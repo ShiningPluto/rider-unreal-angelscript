@@ -52,6 +52,7 @@
         <!-- Method separators: visual separators between functions/methods -->
         <codeInsight.lineMarkerProvider language="angelscript"
                                         implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptMethodSeparatorProvider"/>
+        <lang.foldingBuilder language="angelscript" implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptFoldingBuilder"/>
 
         <!-- Navigation handler: filters excluded files and provides C++ navigation -->
         <gotoDeclarationHandler

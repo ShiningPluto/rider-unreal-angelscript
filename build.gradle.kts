@@ -280,9 +280,10 @@ tasks.runIde {
 
 tasks.test {
     useJUnitPlatform()
-    // Exclude formatter tests - they require full Rider infrastructure
-    // Formatter functionality should be tested manually in Rider sandbox
+    // Exclude formatter and folding tests - they require full Rider infrastructure
+    // Functionality should be tested manually in Rider sandbox
     exclude("**/AngelScriptFormatterTest.class")
+    exclude("**/AngelScriptFoldingTest.class")
 }
 
 tasks.processTestResources {
