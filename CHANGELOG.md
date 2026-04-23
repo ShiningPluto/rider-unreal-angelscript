@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 0.9.10 - 2026-04-22
+
+### Changed
+- Raised minimum supported Rider version to 2025.2 (build 252). Earlier Rider versions are no longer supported; users on 2024.x / 2025.1 should remain on 0.9.9.
+- Updated bundled language server to unreal-angelscript v1.9.2 (upstream bug fixes: nested namespace resolution, parse throttling, float literal parsing, property-marked function autocompletion, and more).
+
+### Fixed
+- Upstream LSP fixes carried over from v1.9.2: API reference now shows static functions in namespaces that shadow a type; nested namespace resolution no longer overwrites top-level namespaces.
+
+### Internal
+- Migrated LSP bundling pipeline to track upstream's esbuild-based build layout.
+- Bumped IntelliJ Platform Gradle Plugin (2.11.0) and Grammar-Kit (2023.3.0.3) toolchain versions.
+
 ## 0.9.9 - 2026-01-14
 
 ### Fixed
