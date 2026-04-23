@@ -964,9 +964,9 @@ var require_debugSession = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/opts-arg.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/opts-arg.js
 var require_opts_arg = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/opts-arg.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/opts-arg.js"(exports, module2) {
     var { promisify } = require("util");
     var fs2 = require("fs");
     var optsArg = (opts) => {
@@ -992,9 +992,9 @@ var require_opts_arg = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/path-arg.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/path-arg.js
 var require_path_arg = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/path-arg.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/path-arg.js"(exports, module2) {
     var platform = process.env.__TESTING_MKDIRP_PLATFORM__ || process.platform;
     var { resolve, parse } = require("path");
     var pathArg = (path2) => {
@@ -1024,9 +1024,9 @@ var require_path_arg = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/find-made.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/find-made.js
 var require_find_made = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/find-made.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/find-made.js"(exports, module2) {
     var { dirname } = require("path");
     var findMade = (opts, parent, path2 = void 0) => {
       if (path2 === parent)
@@ -1049,9 +1049,9 @@ var require_find_made = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/mkdirp-manual.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/mkdirp-manual.js
 var require_mkdirp_manual = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/mkdirp-manual.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/mkdirp-manual.js"(exports, module2) {
     var { dirname } = require("path");
     var mkdirpManual = (path2, opts, made) => {
       opts.recursive = false;
@@ -1110,9 +1110,9 @@ var require_mkdirp_manual = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/mkdirp-native.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/mkdirp-native.js
 var require_mkdirp_native = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/mkdirp-native.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/mkdirp-native.js"(exports, module2) {
     var { dirname } = require("path");
     var { findMade, findMadeSync } = require_find_made();
     var { mkdirpManual, mkdirpManualSync } = require_mkdirp_manual();
@@ -1148,9 +1148,9 @@ var require_mkdirp_native = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/use-native.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/use-native.js
 var require_use_native = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/lib/use-native.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/lib/use-native.js"(exports, module2) {
     var fs2 = require("fs");
     var version = process.env.__TESTING_MKDIRP_NODE_VERSION__ || process.version;
     var versArr = version.replace(/^v/, "").split(".");
@@ -1161,9 +1161,9 @@ var require_use_native = __commonJS({
   }
 });
 
-// third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/index.js
+// third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/index.js
 var require_mkdirp = __commonJS({
-  "third-party/vscode-unreal-angelscript/extension/node_modules/mkdirp/index.js"(exports, module2) {
+  "third-party/vscode-unreal-angelscript/extension/node_modules/vscode-debugadapter/node_modules/mkdirp/index.js"(exports, module2) {
     var optsArg = require_opts_arg();
     var pathArg = require_path_arg();
     var { mkdirpNative, mkdirpNativeSync } = require_mkdirp_native();
@@ -1972,6 +1972,12 @@ function sendBreakOptions(filters) {
   msg.writeUInt32LE(msg.length - 4, 0);
   unreal.write(msg);
 }
+function sendStopPIE() {
+  let msg = Buffer.alloc(5);
+  msg.writeUInt32LE(1, 0);
+  msg.writeUInt8(38 /* StopPIE */, 4);
+  unreal.write(msg);
+}
 
 // third-party/vscode-unreal-angelscript/extension/src/debug.ts
 var { Subject } = require_await_notify();
@@ -2032,6 +2038,13 @@ var _ASDebugSession = class extends import_vscode_debugadapter.LoggingDebugSessi
     connect(this.hostname, this.port);
     sendRequestBreakFilters();
     this.waitingInitializeResponse = response;
+  }
+  customRequest(command, response, args, request) {
+    if (command == "angelscript/stopPIE") {
+      sendStopPIE();
+      response.success = true;
+      this.sendResponse(response);
+    }
   }
   receiveBreakFilters(msg) {
     this.waitingInitializeResponse.body.exceptionBreakpointFilters = [];

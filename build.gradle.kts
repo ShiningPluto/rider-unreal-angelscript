@@ -18,8 +18,8 @@ interface InjectedExecOps {
 plugins {
     id("java")
     alias(libs.plugins.kotlinJvm)
-    id("org.jetbrains.intellij.platform") version "2.10.4"     // See https://github.com/JetBrains/intellij-platform-gradle-plugin/releases
-    id("org.jetbrains.grammarkit") version "2023.3.0.1"
+    id("org.jetbrains.intellij.platform") version "2.11.0"     // See https://github.com/JetBrains/intellij-platform-gradle-plugin/releases
+    id("org.jetbrains.grammarkit") version "2023.3.0.3"
 }
 
 val isWindows = Os.isFamily(Os.FAMILY_WINDOWS)
@@ -316,24 +316,6 @@ val installThirdPartyDeps by tasks.registering(Exec::class) {
     outputs.dir("$thirdPartyDir/node_modules")
 }
 
-// Compile the third-party VSCode extension language server (TypeScript → JavaScript)
-val compileThirdPartyLsp by tasks.registering(Exec::class) {
-    dependsOn(installThirdPartyDeps)
-    val thirdPartyDir = file("third-party/vscode-unreal-angelscript")
-    workingDir(thirdPartyDir)
-
-    val npmCommand = findProperty("npm.executable") as String?
-        ?: System.getenv("NPM_EXECUTABLE")
-        ?: findNpmInPath()
-        ?: throw GradleException("npm not found in PATH. Please install Node.js or set npm.executable property")
-
-    commandLine(npmCommand, "run", "compile")
-
-    inputs.files("$thirdPartyDir/package.json", "$thirdPartyDir/tsconfig.json")
-    inputs.dir("$thirdPartyDir/language-server/src")
-    outputs.dir("$thirdPartyDir/language-server/out")
-}
-
 // Install bundler dependencies (esbuild, etc.) in project root
 val installBundlerDeps by tasks.registering(Exec::class) {
     workingDir(rootDir)
@@ -350,7 +332,7 @@ val installBundlerDeps by tasks.registering(Exec::class) {
 }
 
 val buildLsp by tasks.registering(Exec::class) {
-    dependsOn(compileThirdPartyLsp, installBundlerDeps)
+    dependsOn(installThirdPartyDeps, installBundlerDeps)
     workingDir(rootDir)
 
     // Allow override via gradle property or environment variable
@@ -362,7 +344,8 @@ val buildLsp by tasks.registering(Exec::class) {
     // This will run both LSP and DAP bundling
     commandLine(npmCommand, "run", "bundle")
 
-    inputs.dir("third-party/vscode-unreal-angelscript/language-server/out")
+    inputs.dir("third-party/vscode-unreal-angelscript/language-server/src")
+    inputs.dir("third-party/vscode-unreal-angelscript/extension/src")
     inputs.files("scripts/bundle-lsp.js", "scripts/bundle-dap.js")
     outputs.file("src/rider/main/resources/js/angelscript-language-server.js")
     outputs.file("src/rider/main/resources/js/angelscript-debug-adapter.js")

@@ -7,9 +7,10 @@ const projectRoot = path.join(__dirname, '..');
 
 async function bundle() {
   try {
-    // First, bundle the server
+    // Bundle directly from TypeScript source. Upstream switched to esbuild
+    // and no longer produces language-server/out/ — esbuild handles .ts natively.
     await esbuild.build({
-      entryPoints: [path.join(projectRoot, 'third-party', 'vscode-unreal-angelscript', 'language-server', 'out', 'server.js')],
+      entryPoints: [path.join(projectRoot, 'third-party', 'vscode-unreal-angelscript', 'language-server', 'src', 'server.ts')],
       bundle: true,
       outfile: path.join(projectRoot, 'src', 'rider', 'main', 'resources', 'js', 'angelscript-language-server.js'),
       platform: 'node',
