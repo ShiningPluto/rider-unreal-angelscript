@@ -20,9 +20,16 @@ enum class AngelScriptUnrealStatus {
     /** The socket is open but the type database has not arrived yet. Normal for a few seconds after connecting. */
     LOADING_TYPES,
 
-    /** The type database is loaded; highlighting and diagnostics are available. */
+    /**
+     * Analysis works, but from the last database saved by a previous session rather than a live
+     * editor. Engine C++ changed since then will not be reflected, so this is reported separately
+     * instead of being presented as a working connection.
+     */
+    CACHED_TYPES,
+
+    /** The type database is loaded from a live editor; highlighting and diagnostics are current. */
     READY;
 
     val isAnalysisAvailable: Boolean
-        get() = this == READY
+        get() = this == READY || this == CACHED_TYPES
 }

@@ -1,6 +1,7 @@
 package com.scriptacus.riderunrealangelscript.settings.ui
 
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.bindIntText
 import com.intellij.ui.dsl.builder.bindText
@@ -11,6 +12,7 @@ import javax.swing.JPanel
 
 class GeneralSettingsPanel {
     private var portField = JBTextField()
+    private val useCachedTypesBox = JBCheckBox("Use the last type database when no Unreal editor is running")
     private var ignorePatterns = mutableListOf<String>()
 
     fun createPanel(): JPanel = panel {
@@ -26,6 +28,15 @@ class GeneralSettingsPanel {
                     }
                 }
         }
+        row {
+            cell(useCachedTypesBox)
+                .comment(
+                    "Highlighting and diagnostics need the C++ type database, which only a running " +
+                        "Unreal editor provides. When enabled, the last database received is reused " +
+                        "offline; it can be out of date after engine C++ changes, and the status bar " +
+                        "says when cached types are in use."
+                )
+        }
 //        row {
 //            label("Script Ignore Patterns:")
 //                .comment("Glob patterns for scripts to ignore (e.g., **/Saved/**, **/.plastic/**)")
@@ -36,18 +47,21 @@ class GeneralSettingsPanel {
 
     fun reset(state: AngelScriptLspSettings.State) {
         portField.text = state.unrealConnectionPort.toString()
+        useCachedTypesBox.isSelected = state.useCachedTypeDatabase
         ignorePatterns.clear()
         ignorePatterns.addAll(state.scriptIgnorePatterns)
     }
 
     fun apply(state: AngelScriptLspSettings.State) {
         state.unrealConnectionPort = portField.text.toIntOrNull() ?: 27099
+        state.useCachedTypeDatabase = useCachedTypesBox.isSelected
         state.scriptIgnorePatterns.clear()
         state.scriptIgnorePatterns.addAll(ignorePatterns)
     }
 
     fun isModified(state: AngelScriptLspSettings.State): Boolean {
         return state.unrealConnectionPort != (portField.text.toIntOrNull() ?: 27099) ||
+                state.useCachedTypeDatabase != useCachedTypesBox.isSelected ||
                 state.scriptIgnorePatterns != ignorePatterns
     }
 }

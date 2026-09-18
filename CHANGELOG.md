@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 
 ### Added
+- The Unreal type database is now cached and reused when no editor is running, so highlighting and diagnostics keep working offline. The database only exists inside a running Unreal editor, which previously made analysis unavailable whenever the editor was closed. The cache is saved per project under the IDE system directory; a live editor always overrides it. Cached types cannot reflect engine C++ changed since they were saved, so the status bar reports when they are in use, and the behaviour can be turned off under Languages & Frameworks | AngelScript.
 - Status bar widget reporting why AngelScript analysis is unavailable. Semantic highlighting and diagnostics both require the C++ type database, which only a running Unreal editor can provide; until now the language server produced nothing and reported nothing in that situation. The widget distinguishes a stopped server, an unconfigured connection port, an editor that is not running, and a type database still loading. Clicking it opens the AngelScript settings.
 
 ### Fixed
