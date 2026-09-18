@@ -64,10 +64,12 @@ class AngelScriptStatusBarWidget(private val project: Project) :
                 "Connected to the Unreal editor on port $port, with a live C++ type database. " +
                     "Semantic highlighting and diagnostics are up to date."
 
+            // Covers both a database read from disk and one left behind by an editor that has since
+            // been closed: in each case analysis works but nothing is attached to keep it current.
             AngelScriptUnrealStatus.CACHED_TYPES ->
-                "No Unreal editor is running, so the type database saved ${describeCacheAge(service)} " +
-                    "is being used. Highlighting and diagnostics work, but will not reflect engine " +
-                    "C++ changed since then. Start the editor to pick up a live database."
+                "Running on a type database captured ${describeCacheAge(service)}, with no live " +
+                    "editor connection on port $port. Highlighting and diagnostics work, but will " +
+                    "not reflect engine C++ changed since then. Start the Unreal editor to refresh it."
 
             AngelScriptUnrealStatus.LOADING_TYPES ->
                 "Connected on port $port, receiving the C++ type database. " +
@@ -88,12 +90,14 @@ class AngelScriptStatusBarWidget(private val project: Project) :
     }
 
     private fun describeCacheAge(service: AngelScriptUnrealStatusService): String {
-        val savedAt = service.cachedTypesSavedAt ?: return "in an earlier session"
-        val days = Duration.between(Instant.ofEpochMilli(savedAt), Instant.now()).toDays()
+        val capturedAt = service.typesCapturedAt ?: return "in an earlier session"
+        val age = Duration.between(Instant.ofEpochMilli(capturedAt), Instant.now())
         return when {
-            days <= 0L -> "earlier today"
-            days == 1L -> "yesterday"
-            else -> "$days days ago"
+            age.toMinutes() < 1L -> "just now"
+            age.toHours() < 1L -> "${age.toMinutes()} minutes ago"
+            age.toDays() < 1L -> "${age.toHours()} hours ago"
+            age.toDays() == 1L -> "yesterday"
+            else -> "${age.toDays()} days ago"
         }
     }
 
