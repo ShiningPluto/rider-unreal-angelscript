@@ -356,6 +356,7 @@ val buildLsp by tasks.registering(Exec::class) {
     inputs.files("scripts/bundle-lsp.js", "scripts/bundle-dap.js")
     outputs.file("src/rider/main/resources/js/angelscript-language-server.js")
     outputs.file("src/rider/main/resources/js/angelscript-debug-adapter.js")
+    outputs.file("src/rider/main/resources/js/lsp-version.properties")
 }
 
 // Ensure resources are processed after LSP is bundled

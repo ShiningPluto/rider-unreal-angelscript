@@ -2,11 +2,13 @@ package com.scriptacus.riderunrealangelscript.settings.ui
 
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.bindIntText
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.layout.ComponentPredicate
+import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLspVersion
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 import javax.swing.JPanel
 
@@ -41,6 +43,17 @@ class GeneralSettingsPanel {
                         "saved database is in use restarts the language server, since a loaded " +
                         "database cannot be discarded without it."
                 )
+        }
+        // Informational rather than a setting, but this is where the status bar widget sends the
+        // user, and nothing else in the IDE names the language server the plugin is actually running.
+        row("Bundled language server:") {
+            // Copyable because the one thing it is for is being quoted in a bug report.
+            cell(JBLabel("Hazelight unreal-angelscript ${AngelScriptLspVersion.displayText}").apply {
+                setCopyable(true)
+            }).comment(
+                "The upstream revision this plugin was built from, with the plugin's own patches " +
+                    "applied on top."
+            )
         }
 //        row {
 //            label("Script Ignore Patterns:")

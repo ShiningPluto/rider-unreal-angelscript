@@ -52,6 +52,9 @@ class AngelScriptConnectionProvider(private val project: Project) : ProcessStrea
 
     init {
         LOG.info("AngelScriptConnectionProvider initializing for project: ${project.name}")
+        // Logged on every start so a report about language server behaviour carries the revision
+        // that produced it; the bundle itself is unversioned.
+        LOG.info("Bundled language server: Hazelight unreal-angelscript ${AngelScriptLspVersion.displayText}")
 
         // Register temp file manager for cleanup when project is disposed
         Disposer.register(project, tempFileManager)
