@@ -247,6 +247,52 @@ function __asOnLiveTypesReceived() {
   __asSaveTypeCache();
 }
 
+function __asScriptSettingsPath() {
+  return require("path").join(require("path").dirname(__asTypeCache.path), "unreal-script-settings.json");
+}
+
+// The editor sends its script settings separately from the type database, over a binary message
+// rather than as JSON. They have to be cached too: automaticImports in particular defaults to
+// false, so replaying types without them makes every cross-module reference report
+// "must be imported". Snapshotting the resolved object avoids re-implementing the versioned
+// message parsing, and picks up fields added upstream for free.
+function __asSaveScriptSettings() {
+  if (!__asTypeCache.path || !__asTypeCache.enabled)
+    return;
+  try {
+    const fs = require("fs");
+    fs.mkdirSync(require("path").dirname(__asTypeCache.path), { recursive: true });
+    const file = __asScriptSettingsPath();
+    fs.writeFileSync(file + ".tmp", JSON.stringify({
+      version: 1, savedAt: Date.now(), scriptSettings: GetScriptSettings()
+    }));
+    fs.renameSync(file + ".tmp", file);
+    connection.console.log("[typeCache] Saved script settings (automaticImports="
+      + GetScriptSettings().automaticImports + ")");
+  } catch (e) {
+    connection.console.log("[typeCache] Failed to save script settings: " + e);
+  }
+}
+
+function __asLoadScriptSettings() {
+  try {
+    const fs = require("fs");
+    const file = __asScriptSettingsPath();
+    if (!fs.existsSync(file))
+      return false;
+    const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!cached || cached.version != 1 || !cached.scriptSettings)
+      return false;
+    Object.assign(GetScriptSettings(), cached.scriptSettings);
+    connection.console.log("[typeCache] Restored script settings (automaticImports="
+      + GetScriptSettings().automaticImports + ")");
+    return true;
+  } catch (e) {
+    connection.console.log("[typeCache] Failed to restore script settings: " + e);
+    return false;
+  }
+}
+
 function __asSaveTypeCache() {
   if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.chunks.length == 0)
     return;
@@ -279,6 +325,9 @@ function __asLoadTypeCache() {
     const cache = JSON.parse(fs.readFileSync(__asTypeCache.path, "utf8"));
     if (!cache || cache.version != 1 || !Array.isArray(cache.chunks) || cache.chunks.length == 0)
       return false;
+
+    // Before the types, so resolution and AddPrimitiveTypes below see the editor's settings.
+    __asLoadScriptSettings();
 
     for (let chunk of cache.chunks)
       AddTypesFromUnreal(chunk);
@@ -344,11 +393,21 @@ setInterval(() => {
     const saveAdded = saveHook !== content;
     content = saveHook;
 
-    if (typeCacheAdded && captureAdded && saveAdded) {
+    // Snapshot the editor's script settings at the end of their own message handler, since they
+    // arrive over a separate binary message and are not part of the database payload.
+    const settingsHook = content.replace(
+      /(\} else if \(msg\.type == \d+ \/\* DebugDatabaseSettings \*\/\) \{[\s\S]*?)(\n      \} else if)/,
+      '$1\n        __asSaveScriptSettings();$2'
+    );
+    const settingsAdded = settingsHook !== content;
+    content = settingsHook;
+
+    if (typeCacheAdded && captureAdded && saveAdded && settingsAdded) {
       console.log('✓ Patched to cache the Unreal type database for offline use');
     } else {
       console.warn('⚠ Warning: Type database cache not fully applied'
-        + ' (support: ' + typeCacheAdded + ', capture: ' + captureAdded + ', save: ' + saveAdded + ')');
+        + ' (support: ' + typeCacheAdded + ', capture: ' + captureAdded + ', save: ' + saveAdded
+        + ', settings: ' + settingsAdded + ')');
     }
 
     fs.writeFileSync(bundledPath, content);
