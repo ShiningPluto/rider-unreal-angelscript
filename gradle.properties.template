@@ -8,7 +8,12 @@
 
 dotnetPluginId=Scriptacus.RiderUnrealAngelscript
 dotnetSolution=Scriptacus.RiderUnrealAngelscript.sln
+# Plugin identity written into plugin.xml at build time.
+# Forks maintaining their own build should change riderPluginId: the IDE matches marketplace
+# updates by plugin id, so a distinct id keeps a local build from ever being overwritten.
+# riderPluginName is optional and only affects the name shown in the Plugins list.
 riderPluginId=com.scriptacus.rider-unreal-angelscript
+#riderPluginName=Rider Unreal Angelscript
 pluginVersion=9999.0.0
 
 buildConfiguration=Debug

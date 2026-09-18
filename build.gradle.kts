@@ -291,6 +291,13 @@ tasks.processTestResources {
 }
 
 tasks.patchPluginXml {
+    // Identity comes from gradle.properties, which is not tracked by git. That lets a fork publish
+    // under its own plugin id without touching plugin.xml: the IDE matches marketplace updates by
+    // plugin id, so a distinct id makes the marketplace build and a local build two unrelated
+    // plugins that can never overwrite each other. Absent properties leave plugin.xml untouched.
+    pluginId.set(providers.gradleProperty("riderPluginId"))
+    pluginName.set(providers.gradleProperty("riderPluginName"))
+
     // TODO: See also org.jetbrains.changelog: https://github.com/JetBrains/gradle-changelog-plugin
     val changelogText = file("${rootDir}/CHANGELOG.md").readText()
     val changelogMatches = Regex("(?s)(-.+?)(?=##|$)").findAll(changelogText)
