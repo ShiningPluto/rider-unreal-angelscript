@@ -6,6 +6,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.redhat.devtools.lsp4ij.LanguageServerManager
+import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -134,7 +135,7 @@ class AngelScriptApiService(private val project: Project) {
             val manager = LanguageServerManager.getInstance(project)
 
             // Get the AngelScript language server
-            val serverItemFuture = manager.getLanguageServer("angelscript-lsp")
+            val serverItemFuture = manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID)
 
             serverItemFuture.thenAccept { serverItem ->
                 if (serverItem == null) {

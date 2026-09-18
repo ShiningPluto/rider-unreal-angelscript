@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+- Syntax highlighting and diagnostics no longer disappear after the language server restarts. Configuration was only pushed once per project open, so a restarted server kept its default `unrealConnectionPort` of `-1`, never connected to the Unreal editor, and never received the C++ type database. The client now re-sends `workspace/didChangeConfiguration` on every server start.
+- Startup no longer logs spurious `LSP server not ready yet (status: null)` warnings. The readiness probe queried the server id `angelscript` while the server is registered as `angelscript-lsp`, so it could never observe the real status.
+
 ## 0.9.10 - 2026-04-22
 
 ### Changed

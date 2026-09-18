@@ -12,6 +12,7 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.scriptacus.riderunrealangelscript.lang.psi.AngelScriptFile
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer
+import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 import com.scriptacus.riderunrealangelscript.util.GlobMatcher
 import com.redhat.devtools.lsp4ij.LanguageServerManager
@@ -156,7 +157,7 @@ class AngelScriptCppNavigationHandler : GotoDeclarationHandler {
 
             // Query LSP server for definition location with a short timeout
             val manager = LanguageServerManager.getInstance(project)
-            val serverItemFuture = manager.getLanguageServer("angelscript-lsp")
+            val serverItemFuture = manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID)
             val serverItem = serverItemFuture.get(200, java.util.concurrent.TimeUnit.MILLISECONDS)
                 ?: return false
 
@@ -216,7 +217,7 @@ class AngelScriptCppNavigationHandler : GotoDeclarationHandler {
     ): CppSymbolInfo? {
         try {
             val manager = LanguageServerManager.getInstance(project)
-            val serverItemFuture = manager.getLanguageServer("angelscript-lsp")
+            val serverItemFuture = manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID)
 
             // Wait for server with timeout
             val serverItem = serverItemFuture.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -292,7 +293,7 @@ class AngelScriptCppNavigationHandler : GotoDeclarationHandler {
     ) {
         try {
             val manager = LanguageServerManager.getInstance(project)
-            val serverItemFuture = manager.getLanguageServer("angelscript-lsp")
+            val serverItemFuture = manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID)
 
             serverItemFuture.thenAccept { serverItem ->
                 if (serverItem != null) {

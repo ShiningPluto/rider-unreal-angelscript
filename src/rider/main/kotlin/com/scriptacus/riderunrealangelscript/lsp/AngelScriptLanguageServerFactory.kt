@@ -15,6 +15,17 @@ import java.net.URI
 class AngelScriptLanguageServerFactory : LanguageServerFactory {
     private val LOG = Logger.getInstance(AngelScriptLanguageServerFactory::class.java)
 
+    companion object {
+        /**
+         * Id of the `com.redhat.devtools.lsp4ij.server` extension declared in plugin.xml.
+         *
+         * Always use this constant when talking to [com.redhat.devtools.lsp4ij.LanguageServerManager]:
+         * an id that does not match the descriptor silently resolves to no server, which reports a
+         * `null` status forever rather than failing.
+         */
+        const val SERVER_ID = "angelscript-lsp"
+    }
+
     override fun createConnectionProvider(project: Project): StreamConnectionProvider {
         return AngelScriptConnectionProvider(project)
     }
