@@ -99,7 +99,7 @@
 
         <!-- Detect and register AngelScript Script folders as module content roots -->
         <postStartupActivity implementation="com.scriptacus.riderunrealangelscript.project.AngelScriptContentRootProvider"/>
-G    </extensions>
+    </extensions>
 
     <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
         <server id="angelscript-lsp" factoryClass="com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory"/>
