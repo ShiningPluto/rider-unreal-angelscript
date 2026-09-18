@@ -57,6 +57,30 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
         )
     }
 
+    /**
+     * HasTypesFromUnreal() never goes back to false, so a database outlives the editor that sent
+     * it. Reporting a live connection on the strength of types alone claimed an editor that had
+     * been closed.
+     */
+    fun testTypesOutlivingTheirEditorAreNotReportedAsALiveConnection() {
+        assertEquals(
+            AngelScriptUnrealStatus.CACHED_TYPES,
+            AngelScriptUnrealStatusService.classify(
+                port = 27099, socketState = "disconnected", typesLoaded = true, usingCachedTypes = false
+            )
+        )
+    }
+
+    /** A socket opening does not make cached types live; only a delivered database does. */
+    fun testCachedTypesStayCachedUntilTheEditorDeliversADatabase() {
+        assertEquals(
+            AngelScriptUnrealStatus.CACHED_TYPES,
+            AngelScriptUnrealStatusService.classify(
+                port = 27099, socketState = "open", typesLoaded = true, usingCachedTypes = true
+            )
+        )
+    }
+
     fun testOpenSocketWithoutTypesIsDistinctFromNoEditor() {
         assertEquals(
             AngelScriptUnrealStatus.LOADING_TYPES,

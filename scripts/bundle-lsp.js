@@ -192,7 +192,9 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
     socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
     typesLoaded: HasTypesFromUnreal(),
     usingCachedTypes: __asTypeCache.loaded,
-    cachedTypesSavedAt: __asTypeCache.savedAt
+    // When the database in use was captured, live or cached. HasTypesFromUnreal() never goes back
+    // to false, so this is what tells a current database apart from one an editor left behind.
+    typesCapturedAt: __asTypeCache.capturedAt
   };
 });
 `;
@@ -233,9 +235,17 @@ var __asTypeCache = {
   enabled: !process.argv.includes("--no-type-cache"),
   chunks: [],
   loaded: false,
-  savedAt: null,
+  capturedAt: null,
   configuredAt: null
 };
+
+// Called when the editor finishes sending a database. Live types supersede anything the cache
+// supplied, so the cached flag has to be cleared even when saving is switched off.
+function __asOnLiveTypesReceived() {
+  __asTypeCache.loaded = false;
+  __asTypeCache.capturedAt = Date.now();
+  __asSaveTypeCache();
+}
 
 function __asSaveTypeCache() {
   if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.chunks.length == 0)
@@ -276,7 +286,7 @@ function __asLoadTypeCache() {
     AddPrimitiveTypes(GetScriptSettings().floatIsFloat64);
 
     __asTypeCache.loaded = true;
-    __asTypeCache.savedAt = cache.savedAt || null;
+    __asTypeCache.capturedAt = cache.savedAt || null;
     connection.console.log("[typeCache] Loaded " + cache.chunks.length
       + " chunks saved at " + new Date(cache.savedAt).toISOString());
 
@@ -329,7 +339,7 @@ setInterval(() => {
 
     const saveHook = content.replace(
       /(typedb_exports\.FinishTypesFromUnreal\(\);|\bFinishTypesFromUnreal\(\);)(\s*\n\s*let scriptSettings = GetScriptSettings\(\);)/,
-      '$1\n        __asSaveTypeCache();$2'
+      '$1\n        __asOnLiveTypesReceived();$2'
     );
     const saveAdded = saveHook !== content;
     content = saveHook;

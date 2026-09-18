@@ -54,10 +54,12 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
             typesLoaded: Boolean,
             usingCachedTypes: Boolean = false
         ): AngelScriptUnrealStatus = when {
-            // Cached types are still types: analysis works, but it describes the engine as of the
-            // last session, so it must not be reported as a live connection.
-            typesLoaded && usingCachedTypes -> AngelScriptUnrealStatus.CACHED_TYPES
-            typesLoaded -> AngelScriptUnrealStatus.READY
+            // Live only while an editor is actually attached. HasTypesFromUnreal() never goes back
+            // to false, so types outlive the editor that supplied them: after it closes, analysis
+            // still works but describes an engine nobody is talking to any more. That is the same
+            // situation as a database read from disk, and is reported the same way.
+            typesLoaded && !usingCachedTypes && socketState == "open" -> AngelScriptUnrealStatus.READY
+            typesLoaded -> AngelScriptUnrealStatus.CACHED_TYPES
             // The bundled server starts at -1 and only dials Unreal once configuration arrives.
             port == null || port < 0 -> AngelScriptUnrealStatus.NOT_CONFIGURED
             socketState == "open" -> AngelScriptUnrealStatus.LOADING_TYPES
@@ -76,9 +78,12 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
     var configuredPort: Int? = null
         private set
 
-    /** When the type database in use was captured, if it came from the cache rather than an editor. */
+    /**
+     * When the type database in use was captured, live or cached, or null if none is loaded.
+     * Needed because types outlive the editor that supplied them.
+     */
     @Volatile
-    var cachedTypesSavedAt: Long? = null
+    var typesCapturedAt: Long? = null
         private set
 
     /**
@@ -148,11 +153,13 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
         val socketState = raw["socketState"] as? String
         val typesLoaded = raw["typesLoaded"] as? Boolean ?: false
         val usingCachedTypes = raw["usingCachedTypes"] as? Boolean ?: false
-        cachedTypesSavedAt = (raw["cachedTypesSavedAt"] as? Number)?.toLong()
+        typesCapturedAt = (raw["typesCapturedAt"] as? Number)?.toLong()
 
         val newStatus = classify(port, socketState, typesLoaded, usingCachedTypes)
         update(newStatus, port)
-        return if (newStatus.isAnalysisAvailable) POLL_INTERVAL_READY_MS else POLL_INTERVAL_PENDING_MS
+        // Only a live connection is a settled state. Running on captured types is a degraded one
+        // that an editor starting up would improve, so keep watching for that at the fast rate.
+        return if (newStatus == AngelScriptUnrealStatus.READY) POLL_INTERVAL_READY_MS else POLL_INTERVAL_PENDING_MS
     }
 
     private fun update(newStatus: AngelScriptUnrealStatus, port: Int?) {
