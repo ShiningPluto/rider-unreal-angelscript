@@ -120,6 +120,15 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
             "bundle-lsp.js did not hook database chunks for caching",
             bundle.contains("__asTypeCache.chunks.push(dbStr)")
         )
+        // The editor's script settings arrive separately from the database. Replaying types
+        // without them leaves automaticImports at its default of false, which reports every
+        // cross-module reference as needing an import.
+        assertTrue(
+            "bundle-lsp.js did not hook the editor's script settings for caching",
+            bundle.contains("function __asSaveScriptSettings()") &&
+                bundle.contains("function __asLoadScriptSettings()") &&
+                bundle.contains("__asSaveScriptSettings();")
+        )
         for (identifier in listOf("HasTypesFromUnreal()", "var unreal;", "var port = -1;")) {
             assertTrue(
                 "Identifier '$identifier' the status handler depends on is gone from the bundle",
