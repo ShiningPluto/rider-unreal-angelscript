@@ -48,7 +48,15 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
          * Kept separate from the polling so the precedence between the fields is testable: only
          * [typesLoaded] decides whether analysis works, everything else explains why it does not.
          */
-        fun classify(port: Int?, socketState: String?, typesLoaded: Boolean): AngelScriptUnrealStatus = when {
+        fun classify(
+            port: Int?,
+            socketState: String?,
+            typesLoaded: Boolean,
+            usingCachedTypes: Boolean = false
+        ): AngelScriptUnrealStatus = when {
+            // Cached types are still types: analysis works, but it describes the engine as of the
+            // last session, so it must not be reported as a live connection.
+            typesLoaded && usingCachedTypes -> AngelScriptUnrealStatus.CACHED_TYPES
             typesLoaded -> AngelScriptUnrealStatus.READY
             // The bundled server starts at -1 and only dials Unreal once configuration arrives.
             port == null || port < 0 -> AngelScriptUnrealStatus.NOT_CONFIGURED
@@ -66,6 +74,11 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
     /** Port the server is actually using, or null while it has not been configured. */
     @Volatile
     var configuredPort: Int? = null
+        private set
+
+    /** When the type database in use was captured, if it came from the cache rather than an editor. */
+    @Volatile
+    var cachedTypesSavedAt: Long? = null
         private set
 
     /**
@@ -134,8 +147,10 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
         val port = (raw["configuredPort"] as? Number)?.toInt()
         val socketState = raw["socketState"] as? String
         val typesLoaded = raw["typesLoaded"] as? Boolean ?: false
+        val usingCachedTypes = raw["usingCachedTypes"] as? Boolean ?: false
+        cachedTypesSavedAt = (raw["cachedTypesSavedAt"] as? Number)?.toLong()
 
-        val newStatus = classify(port, socketState, typesLoaded)
+        val newStatus = classify(port, socketState, typesLoaded, usingCachedTypes)
         update(newStatus, port)
         return if (newStatus.isAnalysisAvailable) POLL_INTERVAL_READY_MS else POLL_INTERVAL_PENDING_MS
     }

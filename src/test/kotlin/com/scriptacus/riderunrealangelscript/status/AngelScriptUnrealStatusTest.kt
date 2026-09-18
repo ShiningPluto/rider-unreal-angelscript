@@ -9,14 +9,16 @@ import com.intellij.testFramework.UsefulTestCase
  */
 class AngelScriptUnrealStatusTest : UsefulTestCase() {
 
-    fun testTypesLoadedIsTheOnlyThingThatMakesAnalysisAvailable() {
+    /** Only a loaded type database - live or cached - makes analysis work. */
+    fun testAnalysisIsOnlyAvailableWithATypeDatabase() {
         assertEquals(
             AngelScriptUnrealStatus.READY,
             AngelScriptUnrealStatusService.classify(port = 27099, socketState = "open", typesLoaded = true)
         )
         assertTrue(AngelScriptUnrealStatus.READY.isAnalysisAvailable)
 
-        for (status in AngelScriptUnrealStatus.entries.filter { it != AngelScriptUnrealStatus.READY }) {
+        val working = setOf(AngelScriptUnrealStatus.READY, AngelScriptUnrealStatus.CACHED_TYPES)
+        for (status in AngelScriptUnrealStatus.entries.filter { it !in working }) {
             assertFalse("$status must not claim analysis works", status.isAnalysisAvailable)
         }
     }
@@ -30,6 +32,28 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
         assertEquals(
             AngelScriptUnrealStatus.NOT_CONFIGURED,
             AngelScriptUnrealStatusService.classify(port = null, socketState = null, typesLoaded = false)
+        )
+    }
+
+    /**
+     * Cached types make analysis work, but they describe the engine as of the last session, so they
+     * must never be presented as a live connection.
+     */
+    fun testCachedTypesAreUsableButReportedSeparatelyFromLiveTypes() {
+        assertEquals(
+            AngelScriptUnrealStatus.CACHED_TYPES,
+            AngelScriptUnrealStatusService.classify(
+                port = 27099, socketState = "disconnected", typesLoaded = true, usingCachedTypes = true
+            )
+        )
+        assertTrue(AngelScriptUnrealStatus.CACHED_TYPES.isAnalysisAvailable)
+
+        // A live editor always wins: same reply but not from cache must read as READY.
+        assertEquals(
+            AngelScriptUnrealStatus.READY,
+            AngelScriptUnrealStatusService.classify(
+                port = 27099, socketState = "open", typesLoaded = true, usingCachedTypes = false
+            )
         )
     }
 
@@ -63,6 +87,14 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
         assertTrue(
             "bundle-lsp.js did not inject the angelscript/getUnrealStatus handler",
             bundle!!.contains("connection.onRequest(\"angelscript/getUnrealStatus\"")
+        )
+        assertTrue(
+            "bundle-lsp.js did not inject the type database cache support",
+            bundle.contains("function __asSaveTypeCache()") && bundle.contains("function __asLoadTypeCache()")
+        )
+        assertTrue(
+            "bundle-lsp.js did not hook database chunks for caching",
+            bundle.contains("__asTypeCache.chunks.push(dbStr)")
         )
         for (identifier in listOf("HasTypesFromUnreal()", "var unreal;", "var port = -1;")) {
             assertTrue(

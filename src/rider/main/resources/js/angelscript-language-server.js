@@ -41248,6 +41248,7 @@ function connect_unreal() {
       } else if (msg.type == 2 /* DebugDatabase */) {
         let dbStr = msg.readString();
         let dbObj = JSON.parse(dbStr);
+        if (__asTypeCache.enabled) __asTypeCache.chunks.push(dbStr);
         AddTypesFromUnreal(dbObj);
         UnrealTypesTimedOut = false;
         if (ReceivingTypesTimeout)
@@ -41257,6 +41258,7 @@ function connect_unreal() {
         if (ReceivingTypesTimeout)
           clearTimeout(ReceivingTypesTimeout);
         FinishTypesFromUnreal();
+        __asSaveTypeCache();
         let scriptSettings = GetScriptSettings();
         AddPrimitiveTypes(scriptSettings.floatIsFloat64);
         ReResolveAllModules();
@@ -41922,13 +41924,98 @@ connection.onRequest("angelscript/getAPIDetails", (root) => {
   });
   return promise;
 });
+var __asTypeCache = {
+  path: (() => {
+    const arg = process.argv.find((a) => a.startsWith("--type-cache="));
+    return arg ? arg.substring("--type-cache=".length) : null;
+  })(),
+  enabled: !process.argv.includes("--no-type-cache"),
+  chunks: [],
+  loaded: false,
+  savedAt: null,
+  configuredAt: null
+};
+
+function __asSaveTypeCache() {
+  if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.chunks.length == 0)
+    return;
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    fs.mkdirSync(path.dirname(__asTypeCache.path), { recursive: true });
+    // Each chunk is already valid JSON, so splice them in as array elements rather than
+    // stringifying the parsed graph again.
+    const body = '{"version":1,"savedAt":' + Date.now() + ',"port":' + port
+      + ',"chunks":[' + __asTypeCache.chunks.join(",") + ']}';
+    fs.writeFileSync(__asTypeCache.path + ".tmp", body);
+    fs.renameSync(__asTypeCache.path + ".tmp", __asTypeCache.path);
+    connection.console.log("[typeCache] Saved " + __asTypeCache.chunks.length
+      + " chunks (" + body.length + " bytes) to " + __asTypeCache.path);
+  } catch (e) {
+    connection.console.log("[typeCache] Failed to save: " + e);
+  } finally {
+    __asTypeCache.chunks = [];
+  }
+}
+
+function __asLoadTypeCache() {
+  if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.loaded)
+    return false;
+  try {
+    const fs = require("fs");
+    if (!fs.existsSync(__asTypeCache.path))
+      return false;
+    const cache = JSON.parse(fs.readFileSync(__asTypeCache.path, "utf8"));
+    if (!cache || cache.version != 1 || !Array.isArray(cache.chunks) || cache.chunks.length == 0)
+      return false;
+
+    for (let chunk of cache.chunks)
+      AddTypesFromUnreal(chunk);
+    FinishTypesFromUnreal();
+    AddPrimitiveTypes(GetScriptSettings().floatIsFloat64);
+
+    __asTypeCache.loaded = true;
+    __asTypeCache.savedAt = cache.savedAt || null;
+    connection.console.log("[typeCache] Loaded " + cache.chunks.length
+      + " chunks saved at " + new Date(cache.savedAt).toISOString());
+
+    ReResolveAllModules();
+    return true;
+  } catch (e) {
+    connection.console.log("[typeCache] Failed to load: " + e);
+    return false;
+  }
+}
+
+// Fall back to the cache only once it is clear no editor is answering. connect_unreal() retries
+// every 5s, so a socket that is still not open by then means nothing is listening.
+setInterval(() => {
+  if (!__asTypeCache.enabled || __asTypeCache.loaded || HasTypesFromUnreal())
+    return;
+  if (port < 0) {
+    // Not configured yet: the server has not been told where to look, so nothing has failed.
+    __asTypeCache.configuredAt = null;
+    return;
+  }
+  if (unreal && !unreal.connecting)
+    return; // Socket is open; live types are on their way and always win over the cache.
+  if (__asTypeCache.configuredAt == null) {
+    __asTypeCache.configuredAt = Date.now();
+    return;
+  }
+  if (Date.now() - __asTypeCache.configuredAt >= 6000)
+    __asLoadTypeCache();
+}, 1000);
+
 connection.onRequest("angelscript/getUnrealStatus", () => {
   return {
     configuredPort: port,
     // readyState alone is ambiguous: a socket that has not been connected yet still reports
     // "open", so check connecting first to tell "dialling" apart from "connected".
     socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
-    typesLoaded: HasTypesFromUnreal()
+    typesLoaded: HasTypesFromUnreal(),
+    usingCachedTypes: __asTypeCache.loaded,
+    cachedTypesSavedAt: __asTypeCache.savedAt
   };
 });
 

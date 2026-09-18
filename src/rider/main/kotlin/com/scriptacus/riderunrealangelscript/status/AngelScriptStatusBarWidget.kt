@@ -8,6 +8,8 @@ import com.intellij.util.Consumer
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptSettingsConfigurable
 import java.awt.Component
 import java.awt.event.MouseEvent
+import java.time.Duration
+import java.time.Instant
 
 /**
  * Reports why AngelScript analysis is unavailable, instead of leaving the editor silently inert.
@@ -42,9 +44,12 @@ class AngelScriptStatusBarWidget(private val project: Project) :
         if (!service.everObservedServer) {
             return ""
         }
+        // Every state names what is actually true, so "working" is never indistinguishable from
+        // "silently doing nothing" - which is the whole reason this widget exists.
         return when (service.status) {
-            AngelScriptUnrealStatus.READY -> "AngelScript"
-            AngelScriptUnrealStatus.LOADING_TYPES -> "AngelScript: loading types"
+            AngelScriptUnrealStatus.READY -> "AngelScript: Unreal ${service.configuredPort}"
+            AngelScriptUnrealStatus.CACHED_TYPES -> "AngelScript: cached types"
+            AngelScriptUnrealStatus.LOADING_TYPES -> "AngelScript: loading types…"
             AngelScriptUnrealStatus.SERVER_STOPPED -> "AngelScript: server stopped"
             AngelScriptUnrealStatus.NOT_CONFIGURED -> "AngelScript: not configured"
             AngelScriptUnrealStatus.DISCONNECTED -> "AngelScript: no Unreal editor"
@@ -56,7 +61,13 @@ class AngelScriptStatusBarWidget(private val project: Project) :
         val port = service.configuredPort
         return when (service.status) {
             AngelScriptUnrealStatus.READY ->
-                "Connected to the Unreal editor on port $port. Highlighting and diagnostics are available."
+                "Connected to the Unreal editor on port $port, with a live C++ type database. " +
+                    "Semantic highlighting and diagnostics are up to date."
+
+            AngelScriptUnrealStatus.CACHED_TYPES ->
+                "No Unreal editor is running, so the type database saved ${describeCacheAge(service)} " +
+                    "is being used. Highlighting and diagnostics work, but will not reflect engine " +
+                    "C++ changed since then. Start the editor to pick up a live database."
 
             AngelScriptUnrealStatus.LOADING_TYPES ->
                 "Connected on port $port, receiving the C++ type database. " +
@@ -71,7 +82,18 @@ class AngelScriptStatusBarWidget(private val project: Project) :
 
             AngelScriptUnrealStatus.DISCONNECTED ->
                 "No Unreal editor listening on port $port. Semantic highlighting and diagnostics " +
-                    "need the C++ type database, which only a running editor can provide."
+                    "need the C++ type database, which only a running editor can provide. " +
+                    "No cached database is available for this project yet."
+        }
+    }
+
+    private fun describeCacheAge(service: AngelScriptUnrealStatusService): String {
+        val savedAt = service.cachedTypesSavedAt ?: return "in an earlier session"
+        val days = Duration.between(Instant.ofEpochMilli(savedAt), Instant.now()).toDays()
+        return when {
+            days <= 0L -> "earlier today"
+            days == 1L -> "yesterday"
+            else -> "$days days ago"
         }
     }
 
