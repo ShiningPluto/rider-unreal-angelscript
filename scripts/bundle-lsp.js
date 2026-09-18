@@ -177,6 +177,40 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
       console.warn('⚠ Warning: Could not find insertion point for C++ navigation handlers');
     }
 
+    // Patch to expose the Unreal editor connection state.
+    //
+    // Highlighting and diagnostics both require the C++ type database, which only exists inside a
+    // running Unreal editor. When it is missing the server simply produces nothing - upstream sets
+    // UnrealTypesTimedOut on connection timeout but never reads it, so there is no user-visible
+    // signal at all. This handler lets the Rider plugin report the state in the status bar.
+    const unrealStatusHandler = `
+connection.onRequest("angelscript/getUnrealStatus", () => {
+  return {
+    configuredPort: port,
+    // readyState alone is ambiguous: a socket that has not been connected yet still reports
+    // "open", so check connecting first to tell "dialling" apart from "connected".
+    socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
+    typesLoaded: HasTypesFromUnreal()
+  };
+});
+`;
+
+    let statusHandlerAdded = false;
+    const statusInsertionPoint = /connection\.onRequest\("angelscript\/getAPIDetails"[\s\S]*?return promise;\s*\}\);/;
+    content = content.replace(statusInsertionPoint, (match) => {
+      if (!statusHandlerAdded) {
+        statusHandlerAdded = true;
+        return match + unrealStatusHandler;
+      }
+      return match;
+    });
+
+    if (statusHandlerAdded) {
+      console.log('✓ Patched to add Unreal connection status handler');
+    } else {
+      console.warn('⚠ Warning: Could not find insertion point for Unreal connection status handler');
+    }
+
     fs.writeFileSync(bundledPath, content);
     console.log('✓ Language server bundled and patched for stdio communication!');
   } catch (error) {

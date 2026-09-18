@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+### Added
+- Status bar widget reporting why AngelScript analysis is unavailable. Semantic highlighting and diagnostics both require the C++ type database, which only a running Unreal editor can provide; until now the language server produced nothing and reported nothing in that situation. The widget distinguishes a stopped server, an unconfigured connection port, an editor that is not running, and a type database still loading. Clicking it opens the AngelScript settings.
+
 ### Fixed
 - Syntax highlighting and diagnostics no longer disappear after the language server restarts. Configuration was only pushed once per project open, so a restarted server kept its default `unrealConnectionPort` of `-1`, never connected to the Unreal editor, and never received the C++ type database. The client now re-sends `workspace/didChangeConfiguration` on every server start.
 - Startup no longer logs spurious `LSP server not ready yet (status: null)` warnings. The readiness probe queried the server id `angelscript` while the server is registered as `angelscript-lsp`, so it could never observe the real status.
