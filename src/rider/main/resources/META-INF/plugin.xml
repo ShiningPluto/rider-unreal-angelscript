@@ -94,6 +94,10 @@
         <!-- Send initial LSP configuration when project opens -->
         <postStartupActivity implementation="com.scriptacus.riderunrealangelscript.lsp.AngelScriptLspInitializer"/>
 
+        <!-- Surfaces why analysis is unavailable: it needs the type database from a running Unreal editor -->
+        <statusBarWidgetFactory id="AngelScriptUnrealStatus"
+                                implementation="com.scriptacus.riderunrealangelscript.status.AngelScriptStatusBarWidgetFactory"/>
+
         <!-- Auto-switch between AngelScript Files and Solution Explorer tool windows -->
         <postStartupActivity implementation="com.scriptacus.riderunrealangelscript.toolwindow.ToolWindowSwitcher"/>
 

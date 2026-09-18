@@ -65,4 +65,16 @@ interface AngelScriptLanguageServer : LanguageServer {
      */
     @JsonRequest("angelscript/navigateToCpp")
     fun navigateToCpp(params: Map<String, Any>): CompletableFuture<Boolean>
+
+    /**
+     * Get the server's view of its connection to the Unreal editor.
+     * Custom LSP request: angelscript/getUnrealStatus
+     *
+     * Returns `configuredPort` (-1 until a configuration push arrives), `socketState` (the Node
+     * socket readyState, or "disconnected") and `typesLoaded` (whether the C++ type database has
+     * been received). Analysis only produces semantic tokens and diagnostics once typesLoaded is
+     * true, so these three fields distinguish the ways it can silently stay unavailable.
+     */
+    @JsonRequest("angelscript/getUnrealStatus")
+    fun getUnrealStatus(): CompletableFuture<Map<String, Any>?>
 }

@@ -41922,6 +41922,16 @@ connection.onRequest("angelscript/getAPIDetails", (root) => {
   });
   return promise;
 });
+connection.onRequest("angelscript/getUnrealStatus", () => {
+  return {
+    configuredPort: port,
+    // readyState alone is ambiguous: a socket that has not been connected yet still reports
+    // "open", so check connecting first to tell "dialling" apart from "connected".
+    socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
+    typesLoaded: HasTypesFromUnreal()
+  };
+});
+
 connection.onRequest("angelscript/getCppSymbol", (params) => {
   let uri = params.uri;
   let position = params.position;
