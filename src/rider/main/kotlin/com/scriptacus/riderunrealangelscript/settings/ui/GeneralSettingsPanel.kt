@@ -12,7 +12,7 @@ import javax.swing.JPanel
 
 class GeneralSettingsPanel {
     private var portField = JBTextField()
-    private val useCachedTypesBox = JBCheckBox("Use the last type database when no Unreal editor is running")
+    private val useCachedTypesBox = JBCheckBox("Save the type database and reuse it in later sessions")
     private var ignorePatterns = mutableListOf<String>()
 
     fun createPanel(): JPanel = panel {
@@ -32,9 +32,14 @@ class GeneralSettingsPanel {
             cell(useCachedTypesBox)
                 .comment(
                     "Highlighting and diagnostics need the C++ type database, which only a running " +
-                        "Unreal editor provides. When enabled, the last database received is reused " +
-                        "offline; it can be out of date after engine C++ changes, and the status bar " +
-                        "says when cached types are in use."
+                        "Unreal editor provides. When enabled, the database is written to disk and " +
+                        "reloaded on later starts, so analysis works before an editor is running. " +
+                        "A saved database can be out of date after engine C++ changes; the status " +
+                        "bar says when one is in use.<br/>" +
+                        "This does not affect a database an editor has already sent: those types " +
+                        "stay loaded after the editor closes either way. Turning this off while a " +
+                        "saved database is in use restarts the language server, since a loaded " +
+                        "database cannot be discarded without it."
                 )
         }
 //        row {

@@ -191,10 +191,26 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
     // "open", so check connecting first to tell "dialling" apart from "connected".
     socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
     typesLoaded: HasTypesFromUnreal(),
+    cacheEnabled: __asTypeCache.enabled,
     usingCachedTypes: __asTypeCache.loaded,
     // When the database in use was captured, live or cached. HasTypesFromUnreal() never goes back
     // to false, so this is what tells a current database apart from one an editor left behind.
     typesCapturedAt: __asTypeCache.capturedAt
+  };
+});
+
+// Lets the setting be applied without restarting. The reply reports whether a cached database is
+// currently in use, because that is the one case the client cannot fix here: loaded types cannot
+// be unloaded, so the client restarts the server instead.
+connection.onRequest("angelscript/setTypeCacheEnabled", (enabled) => {
+  __asTypeCache.enabled = !!enabled;
+  if (!__asTypeCache.enabled) {
+    // Drop anything buffered but not yet written, so disabling cannot be followed by a save.
+    __asTypeCache.chunks = [];
+  }
+  return {
+    cacheEnabled: __asTypeCache.enabled,
+    usingCachedTypes: __asTypeCache.loaded
   };
 });
 `;

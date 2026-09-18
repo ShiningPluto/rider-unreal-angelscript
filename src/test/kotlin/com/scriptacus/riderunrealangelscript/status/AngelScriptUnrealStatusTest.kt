@@ -9,7 +9,7 @@ import com.intellij.testFramework.UsefulTestCase
  */
 class AngelScriptUnrealStatusTest : UsefulTestCase() {
 
-    /** Only a loaded type database - live or cached - makes analysis work. */
+    /** Only a loaded type database makes analysis work, whatever supplied it. */
     fun testAnalysisIsOnlyAvailableWithATypeDatabase() {
         assertEquals(
             AngelScriptUnrealStatus.READY,
@@ -17,7 +17,11 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
         )
         assertTrue(AngelScriptUnrealStatus.READY.isAnalysisAvailable)
 
-        val working = setOf(AngelScriptUnrealStatus.READY, AngelScriptUnrealStatus.CACHED_TYPES)
+        val working = setOf(
+            AngelScriptUnrealStatus.READY,
+            AngelScriptUnrealStatus.CACHED_TYPES,
+            AngelScriptUnrealStatus.EDITOR_CLOSED,
+        )
         for (status in AngelScriptUnrealStatus.entries.filter { it !in working }) {
             assertFalse("$status must not claim analysis works", status.isAnalysisAvailable)
         }
@@ -64,11 +68,29 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
      */
     fun testTypesOutlivingTheirEditorAreNotReportedAsALiveConnection() {
         assertEquals(
-            AngelScriptUnrealStatus.CACHED_TYPES,
+            AngelScriptUnrealStatus.EDITOR_CLOSED,
             AngelScriptUnrealStatusService.classify(
                 port = 27099, socketState = "disconnected", typesLoaded = true, usingCachedTypes = false
             )
         )
+    }
+
+    /**
+     * Types an editor left behind are not the saved database: they were never read from disk, and
+     * they stay loaded after the editor closes regardless of the cache setting. Reporting both as
+     * "cached" made turning the cache off look broken when it left them in place.
+     */
+    fun testTypesFromAClosedEditorAreDistinctFromASavedDatabase() {
+        val fromClosedEditor = AngelScriptUnrealStatusService.classify(
+            port = 27099, socketState = "disconnected", typesLoaded = true, usingCachedTypes = false
+        )
+        val fromDisk = AngelScriptUnrealStatusService.classify(
+            port = 27099, socketState = "disconnected", typesLoaded = true, usingCachedTypes = true
+        )
+
+        assertEquals(AngelScriptUnrealStatus.EDITOR_CLOSED, fromClosedEditor)
+        assertEquals(AngelScriptUnrealStatus.CACHED_TYPES, fromDisk)
+        assertTrue("Analysis works in both", fromClosedEditor.isAnalysisAvailable && fromDisk.isAnalysisAvailable)
     }
 
     /** A socket opening does not make cached types live; only a delivered database does. */
@@ -119,6 +141,12 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
         assertTrue(
             "bundle-lsp.js did not hook database chunks for caching",
             bundle.contains("__asTypeCache.chunks.push(dbStr)")
+        )
+        // Without this the setting could only reach the server as a process argument, so applying
+        // it would mean restarting even when nothing needs to be discarded.
+        assertTrue(
+            "bundle-lsp.js did not inject the runtime cache toggle",
+            bundle.contains("connection.onRequest(\"angelscript/setTypeCacheEnabled\"")
         )
         // The editor's script settings arrive separately from the database. Replaying types
         // without them leaves automaticImports at its default of false, which reports every

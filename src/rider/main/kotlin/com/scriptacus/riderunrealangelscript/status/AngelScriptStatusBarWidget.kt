@@ -48,6 +48,7 @@ class AngelScriptStatusBarWidget(private val project: Project) :
         // "silently doing nothing" - which is the whole reason this widget exists.
         return when (service.status) {
             AngelScriptUnrealStatus.READY -> "AngelScript: Unreal ${service.configuredPort}"
+            AngelScriptUnrealStatus.EDITOR_CLOSED -> "AngelScript: editor closed"
             AngelScriptUnrealStatus.CACHED_TYPES -> "AngelScript: cached types"
             AngelScriptUnrealStatus.LOADING_TYPES -> "AngelScript: loading types…"
             AngelScriptUnrealStatus.SERVER_STOPPED -> "AngelScript: server stopped"
@@ -64,12 +65,16 @@ class AngelScriptStatusBarWidget(private val project: Project) :
                 "Connected to the Unreal editor on port $port, with a live C++ type database. " +
                     "Semantic highlighting and diagnostics are up to date."
 
-            // Covers both a database read from disk and one left behind by an editor that has since
-            // been closed: in each case analysis works but nothing is attached to keep it current.
+            AngelScriptUnrealStatus.EDITOR_CLOSED ->
+                "The Unreal editor on port $port has disconnected. Highlighting and diagnostics " +
+                    "keep working on the type database it sent ${describeCacheAge(service)}, but " +
+                    "nothing is keeping it up to date. Start the editor again to reconnect."
+
             AngelScriptUnrealStatus.CACHED_TYPES ->
-                "Running on a type database captured ${describeCacheAge(service)}, with no live " +
-                    "editor connection on port $port. Highlighting and diagnostics work, but will " +
-                    "not reflect engine C++ changed since then. Start the Unreal editor to refresh it."
+                "No editor has been reachable this session, so the type database saved " +
+                    "${describeCacheAge(service)} is being used. Highlighting and diagnostics work, " +
+                    "but will not reflect engine C++ changed since then. Start the Unreal editor " +
+                    "on port $port to replace it with a live database."
 
             AngelScriptUnrealStatus.LOADING_TYPES ->
                 "Connected on port $port, receiving the C++ type database. " +

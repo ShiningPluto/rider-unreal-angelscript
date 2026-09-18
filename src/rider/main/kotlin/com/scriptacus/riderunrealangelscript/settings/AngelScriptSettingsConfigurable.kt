@@ -4,6 +4,7 @@ import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.panel
+import com.scriptacus.riderunrealangelscript.status.AngelScriptUnrealStatusService
 import com.scriptacus.riderunrealangelscript.settings.ui.*
 import javax.swing.JComponent
 
@@ -73,6 +74,8 @@ class AngelScriptSettingsConfigurable : SearchableConfigurable {
 
     override fun apply() {
         val state = settings.state
+        val cacheWasEnabled = state.useCachedTypeDatabase
+
         generalPanel.apply(state)
         completionPanel.apply(state)
         diagnosticsPanel.apply(state)
@@ -82,9 +85,18 @@ class AngelScriptSettingsConfigurable : SearchableConfigurable {
         // Notify settings changed
         settings.notifySettingsChanged()
 
-        // Sync settings to all open projects' LSP servers
+        val cacheSettingChanged = cacheWasEnabled != state.useCachedTypeDatabase
+
         ProjectManager.getInstance().openProjects.forEach { project ->
             AngelScriptLspSettingsSync(project).syncSettingsToLsp()
+
+            // The cache setting does not travel with the rest: it decides what the server does with
+            // a database rather than how it analyses one. Applying it can require replacing the
+            // server, so it is handled separately and only when it actually changed.
+            if (cacheSettingChanged) {
+                AngelScriptUnrealStatusService.getInstance(project)
+                    .applyTypeCacheSetting(state.useCachedTypeDatabase)
+            }
         }
     }
 

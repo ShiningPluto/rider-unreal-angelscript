@@ -21,9 +21,15 @@ enum class AngelScriptUnrealStatus {
     LOADING_TYPES,
 
     /**
-     * Analysis works, but from the last database saved by a previous session rather than a live
-     * editor. Engine C++ changed since then will not be reflected, so this is reported separately
-     * instead of being presented as a working connection.
+     * An editor supplied the database earlier in this session and has since gone away. The types it
+     * left behind stay loaded and analysis keeps working, which is how the language server has
+     * always behaved; it is only no longer being kept up to date.
+     */
+    EDITOR_CLOSED,
+
+    /**
+     * Analysis works, but from a database saved to disk by an earlier session rather than from any
+     * editor this one has talked to. This is the only state the cache setting governs.
      */
     CACHED_TYPES,
 
@@ -31,5 +37,5 @@ enum class AngelScriptUnrealStatus {
     READY;
 
     val isAnalysisAvailable: Boolean
-        get() = this == READY || this == CACHED_TYPES
+        get() = this == READY || this == CACHED_TYPES || this == EDITOR_CLOSED
 }

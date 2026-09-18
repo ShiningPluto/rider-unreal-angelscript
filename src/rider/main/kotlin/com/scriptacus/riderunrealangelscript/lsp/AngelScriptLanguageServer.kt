@@ -77,4 +77,15 @@ interface AngelScriptLanguageServer : LanguageServer {
      */
     @JsonRequest("angelscript/getUnrealStatus")
     fun getUnrealStatus(): CompletableFuture<Map<String, Any>?>
+
+    /**
+     * Turn the type database cache on or off without restarting the server.
+     * Custom LSP request: angelscript/setTypeCacheEnabled
+     *
+     * Returns `cacheEnabled` and `usingCachedTypes`. The latter matters when disabling: a cached
+     * database that is already loaded cannot be unloaded, so the caller has to restart the server
+     * to be rid of it.
+     */
+    @JsonRequest("angelscript/setTypeCacheEnabled")
+    fun setTypeCacheEnabled(enabled: Boolean): CompletableFuture<Map<String, Any>?>
 }

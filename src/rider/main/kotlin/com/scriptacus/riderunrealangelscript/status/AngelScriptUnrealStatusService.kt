@@ -55,11 +55,12 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
             usingCachedTypes: Boolean = false
         ): AngelScriptUnrealStatus = when {
             // Live only while an editor is actually attached. HasTypesFromUnreal() never goes back
-            // to false, so types outlive the editor that supplied them: after it closes, analysis
-            // still works but describes an engine nobody is talking to any more. That is the same
-            // situation as a database read from disk, and is reported the same way.
+            // to false, so types outlive the editor that supplied them.
             typesLoaded && !usingCachedTypes && socketState == "open" -> AngelScriptUnrealStatus.READY
-            typesLoaded -> AngelScriptUnrealStatus.CACHED_TYPES
+            // Kept apart from types an editor left behind: only a database read from disk is
+            // governed by the cache setting, and only it can be discarded by turning that off.
+            typesLoaded && usingCachedTypes -> AngelScriptUnrealStatus.CACHED_TYPES
+            typesLoaded -> AngelScriptUnrealStatus.EDITOR_CLOSED
             // The bundled server starts at -1 and only dials Unreal once configuration arrives.
             port == null || port < 0 -> AngelScriptUnrealStatus.NOT_CONFIGURED
             socketState == "open" -> AngelScriptUnrealStatus.LOADING_TYPES
@@ -177,6 +178,51 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
             }
             WindowManager.getInstance().getStatusBar(project)
                 ?.updateWidget(AngelScriptStatusBarWidget.WIDGET_ID)
+        }, project.disposed)
+    }
+
+    /**
+     * Applies a change to the type database cache setting to a server that is already running.
+     *
+     * Only one transition needs a restart: switching the cache off while a cached database is in
+     * use. Those types cannot be unloaded - the server has no reset for its database, and
+     * Unreal-provided symbols share the namespace tree with script-declared ones - so the process
+     * is replaced instead. Everything else takes effect in place, which matters because a restart
+     * with an editor connected throws away a live database and re-downloads it.
+     *
+     * Whether a cached database is in use is answered by the server rather than read from the
+     * polled status, so the decision cannot be made on stale information.
+     */
+    fun applyTypeCacheSetting(enabled: Boolean) {
+        val manager = LanguageServerManager.getInstance(project)
+        // A server that is not running will read the setting from its command line when it starts.
+        if (manager.getServerStatus(AngelScriptLanguageServerFactory.SERVER_ID) != ServerStatus.started) {
+            return
+        }
+
+        manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID).thenAccept { item ->
+            val server = item?.server as? AngelScriptLanguageServer ?: return@thenAccept
+            server.setTypeCacheEnabled(enabled).thenAccept { result ->
+                val usingCachedTypes = result?.get("usingCachedTypes") as? Boolean ?: false
+                if (!enabled && usingCachedTypes) {
+                    LOG.info("Restarting AngelScript LSP server to discard a cached type database")
+                    restartServer()
+                } else {
+                    LOG.info("Type database cache ${if (enabled) "enabled" else "disabled"} in place")
+                }
+            }
+        }
+    }
+
+    private fun restartServer() {
+        ApplicationManager.getApplication().invokeLater({
+            if (project.isDisposed) {
+                return@invokeLater
+            }
+            LanguageServerManager.getInstance(project).start(
+                AngelScriptLanguageServerFactory.SERVER_ID,
+                LanguageServerManager.StartOptions().setForceRestart(true)
+            )
         }, project.disposed)
     }
 
