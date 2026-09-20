@@ -55,7 +55,7 @@ express a version constraint on it, so the pin is both what we compile against a
 minimum. **0.21 or later**, for `LSPWorkspaceFolderFeature` - on an older lsp4ij the plugin's
 client features fail to load and the server never starts. When raising it, check the classes the
 plugin extends against the new version: `LSPCompletionProposal` in particular is subclassed with
-reflection into its private members, see [LSP_COMPLETION_WORKAROUND.md](docs/LSP_COMPLETION_WORKAROUND.md).
+reflection into its private members, see [reference/lsp-completion-workaround.md](docs/reference/lsp-completion-workaround.md).
 
 **Key files:**
 - `AngelScriptFileType.kt` - File type registration
@@ -167,11 +167,15 @@ The transport is not patched: the server selects stdio itself when no Node IPC c
 - **Unreal Engine Compatibility**: Injects `unreal.setDataBreakpoints([])` during initialization to match VSCode's DAP client behavior
 - **Why needed**: Unreal Engine expects this message; LSP4IJ (Rider's DAP client) follows DAP spec strictly and only sends it when user creates data breakpoints
 
+Why the patches live in the bundler rather than in the checkout, and what the `✓` lines are actually
+checking, is recorded in
+[decisions/0001](docs/decisions/0001-patch-the-language-server-at-bundle-time.md).
+
 #### Making Changes
 
 1. **Edit the patch** in `scripts/bundle-lsp.js` or `scripts/bundle-dap.js` rather than the submodule checkout, which stays at its upstream revision
 2. **Rebuild the bundles**: `npm run bundle` (or `npm run bundle:lsp` / `npm run bundle:dap` individually)
-3. **Check every patch reports `✓`**: the patches are regexes over the bundled output, so an upstream rename turns one into a silent no-op. A `⚠` line means the patch did not apply and the bundle must not be shipped.
+3. **Check every patch reports `✓`**: the patches are regexes over the bundled output, so an upstream rename turns one into a silent no-op. A `⚠` line means the patch did not apply and the bundle must not be shipped. One of the lines checks the opposite direction - that every name the *injected* code calls is defined in the finished bundle - because a patch can apply perfectly and still reference something the bundle no longer has, which fails only at runtime and only in a way the client reads as "nothing here".
 4. **Bundled outputs**:
    - LSP: `src/rider/main/resources/js/angelscript-language-server.js`
    - DAP: `src/rider/main/resources/js/angelscript-debug-adapter.js`
@@ -183,6 +187,23 @@ The transport is not patched: the server selects stdio itself when no Node IPC c
 2. **Document patches**: Add comments explaining why each patch is needed
 3. **Test thoroughly**: Verify LSP features and debugging after rebundling
 4. **Commit together**: Always commit source changes and bundled outputs in the same commit
+
+## Documentation
+
+[docs/README.md](docs/README.md) describes how this repository documents itself. In short:
+
+- **[docs/decisions/](docs/decisions/)** holds one file per decision - the choice, the alternatives,
+  the evidence, and what would invalidate it. Add one when a choice constrains future work, when you
+  rejected an alternative for a reason the code does not show, when a failure was invisible, or when
+  a measurement drove the design. Not for ordinary bug fixes.
+- **[docs/reference/](docs/reference/)** holds maintenance guides for mechanisms too intricate for
+  comments.
+- **[docs/plans/](docs/plans/)** holds work that is understood but not done, so the investigation
+  behind it is not repeated by whoever picks it up.
+
+Read [decisions/0001](docs/decisions/0001-patch-the-language-server-at-bundle-time.md) and
+[decisions/0003](docs/decisions/0003-send-only-the-script-folders-as-the-workspace.md) before
+changing anything about how the language server is built or started.
 
 ## Code Style
 
@@ -249,6 +270,8 @@ configuration protocol.
 
 - Keep PRs focused on a single feature or fix
 - Update documentation if you change user-facing behavior
+- Add a [decision record](docs/README.md#decision-records) if the change makes a choice that later
+  work has to live with, or corrects one that is already recorded
 - Add tests for new functionality
 - Ensure all tests pass
 - Respond to review feedback promptly

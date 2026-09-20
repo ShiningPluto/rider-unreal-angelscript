@@ -29,7 +29,7 @@ import org.eclipse.lsp4j.TextEdit
  * Measured identical on lsp4ij 0.19.1 (what this build compiles against) and 0.21.0 (what Rider
  * ships today). **If this test fails, lsp4ij has changed how it orders same-position edits**: check
  * whether the stable sort in [AngelScriptCompletionProposal] can be dropped in favour of plain
- * `LSPIJUtils.applyEdits`, and update docs/LSP_COMPLETION_WORKAROUND.md either way.
+ * `LSPIJUtils.applyEdits`, and update docs/reference/lsp-completion-workaround.md either way.
  */
 class LspSamePositionTextEditTest : UsefulTestCase() {
 

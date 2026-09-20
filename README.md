@@ -33,7 +33,7 @@ This plugin bundles and integrates the AngelScript language server from the exce
 - **Debug Adapter Protocol (DAP)** based debugging support
 - **Concurrent Debugging** - Debug C++ and AngelScript simultaneously
 
-See [docs/DEBUGGING.md](docs/DEBUGGING.md) for details and setup instructions.
+See [docs/reference/debugging.md](docs/reference/debugging.md) for details and setup instructions.
 
 ## Requirements
 
@@ -86,7 +86,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, and
+[docs/](docs/) for how the plugin works and why - in particular
+[docs/decisions/](docs/decisions/), which records the choices behind the parts that are not obvious
+from the code.
 
 ## Development
 Portions of this codebase are written with AI coding tools.<br>
