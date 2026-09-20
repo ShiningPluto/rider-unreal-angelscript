@@ -49,6 +49,14 @@ The IDE integration layer providing:
 - Syntax highlighting and semantic token mapping
 - Parser and lexer definitions
 
+**lsp4ij version:** pinned in `build.gradle.kts` (`plugin("com.redhat.devtools.lsp4ij", ...)`).
+lsp4ij is a separate Marketplace plugin that users update independently, and `plugin.xml` cannot
+express a version constraint on it, so the pin is both what we compile against and the effective
+minimum. **0.21 or later**, for `LSPWorkspaceFolderFeature` - on an older lsp4ij the plugin's
+client features fail to load and the server never starts. When raising it, check the classes the
+plugin extends against the new version: `LSPCompletionProposal` in particular is subclassed with
+reflection into its private members, see [LSP_COMPLETION_WORKAROUND.md](docs/LSP_COMPLETION_WORKAROUND.md).
+
 **Key files:**
 - `AngelScriptFileType.kt` - File type registration
 - `AngelScriptLanguage.kt` - Language definition
@@ -146,7 +154,7 @@ The build scripts (`scripts/bundle-lsp.js` and `scripts/bundle-dap.js`) automati
 **LSP Server Patching** (`scripts/bundle-lsp.js`):
 - **Drive letter normalisation**: Lowercases the drive letter of diagnostic URIs before they are sent, since Rider and the server disagree on its case
 - **Deferred Unreal connection**: Starts with an unconfigured port so the server dials the editor only once the real port arrives, instead of connecting on the default first
-- **Streamed workspace scan**: Loads each workspace root as soon as it has been scanned, instead of waiting for the slowest one - lsp4ij passes every content root of the solution, so the slowest is minutes away and unrelated to AngelScript
+- **Streamed workspace scan**: Loads each workspace root as soon as it has been scanned, instead of waiting for the slowest one. `AngelScriptWorkspaceFolderFeature` keeps the roots down to the script folders, so this mainly covers projects that fall back to Rider's content roots, where the slowest root is minutes away and unrelated to AngelScript
 - **Re-resolve after a batch loads**: Re-resolves whenever newly loaded modules have drained through the queues, since modules resolved before them cache their failed cross-module lookups until the file is edited
 - **C++ navigation handlers**: Adds `angelscript/getCppSymbol` and `angelscript/navigateToCpp`
 - **Unreal status handler**: Adds `angelscript/getUnrealStatus` and `angelscript/setTypeCacheEnabled`, which back the status bar widget
