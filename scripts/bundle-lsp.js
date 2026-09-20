@@ -137,8 +137,8 @@ async function bundle() {
     const globStreamPattern = /GlobsRemaining -= 1;\s*if \(GlobsRemaining <= 0\)\s*TickQueues\(\);/;
     const globStreamReplacement =
       'GlobsRemaining -= 1;\n'
-      + '      if (GlobsRemaining <= 0)\n'
-      + '        __asAllRootsScanned = true;\n'
+      + '      if (files && files.length != 0)\n'
+      + '        __asModulesLoadedSinceResolve = true;\n'
       + '      // Load what this root found now; a slower root no longer holds the project back.\n'
       + '      if (!IsServicingQueues)\n'
       + '        TickQueues();';
@@ -150,36 +150,44 @@ async function bundle() {
       console.warn('⚠ Warning: Could not find the workspace root scan to patch');
     }
 
-    // Patch to re-resolve once the whole project has been loaded.
+    // Patch to re-resolve whenever a batch of modules has finished loading.
     //
-    // The safety net for the window above, which the patch narrows but cannot close: whatever was
-    // resolved while roots were still being scanned is re-resolved once, after the last root has
-    // been scanned and the queues have drained. Upstream only re-resolves when a type database
-    // arrives, and ReResolveAllModules() refuses to run while the queues are being serviced, so
+    // The safety net for the window above, which the patch narrows but cannot close: resolution is
+    // cached on the module and only invalidated by an edit, so anything resolved before a root was
+    // scanned keeps referring to a project that did not have those files in it. Upstream only
+    // re-resolves when a type database arrives, and ReResolveAllModules() refuses to run while the
+    // queues are being serviced - which is exactly when a type database tends to arrive - so
     // nothing else ever revisits those modules.
+    //
+    // Waiting for every root to be scanned is not enough: with a root that takes minutes, the
+    // script files are loaded and the user is working long before that. The trigger is therefore
+    // "modules were loaded since the last re-resolve, and the queues have drained", which fires
+    // per batch. Roots that contain no AngelScript - most of what Rider passes - never set it.
     const settleHookPattern = /(\} else \{\s*)IsServicingQueues = false;(\s*\}\s*\})/;
     const settleHookReplacement = '$1IsServicingQueues = false;\n    __asOnQueuesSettled();$2';
 
     if (settleHookPattern.test(content)) {
       content = content.replace(settleHookPattern, settleHookReplacement);
-      console.log('✓ Patched to re-resolve modules once the project has finished loading');
+      console.log('✓ Patched to re-resolve modules when a batch of them finishes loading');
     } else {
       console.warn('⚠ Warning: Could not find the queue drain to patch');
     }
 
     const initialLoadSupport = `
-var __asAllRootsScanned = false;
-var __asInitialLoadReResolved = false;
+var __asModulesLoadedSinceResolve = false;
 
-// Modules resolved before the project finished loading may have resolved cross-module references
-// against a database that was still missing most of it. Resolution is cached on the module and
-// only invalidated by an edit, so without this they stay wrong for the rest of the session -
-// completion recovers on its own (it reads the type database) but go-to-definition does not.
+// Modules resolved before another root's files were loaded resolved their cross-module references
+// against a project that did not contain those files. Without this they stay wrong for the rest of
+// the session - completion recovers on its own because it reads the type database when asked, but
+// go-to-definition does not, because it reads the symbol list recorded when the module resolved.
+//
+// Only worth doing once the modules are actually usable: no type database means nothing resolves
+// anyway, and the load that follows will trigger this again.
 function __asOnQueuesSettled() {
-  if (__asInitialLoadReResolved || !__asAllRootsScanned || !HasTypesFromUnreal())
+  if (!__asModulesLoadedSinceResolve || !HasTypesFromUnreal())
     return;
-  __asInitialLoadReResolved = true;
-  connection.console.log("[initialLoad] All roots scanned; re-resolving modules resolved before that");
+  __asModulesLoadedSinceResolve = false;
+  connection.console.log("[initialLoad] A batch of modules finished loading; re-resolving");
   ReResolveAllModules();
 }
 `;

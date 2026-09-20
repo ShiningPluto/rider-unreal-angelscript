@@ -26,7 +26,7 @@ class AngelScriptInitialLoadTest : UsefulTestCase() {
     fun testEachWorkspaceRootIsLoadedAsSoonAsItHasBeenScanned() {
         assertTrue(
             "bundle-lsp.js did not patch the workspace root scan",
-            bundle.contains("__asAllRootsScanned = true;")
+            bundle.contains("__asModulesLoadedSinceResolve = true;")
         )
         // Waiting for the last root is exactly what the patch removes; if this reappears, the
         // patched form was replaced by upstream's.
@@ -38,17 +38,24 @@ class AngelScriptInitialLoadTest : UsefulTestCase() {
 
     /**
      * Resolution is cached on the module and only invalidated by an edit, so a module resolved
-     * before the project finished loading stays wrong for the whole session. Upstream re-resolves
-     * only when a type database arrives, which is never for a project running off a saved one.
+     * before another root's files were loaded stays wrong for the whole session. Upstream
+     * re-resolves only when a type database arrives, which for a project running off a saved one
+     * happens once, before any of the project has been scanned.
      */
-    fun testModulesResolvedBeforeTheProjectLoadedAreReResolved() {
+    fun testModulesResolvedBeforeALaterBatchLoadedAreReResolved() {
         assertTrue(
-            "bundle-lsp.js did not inject the initial load settle hook",
+            "bundle-lsp.js did not inject the queue settle hook",
             bundle.contains("function __asOnQueuesSettled()") && bundle.contains("__asOnQueuesSettled();")
         )
         assertTrue(
             "The settle hook must re-resolve rather than merely log",
-            bundle.contains("__asInitialLoadReResolved = true;") && bundle.contains("ReResolveAllModules();")
+            bundle.contains("__asModulesLoadedSinceResolve = false;") && bundle.contains("ReResolveAllModules();")
+        )
+        // Waiting for the last root would be waiting minutes on a real project, long after the
+        // script files themselves have loaded and the user has started working in them.
+        assertFalse(
+            "The re-resolve must not be gated on every root having been scanned",
+            bundle.contains("__asAllRootsScanned")
         )
     }
 

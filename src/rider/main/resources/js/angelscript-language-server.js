@@ -40874,8 +40874,8 @@ connection.onInitialize((_params) => {
         LoadQueue.push(asmodule);
       }
       GlobsRemaining -= 1;
-      if (GlobsRemaining <= 0)
-        __asAllRootsScanned = true;
+      if (files && files.length != 0)
+        __asModulesLoadedSinceResolve = true;
       // Load what this root found now; a slower root no longer holds the project back.
       if (!IsServicingQueues)
         TickQueues();
@@ -41631,18 +41631,20 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
   return false;
 });
 
-var __asAllRootsScanned = false;
-var __asInitialLoadReResolved = false;
+var __asModulesLoadedSinceResolve = false;
 
-// Modules resolved before the project finished loading may have resolved cross-module references
-// against a database that was still missing most of it. Resolution is cached on the module and
-// only invalidated by an edit, so without this they stay wrong for the rest of the session -
-// completion recovers on its own (it reads the type database) but go-to-definition does not.
+// Modules resolved before another root's files were loaded resolved their cross-module references
+// against a project that did not contain those files. Without this they stay wrong for the rest of
+// the session - completion recovers on its own because it reads the type database when asked, but
+// go-to-definition does not, because it reads the symbol list recorded when the module resolved.
+//
+// Only worth doing once the modules are actually usable: no type database means nothing resolves
+// anyway, and the load that follows will trigger this again.
 function __asOnQueuesSettled() {
-  if (__asInitialLoadReResolved || !__asAllRootsScanned || !HasTypesFromUnreal())
+  if (!__asModulesLoadedSinceResolve || !HasTypesFromUnreal())
     return;
-  __asInitialLoadReResolved = true;
-  connection.console.log("[initialLoad] All roots scanned; re-resolving modules resolved before that");
+  __asModulesLoadedSinceResolve = false;
+  connection.console.log("[initialLoad] A batch of modules finished loading; re-resolving");
   ReResolveAllModules();
 }
 
