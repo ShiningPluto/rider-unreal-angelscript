@@ -4115,11 +4115,11 @@ var require_main2 = __commonJS({
         CompletionItemKind5.Operator = 24;
         CompletionItemKind5.TypeParameter = 25;
       })(CompletionItemKind4 = exports2.CompletionItemKind || (exports2.CompletionItemKind = {}));
-      var InsertTextFormat2;
-      (function(InsertTextFormat3) {
-        InsertTextFormat3.PlainText = 1;
-        InsertTextFormat3.Snippet = 2;
-      })(InsertTextFormat2 = exports2.InsertTextFormat || (exports2.InsertTextFormat = {}));
+      var InsertTextFormat3;
+      (function(InsertTextFormat4) {
+        InsertTextFormat4.PlainText = 1;
+        InsertTextFormat4.Snippet = 2;
+      })(InsertTextFormat3 = exports2.InsertTextFormat || (exports2.InsertTextFormat = {}));
       var CompletionItemTag;
       (function(CompletionItemTag2) {
         CompletionItemTag2.Deprecated = 1;
@@ -4549,14 +4549,14 @@ var require_main2 = __commonJS({
         }
         InlayHint4.is = is;
       })(InlayHint3 = exports2.InlayHint || (exports2.InlayHint = {}));
-      var WorkspaceFolder;
-      (function(WorkspaceFolder2) {
+      var WorkspaceFolder2;
+      (function(WorkspaceFolder3) {
         function is(value) {
           var candidate = value;
           return Is.objectLiteral(candidate) && URI2.is(candidate.uri) && Is.string(candidate.name);
         }
-        WorkspaceFolder2.is = is;
-      })(WorkspaceFolder = exports2.WorkspaceFolder || (exports2.WorkspaceFolder = {}));
+        WorkspaceFolder3.is = is;
+      })(WorkspaceFolder2 = exports2.WorkspaceFolder || (exports2.WorkspaceFolder = {}));
       exports2.EOL = ["\n", "\r\n", "\r"];
       var TextDocument3;
       (function(TextDocument4) {
@@ -8530,8 +8530,8 @@ var require_main4 = __commonJS({
         for (let i = 0; i < argv.length; i++) {
           let arg = argv[i];
           if (arg === "--node-ipc") {
-            input = new node_1.StreamMessageReader(process.stdin);
-            output = new node_1.StreamMessageWriter(process.stdout);
+            input = new node_1.IPCMessageReader(process);
+            output = new node_1.IPCMessageWriter(process);
             break;
           } else if (arg === "--stdio") {
             input = process.stdin;
@@ -9299,8 +9299,6 @@ var require_node_types = __commonJS({
         IfStatement: indexed ? i++ : "IfStatement",
         ElseStatement: indexed ? i++ : "ElseStatement",
         ReturnStatement: indexed ? i++ : "ReturnStatement",
-        ImportStatement: indexed ? i++ : "ImportStatement",
-        ImportFunctionStatement: indexed ? i++ : "ImportFunctionStatement",
         DefaultStatement: indexed ? i++ : "DefaultStatement",
         SwitchStatement: indexed ? i++ : "SwitchStatement",
         CaseStatement: indexed ? i++ : "CaseStatement",
@@ -9391,471 +9389,467 @@ var require_angelscript = __commonJS({
       compound.end = range.end;
       return compound;
     }
-    function peg$subclass(child, parent) {
-      function C() {
-        this.constructor = child;
+    var peg$SyntaxError = class extends SyntaxError {
+      constructor(message, expected, found, location) {
+        super(message);
+        this.expected = expected;
+        this.found = found;
+        this.location = location;
+        this.name = "SyntaxError";
       }
-      C.prototype = parent.prototype;
-      child.prototype = new C();
-    }
-    function peg$SyntaxError(message, expected, found, location) {
-      var self = Error.call(this, message);
-      if (Object.setPrototypeOf) {
-        Object.setPrototypeOf(self, peg$SyntaxError.prototype);
-      }
-      self.expected = expected;
-      self.found = found;
-      self.location = location;
-      self.name = "SyntaxError";
-      return self;
-    }
-    peg$subclass(peg$SyntaxError, Error);
-    function peg$padEnd(str, targetLength, padString) {
-      padString = padString || " ";
-      if (str.length > targetLength) {
+      format(sources) {
+        let str = "Error: " + this.message;
+        if (this.location) {
+          let src = null;
+          const st = sources.find((s2) => s2.source === this.location.source);
+          if (st) {
+            src = st.text.split(/\r\n|\n|\r/g);
+          }
+          const s = this.location.start;
+          const offset_s = this.location.source && typeof this.location.source.offset === "function" ? this.location.source.offset(s) : s;
+          const loc = this.location.source + ":" + offset_s.line + ":" + offset_s.column;
+          if (src) {
+            const e = this.location.end;
+            const filler = "".padEnd(offset_s.line.toString().length, " ");
+            const line = src[s.line - 1];
+            const last = s.line === e.line ? e.column : line.length + 1;
+            const hatLen = last - s.column || 1;
+            str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s.column - 1, " ") + "".padEnd(hatLen, "^");
+          } else {
+            str += "\n at " + loc;
+          }
+        }
         return str;
       }
-      targetLength -= str.length;
-      padString += padString.repeat(targetLength);
-      return str + padString.slice(0, targetLength);
-    }
-    peg$SyntaxError.prototype.format = function(sources) {
-      var str = "Error: " + this.message;
-      if (this.location) {
-        var src = null;
-        var k;
-        for (k = 0; k < sources.length; k++) {
-          if (sources[k].source === this.location.source) {
-            src = sources[k].text.split(/\r\n|\n|\r/g);
-            break;
+      static buildMessage(expected, found) {
+        function hex(ch) {
+          return ch.codePointAt(0).toString(16).toUpperCase();
+        }
+        const nonPrintable = Object.prototype.hasOwnProperty.call(RegExp.prototype, "unicode") ? new RegExp("[\\p{C}\\p{Mn}\\p{Mc}]", "gu") : null;
+        function unicodeEscape(s) {
+          if (nonPrintable) {
+            return s.replace(nonPrintable, (ch) => "\\u{" + hex(ch) + "}");
           }
+          return s;
         }
-        var s = this.location.start;
-        var offset_s = this.location.source && typeof this.location.source.offset === "function" ? this.location.source.offset(s) : s;
-        var loc = this.location.source + ":" + offset_s.line + ":" + offset_s.column;
-        if (src) {
-          var e = this.location.end;
-          var filler = peg$padEnd("", offset_s.line.toString().length, " ");
-          var line = src[s.line - 1];
-          var last = s.line === e.line ? e.column : line.length + 1;
-          var hatLen = last - s.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + peg$padEnd("", s.column - 1, " ") + peg$padEnd("", hatLen, "^");
-        } else {
-          str += "\n at " + loc;
+        function literalEscape(s) {
+          return unicodeEscape(s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\0/g, "\\0").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/[\x00-\x0F]/g, (ch) => "\\x0" + hex(ch)).replace(/[\x10-\x1F\x7F-\x9F]/g, (ch) => "\\x" + hex(ch)));
         }
-      }
-      return str;
-    };
-    peg$SyntaxError.buildMessage = function(expected, found) {
-      var DESCRIBE_EXPECTATION_FNS = {
-        literal: function(expectation) {
-          return '"' + literalEscape(expectation.text) + '"';
-        },
-        class: function(expectation) {
-          var escapedParts = expectation.parts.map(function(part) {
-            return Array.isArray(part) ? classEscape(part[0]) + "-" + classEscape(part[1]) : classEscape(part);
-          });
-          return "[" + (expectation.inverted ? "^" : "") + escapedParts.join("") + "]";
-        },
-        any: function() {
-          return "any character";
-        },
-        end: function() {
-          return "end of input";
-        },
-        other: function(expectation) {
-          return expectation.description;
+        function classEscape(s) {
+          return unicodeEscape(s.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\^/g, "\\^").replace(/-/g, "\\-").replace(/\0/g, "\\0").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/[\x00-\x0F]/g, (ch) => "\\x0" + hex(ch)).replace(/[\x10-\x1F\x7F-\x9F]/g, (ch) => "\\x" + hex(ch)));
         }
-      };
-      function hex(ch) {
-        return ch.charCodeAt(0).toString(16).toUpperCase();
-      }
-      function literalEscape(s) {
-        return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\0/g, "\\0").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/[\x00-\x0F]/g, function(ch) {
-          return "\\x0" + hex(ch);
-        }).replace(/[\x10-\x1F\x7F-\x9F]/g, function(ch) {
-          return "\\x" + hex(ch);
-        });
-      }
-      function classEscape(s) {
-        return s.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\^/g, "\\^").replace(/-/g, "\\-").replace(/\0/g, "\\0").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/[\x00-\x0F]/g, function(ch) {
-          return "\\x0" + hex(ch);
-        }).replace(/[\x10-\x1F\x7F-\x9F]/g, function(ch) {
-          return "\\x" + hex(ch);
-        });
-      }
-      function describeExpectation(expectation) {
-        return DESCRIBE_EXPECTATION_FNS[expectation.type](expectation);
-      }
-      function describeExpected(expected2) {
-        var descriptions = expected2.map(describeExpectation);
-        var i, j;
-        descriptions.sort();
-        if (descriptions.length > 0) {
-          for (i = 1, j = 1; i < descriptions.length; i++) {
-            if (descriptions[i - 1] !== descriptions[i]) {
-              descriptions[j] = descriptions[i];
-              j++;
+        const DESCRIBE_EXPECTATION_FNS = {
+          literal(expectation) {
+            return '"' + literalEscape(expectation.text) + '"';
+          },
+          class(expectation) {
+            const escapedParts = expectation.parts.map(
+              (part) => Array.isArray(part) ? classEscape(part[0]) + "-" + classEscape(part[1]) : classEscape(part)
+            );
+            return "[" + (expectation.inverted ? "^" : "") + escapedParts.join("") + "]" + (expectation.unicode ? "u" : "");
+          },
+          any() {
+            return "any character";
+          },
+          end() {
+            return "end of input";
+          },
+          other(expectation) {
+            return expectation.description;
+          }
+        };
+        function describeExpectation(expectation) {
+          return DESCRIBE_EXPECTATION_FNS[expectation.type](expectation);
+        }
+        function describeExpected(expected2) {
+          const descriptions = expected2.map(describeExpectation);
+          descriptions.sort();
+          if (descriptions.length > 0) {
+            let j = 1;
+            for (let i = 1; i < descriptions.length; i++) {
+              if (descriptions[i - 1] !== descriptions[i]) {
+                descriptions[j] = descriptions[i];
+                j++;
+              }
             }
+            descriptions.length = j;
           }
-          descriptions.length = j;
+          switch (descriptions.length) {
+            case 1:
+              return descriptions[0];
+            case 2:
+              return descriptions[0] + " or " + descriptions[1];
+            default:
+              return descriptions.slice(0, -1).join(", ") + ", or " + descriptions[descriptions.length - 1];
+          }
         }
-        switch (descriptions.length) {
-          case 1:
-            return descriptions[0];
-          case 2:
-            return descriptions[0] + " or " + descriptions[1];
-          default:
-            return descriptions.slice(0, -1).join(", ") + ", or " + descriptions[descriptions.length - 1];
+        function describeFound(found2) {
+          return found2 ? '"' + literalEscape(found2) + '"' : "end of input";
         }
+        return "Expected " + describeExpected(expected) + " but " + describeFound(found) + " found.";
       }
-      function describeFound(found2) {
-        return found2 ? '"' + literalEscape(found2) + '"' : "end of input";
-      }
-      return "Expected " + describeExpected(expected) + " but " + describeFound(found) + " found.";
     };
     function peg$parse(input, options) {
       options = options !== void 0 ? options : {};
-      var peg$FAILED = {};
-      var peg$source = options.grammarSource;
-      var peg$startRuleFunctions = { start: peg$parsestart, start_global: peg$parsestart_global, start_class: peg$parsestart_class, start_enum: peg$parsestart_enum };
-      var peg$startRuleFunction = peg$parsestart;
-      var peg$c0 = "/";
-      var peg$c1 = "*";
-      var peg$c2 = "#";
-      var peg$c3 = "+";
-      var peg$c4 = "-";
-      var peg$c5 = "&";
-      var peg$c6 = "|";
-      var peg$c7 = "=";
-      var peg$c8 = "%";
-      var peg$c9 = "!";
-      var peg$c10 = "<";
-      var peg$c11 = ">";
-      var peg$c12 = "^";
-      var peg$c13 = "~";
-      var peg$c14 = "mixin";
-      var peg$c15 = "local";
-      var peg$c16 = "i";
-      var peg$c17 = "if";
-      var peg$c18 = "(";
-      var peg$c19 = ")";
-      var peg$c20 = "r";
-      var peg$c21 = "return";
-      var peg$c22 = "e";
-      var peg$c23 = "else";
-      var peg$c24 = "s";
-      var peg$c25 = "switch";
-      var peg$c26 = "f";
-      var peg$c27 = "for";
-      var peg$c28 = ";";
-      var peg$c29 = ":";
-      var peg$c30 = ",";
-      var peg$c31 = "c";
-      var peg$c32 = "case";
-      var peg$c33 = "d";
-      var peg$c34 = "default";
-      var peg$c35 = "continue";
-      var peg$c36 = "b";
-      var peg$c37 = "break";
-      var peg$c38 = "fallthrough";
-      var peg$c39 = "w";
-      var peg$c40 = "while";
-      var peg$c41 = "const";
-      var peg$c42 = "inout";
-      var peg$c43 = "in";
-      var peg$c44 = "o";
-      var peg$c45 = "out";
-      var peg$c46 = "t";
-      var peg$c47 = "this";
-      var peg$c48 = "[";
-      var peg$c49 = "]";
-      var peg$c50 = ".";
-      var peg$c51 = "?";
-      var peg$c52 = "C";
-      var peg$c53 = "Cast";
-      var peg$c54 = "true";
-      var peg$c55 = "false";
-      var peg$c56 = "n";
-      var peg$c57 = "nullptr";
-      var peg$c58 = "0";
-      var peg$c59 = "x";
-      var peg$c60 = '"';
-      var peg$c61 = "\\";
-      var peg$c62 = '"""';
-      var peg$c63 = "'";
-      var peg$c64 = "class";
-      var peg$c65 = "struct";
-      var peg$c66 = "v";
-      var peg$c67 = "void";
-      var peg$c68 = "override";
-      var peg$c69 = "delegate";
-      var peg$c70 = "p";
-      var peg$c71 = "property";
-      var peg$c72 = "event";
-      var peg$c73 = "enum";
-      var peg$c74 = "m";
-      var peg$c75 = "l";
-      var peg$c76 = "final";
-      var peg$c77 = "a";
-      var peg$c78 = "access";
-      var peg$c79 = "namespace";
-      var peg$c80 = "U";
-      var peg$c81 = "UFUNCTION";
-      var peg$c82 = "UPROPERTY";
-      var peg$c83 = "UCLASS";
-      var peg$c84 = "UENUM";
-      var peg$c85 = "UMETA";
-      var peg$c86 = "USTRUCT";
-      var peg$c87 = "T";
-      var peg$c88 = "TSubclassOf";
-      var peg$c89 = "TArray";
-      var peg$c90 = "TMap";
-      var peg$c91 = "TSet";
-      var peg$c92 = "TOptional";
-      var peg$c93 = "TWeakObjectPtr";
-      var peg$c94 = "TSoftObjectPtr";
-      var peg$c95 = "TSoftClassPtr";
-      var peg$c96 = "TInstigated";
-      var peg$c97 = "TPerPlayer";
-      var peg$c98 = "float32";
-      var peg$c99 = "float64";
-      var peg$c100 = "float";
-      var peg$c101 = "int64";
-      var peg$c102 = "int32";
-      var peg$c103 = "int16";
-      var peg$c104 = "int8";
-      var peg$c105 = "int";
-      var peg$c106 = "u";
-      var peg$c107 = "uint64";
-      var peg$c108 = "uint32";
-      var peg$c109 = "uint16";
-      var peg$c110 = "uint8";
-      var peg$c111 = "uint";
-      var peg$c112 = "bool";
-      var peg$c113 = "import";
-      var peg$c114 = "from";
-      var peg$c115 = "asset";
-      var peg$c116 = "of";
-      var peg$c117 = "private";
-      var peg$c118 = "protected";
-      var peg$c119 = "public";
-      var peg$r0 = /^[^\r\n]/;
-      var peg$r1 = /^[ \t\r\n]/;
-      var peg$r2 = /^[\/#]/;
-      var peg$r3 = /^[0-9]/;
-      var peg$r4 = /^[,)=]/;
-      var peg$r5 = /^[^\r\n"\\]/;
-      var peg$r6 = /^[A-Za-z"'\\]/;
-      var peg$r7 = /^[^\r\n'\\]/;
-      var peg$r8 = /^[0-9A-Fa-f]/;
-      var peg$r9 = /^[01]/;
-      var peg$r10 = /^[0-8]/;
-      var peg$r11 = /^[A-Za-z_]/;
-      var peg$r12 = /^[A-Za-z_0-9]/;
-      var peg$r13 = /^[|:]/;
-      var peg$e0 = peg$literalExpectation("/", false);
-      var peg$e1 = peg$literalExpectation("*", false);
-      var peg$e2 = peg$anyExpectation();
-      var peg$e3 = peg$classExpectation(["\r", "\n"], true, false);
-      var peg$e4 = peg$literalExpectation("#", false);
-      var peg$e5 = peg$classExpectation([" ", "	", "\r", "\n"], false, false);
-      var peg$e6 = peg$classExpectation(["/", "#"], false, false);
-      var peg$e7 = peg$literalExpectation("+", false);
-      var peg$e8 = peg$literalExpectation("-", false);
-      var peg$e9 = peg$literalExpectation("&", false);
-      var peg$e10 = peg$literalExpectation("|", false);
-      var peg$e11 = peg$literalExpectation("=", false);
-      var peg$e12 = peg$literalExpectation("%", false);
-      var peg$e13 = peg$literalExpectation("!", false);
-      var peg$e14 = peg$literalExpectation("<", false);
-      var peg$e15 = peg$literalExpectation(">", false);
-      var peg$e16 = peg$literalExpectation("^", false);
-      var peg$e17 = peg$literalExpectation("~", false);
-      var peg$e18 = peg$literalExpectation("mixin", false);
-      var peg$e19 = peg$literalExpectation("local", false);
-      var peg$e20 = peg$literalExpectation("i", false);
-      var peg$e21 = peg$literalExpectation("if", false);
-      var peg$e22 = peg$literalExpectation("(", false);
-      var peg$e23 = peg$literalExpectation(")", false);
-      var peg$e24 = peg$literalExpectation("r", false);
-      var peg$e25 = peg$literalExpectation("return", false);
-      var peg$e26 = peg$literalExpectation("e", false);
-      var peg$e27 = peg$literalExpectation("else", false);
-      var peg$e28 = peg$literalExpectation("s", false);
-      var peg$e29 = peg$literalExpectation("switch", false);
-      var peg$e30 = peg$literalExpectation("f", false);
-      var peg$e31 = peg$literalExpectation("for", false);
-      var peg$e32 = peg$literalExpectation(";", false);
-      var peg$e33 = peg$literalExpectation(":", false);
-      var peg$e34 = peg$literalExpectation(",", false);
-      var peg$e35 = peg$literalExpectation("c", false);
-      var peg$e36 = peg$literalExpectation("case", false);
-      var peg$e37 = peg$literalExpectation("d", false);
-      var peg$e38 = peg$literalExpectation("default", false);
-      var peg$e39 = peg$classExpectation([["0", "9"]], false, false);
-      var peg$e40 = peg$literalExpectation("continue", false);
-      var peg$e41 = peg$literalExpectation("b", false);
-      var peg$e42 = peg$literalExpectation("break", false);
-      var peg$e43 = peg$literalExpectation("fallthrough", false);
-      var peg$e44 = peg$literalExpectation("w", false);
-      var peg$e45 = peg$literalExpectation("while", false);
-      var peg$e46 = peg$literalExpectation("const", false);
-      var peg$e47 = peg$literalExpectation("inout", false);
-      var peg$e48 = peg$literalExpectation("in", false);
-      var peg$e49 = peg$literalExpectation("o", false);
-      var peg$e50 = peg$literalExpectation("out", false);
-      var peg$e51 = peg$literalExpectation("t", false);
-      var peg$e52 = peg$literalExpectation("this", false);
-      var peg$e53 = peg$literalExpectation("[", false);
-      var peg$e54 = peg$literalExpectation("]", false);
-      var peg$e55 = peg$literalExpectation(".", false);
-      var peg$e56 = peg$classExpectation([",", ")", "="], false, false);
-      var peg$e57 = peg$literalExpectation("?", false);
-      var peg$e58 = peg$literalExpectation("C", false);
-      var peg$e59 = peg$literalExpectation("Cast", false);
-      var peg$e60 = peg$literalExpectation("true", false);
-      var peg$e61 = peg$literalExpectation("false", false);
-      var peg$e62 = peg$literalExpectation("n", false);
-      var peg$e63 = peg$literalExpectation("nullptr", false);
-      var peg$e64 = peg$literalExpectation("0", false);
-      var peg$e65 = peg$literalExpectation("x", false);
-      var peg$e66 = peg$literalExpectation('"', false);
-      var peg$e67 = peg$classExpectation(["\r", "\n", '"', "\\"], true, false);
-      var peg$e68 = peg$literalExpectation("\\", false);
-      var peg$e69 = peg$literalExpectation('"""', false);
-      var peg$e70 = peg$classExpectation([["A", "Z"], ["a", "z"], '"', "'", "\\"], false, false);
-      var peg$e71 = peg$literalExpectation("'", false);
-      var peg$e72 = peg$classExpectation(["\r", "\n", "'", "\\"], true, false);
-      var peg$e73 = peg$classExpectation([["0", "9"], ["A", "F"], ["a", "f"]], false, false);
-      var peg$e74 = peg$classExpectation(["0", "1"], false, false);
-      var peg$e75 = peg$classExpectation([["0", "8"]], false, false);
-      var peg$e76 = peg$literalExpectation("class", false);
-      var peg$e77 = peg$literalExpectation("struct", false);
-      var peg$e78 = peg$literalExpectation("v", false);
-      var peg$e79 = peg$literalExpectation("void", false);
-      var peg$e80 = peg$literalExpectation("override", false);
-      var peg$e81 = peg$literalExpectation("delegate", false);
-      var peg$e82 = peg$literalExpectation("p", false);
-      var peg$e83 = peg$literalExpectation("property", false);
-      var peg$e84 = peg$literalExpectation("event", false);
-      var peg$e85 = peg$literalExpectation("enum", false);
-      var peg$e86 = peg$literalExpectation("m", false);
-      var peg$e87 = peg$literalExpectation("l", false);
-      var peg$e88 = peg$literalExpectation("final", false);
-      var peg$e89 = peg$literalExpectation("a", false);
-      var peg$e90 = peg$literalExpectation("access", false);
-      var peg$e91 = peg$literalExpectation("namespace", false);
-      var peg$e92 = peg$literalExpectation("U", false);
-      var peg$e93 = peg$literalExpectation("UFUNCTION", false);
-      var peg$e94 = peg$literalExpectation("UPROPERTY", false);
-      var peg$e95 = peg$literalExpectation("UCLASS", false);
-      var peg$e96 = peg$literalExpectation("UENUM", false);
-      var peg$e97 = peg$literalExpectation("UMETA", false);
-      var peg$e98 = peg$literalExpectation("USTRUCT", false);
-      var peg$e99 = peg$literalExpectation("T", false);
-      var peg$e100 = peg$literalExpectation("TSubclassOf", false);
-      var peg$e101 = peg$literalExpectation("TArray", false);
-      var peg$e102 = peg$literalExpectation("TMap", false);
-      var peg$e103 = peg$literalExpectation("TSet", false);
-      var peg$e104 = peg$literalExpectation("TOptional", false);
-      var peg$e105 = peg$literalExpectation("TWeakObjectPtr", false);
-      var peg$e106 = peg$literalExpectation("TSoftObjectPtr", false);
-      var peg$e107 = peg$literalExpectation("TSoftClassPtr", false);
-      var peg$e108 = peg$literalExpectation("TInstigated", false);
-      var peg$e109 = peg$literalExpectation("TPerPlayer", false);
-      var peg$e110 = peg$literalExpectation("float32", false);
-      var peg$e111 = peg$literalExpectation("float64", false);
-      var peg$e112 = peg$literalExpectation("float", false);
-      var peg$e113 = peg$literalExpectation("int64", false);
-      var peg$e114 = peg$literalExpectation("int32", false);
-      var peg$e115 = peg$literalExpectation("int16", false);
-      var peg$e116 = peg$literalExpectation("int8", false);
-      var peg$e117 = peg$literalExpectation("int", false);
-      var peg$e118 = peg$literalExpectation("u", false);
-      var peg$e119 = peg$literalExpectation("uint64", false);
-      var peg$e120 = peg$literalExpectation("uint32", false);
-      var peg$e121 = peg$literalExpectation("uint16", false);
-      var peg$e122 = peg$literalExpectation("uint8", false);
-      var peg$e123 = peg$literalExpectation("uint", false);
-      var peg$e124 = peg$literalExpectation("bool", false);
-      var peg$e125 = peg$classExpectation([["A", "Z"], ["a", "z"], "_"], false, false);
-      var peg$e126 = peg$classExpectation([["A", "Z"], ["a", "z"], "_", ["0", "9"]], false, false);
-      var peg$e127 = peg$literalExpectation("import", false);
-      var peg$e128 = peg$literalExpectation("from", false);
-      var peg$e129 = peg$classExpectation(["|", ":"], false, false);
-      var peg$e130 = peg$literalExpectation("asset", false);
-      var peg$e131 = peg$literalExpectation("of", false);
-      var peg$e132 = peg$literalExpectation("private", false);
-      var peg$e133 = peg$literalExpectation("protected", false);
-      var peg$e134 = peg$literalExpectation("public", false);
-      var peg$f0 = function() {
-        return null;
+      const peg$FAILED = {};
+      const peg$source = options.grammarSource;
+      const peg$startRuleFunctions = {
+        start: peg$parsestart,
+        start_global: peg$parsestart_global,
+        start_class: peg$parsestart_class,
+        start_enum: peg$parsestart_enum
       };
-      var peg$f1 = function(comment, decl) {
+      let peg$startRuleFunction = peg$parsestart;
+      const peg$c0 = "/";
+      const peg$c1 = "*";
+      const peg$c2 = "#";
+      const peg$c3 = "+";
+      const peg$c4 = "-";
+      const peg$c5 = "&";
+      const peg$c6 = "|";
+      const peg$c7 = "=";
+      const peg$c8 = "%";
+      const peg$c9 = "!";
+      const peg$c10 = "<";
+      const peg$c11 = ">";
+      const peg$c12 = "^";
+      const peg$c13 = "~";
+      const peg$c14 = "mixin";
+      const peg$c15 = "local";
+      const peg$c16 = "i";
+      const peg$c17 = "if";
+      const peg$c18 = "(";
+      const peg$c19 = ")";
+      const peg$c20 = "r";
+      const peg$c21 = "return";
+      const peg$c22 = "e";
+      const peg$c23 = "else";
+      const peg$c24 = "s";
+      const peg$c25 = "switch";
+      const peg$c26 = "f";
+      const peg$c27 = "for";
+      const peg$c28 = ";";
+      const peg$c29 = ":";
+      const peg$c30 = ",";
+      const peg$c31 = "c";
+      const peg$c32 = "case";
+      const peg$c33 = "d";
+      const peg$c34 = "default";
+      const peg$c35 = "continue";
+      const peg$c36 = "b";
+      const peg$c37 = "break";
+      const peg$c38 = "fallthrough";
+      const peg$c39 = "w";
+      const peg$c40 = "while";
+      const peg$c41 = "const";
+      const peg$c42 = "inout";
+      const peg$c43 = "in";
+      const peg$c44 = "o";
+      const peg$c45 = "out";
+      const peg$c46 = "t";
+      const peg$c47 = "this";
+      const peg$c48 = "[";
+      const peg$c49 = "]";
+      const peg$c50 = ".";
+      const peg$c51 = "?";
+      const peg$c52 = "C";
+      const peg$c53 = "Cast";
+      const peg$c54 = "true";
+      const peg$c55 = "false";
+      const peg$c56 = "n";
+      const peg$c57 = "nullptr";
+      const peg$c58 = "0";
+      const peg$c59 = '"';
+      const peg$c60 = "\\";
+      const peg$c61 = '"""';
+      const peg$c62 = "'";
+      const peg$c63 = "x";
+      const peg$c64 = "class";
+      const peg$c65 = "struct";
+      const peg$c66 = "v";
+      const peg$c67 = "void";
+      const peg$c68 = "override";
+      const peg$c69 = "delegate";
+      const peg$c70 = "p";
+      const peg$c71 = "property";
+      const peg$c72 = "event";
+      const peg$c73 = "enum";
+      const peg$c74 = "m";
+      const peg$c75 = "l";
+      const peg$c76 = "final";
+      const peg$c77 = "a";
+      const peg$c78 = "access";
+      const peg$c79 = "namespace";
+      const peg$c80 = "U";
+      const peg$c81 = "UFUNCTION";
+      const peg$c82 = "UPROPERTY";
+      const peg$c83 = "UCLASS";
+      const peg$c84 = "UENUM";
+      const peg$c85 = "UMETA";
+      const peg$c86 = "USTRUCT";
+      const peg$c87 = "T";
+      const peg$c88 = "TSubclassOf";
+      const peg$c89 = "TArray";
+      const peg$c90 = "TMap";
+      const peg$c91 = "TSet";
+      const peg$c92 = "TOptional";
+      const peg$c93 = "TWeakObjectPtr";
+      const peg$c94 = "TSoftObjectPtr";
+      const peg$c95 = "TSoftClassPtr";
+      const peg$c96 = "TInstigated";
+      const peg$c97 = "TPerPlayer";
+      const peg$c98 = "float32";
+      const peg$c99 = "float64";
+      const peg$c100 = "float";
+      const peg$c101 = "int64";
+      const peg$c102 = "int32";
+      const peg$c103 = "int16";
+      const peg$c104 = "int8";
+      const peg$c105 = "int";
+      const peg$c106 = "u";
+      const peg$c107 = "uint64";
+      const peg$c108 = "uint32";
+      const peg$c109 = "uint16";
+      const peg$c110 = "uint8";
+      const peg$c111 = "uint";
+      const peg$c112 = "bool";
+      const peg$c113 = "from";
+      const peg$c114 = "asset";
+      const peg$c115 = "of";
+      const peg$c116 = "private";
+      const peg$c117 = "protected";
+      const peg$c118 = "public";
+      const peg$r0 = /^[^\r\n]/;
+      const peg$r1 = /^[ \t\r\n]/;
+      const peg$r2 = /^[\/#]/;
+      const peg$r3 = /^[+=]/;
+      const peg$r4 = /^[\-=]/;
+      const peg$r5 = /^[<>]/;
+      const peg$r6 = /^[=|]/;
+      const peg$r7 = /^[&=]/;
+      const peg$r8 = /^[0-9]/;
+      const peg$r9 = /^[(=]/;
+      const peg$r10 = /^[,)=]/;
+      const peg$r11 = /^[box]/;
+      const peg$r12 = /^[^\r\n"\\]/;
+      const peg$r13 = /^[A-Za-z"'\\]/;
+      const peg$r14 = /^[^\r\n'\\]/;
+      const peg$r15 = /^[+\-]/;
+      const peg$r16 = /^[0-9A-Fa-f]/;
+      const peg$r17 = /^[01]/;
+      const peg$r18 = /^[0-8]/;
+      const peg$r19 = /^[A-Za-z_]/;
+      const peg$r20 = /^[A-Za-z_0-9]/;
+      const peg$r21 = /^[|:]/;
+      const peg$e0 = peg$literalExpectation("/", false);
+      const peg$e1 = peg$literalExpectation("*", false);
+      const peg$e2 = peg$anyExpectation();
+      const peg$e3 = peg$classExpectation(["\r", "\n"], true, false, false);
+      const peg$e4 = peg$literalExpectation("#", false);
+      const peg$e5 = peg$classExpectation([" ", "	", "\r", "\n"], false, false, false);
+      const peg$e6 = peg$classExpectation(["/", "#"], false, false, false);
+      const peg$e7 = peg$literalExpectation("+", false);
+      const peg$e8 = peg$literalExpectation("-", false);
+      const peg$e9 = peg$literalExpectation("&", false);
+      const peg$e10 = peg$literalExpectation("|", false);
+      const peg$e11 = peg$classExpectation(["+", "="], false, false, false);
+      const peg$e12 = peg$classExpectation(["-", "="], false, false, false);
+      const peg$e13 = peg$literalExpectation("=", false);
+      const peg$e14 = peg$literalExpectation("%", false);
+      const peg$e15 = peg$literalExpectation("!", false);
+      const peg$e16 = peg$literalExpectation("<", false);
+      const peg$e17 = peg$literalExpectation(">", false);
+      const peg$e18 = peg$classExpectation(["<", ">"], false, false, false);
+      const peg$e19 = peg$classExpectation(["=", "|"], false, false, false);
+      const peg$e20 = peg$classExpectation(["&", "="], false, false, false);
+      const peg$e21 = peg$literalExpectation("^", false);
+      const peg$e22 = peg$literalExpectation("~", false);
+      const peg$e23 = peg$literalExpectation("mixin", false);
+      const peg$e24 = peg$literalExpectation("local", false);
+      const peg$e25 = peg$literalExpectation("i", false);
+      const peg$e26 = peg$literalExpectation("if", false);
+      const peg$e27 = peg$literalExpectation("(", false);
+      const peg$e28 = peg$literalExpectation(")", false);
+      const peg$e29 = peg$literalExpectation("r", false);
+      const peg$e30 = peg$literalExpectation("return", false);
+      const peg$e31 = peg$literalExpectation("e", false);
+      const peg$e32 = peg$literalExpectation("else", false);
+      const peg$e33 = peg$literalExpectation("s", false);
+      const peg$e34 = peg$literalExpectation("switch", false);
+      const peg$e35 = peg$literalExpectation("f", false);
+      const peg$e36 = peg$literalExpectation("for", false);
+      const peg$e37 = peg$literalExpectation(";", false);
+      const peg$e38 = peg$literalExpectation(":", false);
+      const peg$e39 = peg$literalExpectation(",", false);
+      const peg$e40 = peg$literalExpectation("c", false);
+      const peg$e41 = peg$literalExpectation("case", false);
+      const peg$e42 = peg$literalExpectation("d", false);
+      const peg$e43 = peg$literalExpectation("default", false);
+      const peg$e44 = peg$classExpectation([["0", "9"]], false, false, false);
+      const peg$e45 = peg$literalExpectation("continue", false);
+      const peg$e46 = peg$literalExpectation("b", false);
+      const peg$e47 = peg$literalExpectation("break", false);
+      const peg$e48 = peg$literalExpectation("fallthrough", false);
+      const peg$e49 = peg$literalExpectation("w", false);
+      const peg$e50 = peg$literalExpectation("while", false);
+      const peg$e51 = peg$classExpectation(["(", "="], false, false, false);
+      const peg$e52 = peg$literalExpectation("const", false);
+      const peg$e53 = peg$literalExpectation("inout", false);
+      const peg$e54 = peg$literalExpectation("in", false);
+      const peg$e55 = peg$literalExpectation("o", false);
+      const peg$e56 = peg$literalExpectation("out", false);
+      const peg$e57 = peg$literalExpectation("t", false);
+      const peg$e58 = peg$literalExpectation("this", false);
+      const peg$e59 = peg$literalExpectation("[", false);
+      const peg$e60 = peg$literalExpectation("]", false);
+      const peg$e61 = peg$literalExpectation(".", false);
+      const peg$e62 = peg$classExpectation([",", ")", "="], false, false, false);
+      const peg$e63 = peg$literalExpectation("?", false);
+      const peg$e64 = peg$literalExpectation("C", false);
+      const peg$e65 = peg$literalExpectation("Cast", false);
+      const peg$e66 = peg$literalExpectation("true", false);
+      const peg$e67 = peg$literalExpectation("false", false);
+      const peg$e68 = peg$literalExpectation("n", false);
+      const peg$e69 = peg$literalExpectation("nullptr", false);
+      const peg$e70 = peg$literalExpectation("0", false);
+      const peg$e71 = peg$classExpectation(["b", "o", "x"], false, false, false);
+      const peg$e72 = peg$literalExpectation('"', false);
+      const peg$e73 = peg$classExpectation(["\r", "\n", '"', "\\"], true, false, false);
+      const peg$e74 = peg$literalExpectation("\\", false);
+      const peg$e75 = peg$literalExpectation('"""', false);
+      const peg$e76 = peg$classExpectation([["A", "Z"], ["a", "z"], '"', "'", "\\"], false, false, false);
+      const peg$e77 = peg$literalExpectation("'", false);
+      const peg$e78 = peg$classExpectation(["\r", "\n", "'", "\\"], true, false, false);
+      const peg$e79 = peg$classExpectation(["+", "-"], false, false, false);
+      const peg$e80 = peg$literalExpectation("x", false);
+      const peg$e81 = peg$classExpectation([["0", "9"], ["A", "F"], ["a", "f"]], false, false, false);
+      const peg$e82 = peg$classExpectation(["0", "1"], false, false, false);
+      const peg$e83 = peg$classExpectation([["0", "8"]], false, false, false);
+      const peg$e84 = peg$literalExpectation("class", false);
+      const peg$e85 = peg$literalExpectation("struct", false);
+      const peg$e86 = peg$literalExpectation("v", false);
+      const peg$e87 = peg$literalExpectation("void", false);
+      const peg$e88 = peg$literalExpectation("override", false);
+      const peg$e89 = peg$literalExpectation("delegate", false);
+      const peg$e90 = peg$literalExpectation("p", false);
+      const peg$e91 = peg$literalExpectation("property", false);
+      const peg$e92 = peg$literalExpectation("event", false);
+      const peg$e93 = peg$literalExpectation("enum", false);
+      const peg$e94 = peg$literalExpectation("m", false);
+      const peg$e95 = peg$literalExpectation("l", false);
+      const peg$e96 = peg$literalExpectation("final", false);
+      const peg$e97 = peg$literalExpectation("a", false);
+      const peg$e98 = peg$literalExpectation("access", false);
+      const peg$e99 = peg$literalExpectation("namespace", false);
+      const peg$e100 = peg$literalExpectation("U", false);
+      const peg$e101 = peg$literalExpectation("UFUNCTION", false);
+      const peg$e102 = peg$literalExpectation("UPROPERTY", false);
+      const peg$e103 = peg$literalExpectation("UCLASS", false);
+      const peg$e104 = peg$literalExpectation("UENUM", false);
+      const peg$e105 = peg$literalExpectation("UMETA", false);
+      const peg$e106 = peg$literalExpectation("USTRUCT", false);
+      const peg$e107 = peg$literalExpectation("T", false);
+      const peg$e108 = peg$literalExpectation("TSubclassOf", false);
+      const peg$e109 = peg$literalExpectation("TArray", false);
+      const peg$e110 = peg$literalExpectation("TMap", false);
+      const peg$e111 = peg$literalExpectation("TSet", false);
+      const peg$e112 = peg$literalExpectation("TOptional", false);
+      const peg$e113 = peg$literalExpectation("TWeakObjectPtr", false);
+      const peg$e114 = peg$literalExpectation("TSoftObjectPtr", false);
+      const peg$e115 = peg$literalExpectation("TSoftClassPtr", false);
+      const peg$e116 = peg$literalExpectation("TInstigated", false);
+      const peg$e117 = peg$literalExpectation("TPerPlayer", false);
+      const peg$e118 = peg$literalExpectation("float32", false);
+      const peg$e119 = peg$literalExpectation("float64", false);
+      const peg$e120 = peg$literalExpectation("float", false);
+      const peg$e121 = peg$literalExpectation("int64", false);
+      const peg$e122 = peg$literalExpectation("int32", false);
+      const peg$e123 = peg$literalExpectation("int16", false);
+      const peg$e124 = peg$literalExpectation("int8", false);
+      const peg$e125 = peg$literalExpectation("int", false);
+      const peg$e126 = peg$literalExpectation("u", false);
+      const peg$e127 = peg$literalExpectation("uint64", false);
+      const peg$e128 = peg$literalExpectation("uint32", false);
+      const peg$e129 = peg$literalExpectation("uint16", false);
+      const peg$e130 = peg$literalExpectation("uint8", false);
+      const peg$e131 = peg$literalExpectation("uint", false);
+      const peg$e132 = peg$literalExpectation("bool", false);
+      const peg$e133 = peg$classExpectation([["A", "Z"], ["a", "z"], "_"], false, false, false);
+      const peg$e134 = peg$classExpectation([["A", "Z"], ["a", "z"], "_", ["0", "9"]], false, false, false);
+      const peg$e135 = peg$literalExpectation("from", false);
+      const peg$e136 = peg$classExpectation(["|", ":"], false, false, false);
+      const peg$e137 = peg$literalExpectation("asset", false);
+      const peg$e138 = peg$literalExpectation("of", false);
+      const peg$e139 = peg$literalExpectation("private", false);
+      const peg$e140 = peg$literalExpectation("protected", false);
+      const peg$e141 = peg$literalExpectation("public", false);
+      function peg$f0() {
+        return null;
+      }
+      function peg$f1(comment, decl) {
         if (comment)
           decl.documentation = comment;
         return decl;
-      };
-      var peg$f2 = function() {
+      }
+      function peg$f2() {
         return null;
-      };
-      var peg$f3 = function(comment, decl) {
+      }
+      function peg$f3(comment, decl) {
         if (comment)
           decl.documentation = comment;
         return decl;
-      };
-      var peg$f4 = function() {
+      }
+      function peg$f4() {
         return null;
-      };
-      var peg$f5 = function() {
+      }
+      function peg$f5() {
         return null;
-      };
-      var peg$f6 = function(macro, scope, decl) {
+      }
+      function peg$f6(macro, scope, decl) {
         decl.macro = macro;
         decl.scoping = scope;
         return decl;
-      };
-      var peg$f7 = function(condition, body) {
+      }
+      function peg$f7(condition, body) {
         return Compound(range(), n.IfStatement, [condition, body]);
-      };
-      var peg$f8 = function(value) {
+      }
+      function peg$f8(value) {
         return Compound(range(), n.ReturnStatement, value ? [value] : []);
-      };
-      var peg$f9 = function(body) {
+      }
+      function peg$f9(body) {
         return Compound(range(), n.ElseStatement, [body]);
-      };
-      var peg$f10 = function(cond) {
+      }
+      function peg$f10(cond) {
         return Compound(range(), n.SwitchStatement, [cond]);
-      };
-      var peg$f11 = function(init, cond, iter) {
+      }
+      function peg$f11(init, cond, iter) {
         return [cond, iter];
-      };
-      var peg$f12 = function(init, loop, body) {
+      }
+      function peg$f12(init, loop, body) {
         return Compound(range(), n.ForLoop, loop ? [init, loop[0], loop[1], body] : [init, null, null, body]);
-      };
-      var peg$f13 = function(type, iterator, expr, body) {
+      }
+      function peg$f13(type, iterator, expr, body) {
         return Compound(range(), n.ForEachLoop, [type, iterator, expr, body]);
-      };
-      var peg$f14 = function(inner) {
+      }
+      function peg$f14(inner) {
         return ExtendedCompound(range(), inner);
-      };
-      var peg$f15 = function(head, tail) {
+      }
+      function peg$f15(head, tail) {
         if (tail.length != 0)
           return Compound(range(), n.CommaExpression, [head].concat(tail));
         else
           return head;
-      };
-      var peg$f16 = function(lbl, body) {
+      }
+      function peg$f16(lbl, body) {
         return [true, body];
-      };
-      var peg$f17 = function(lbl) {
+      }
+      function peg$f17(lbl) {
         return [false, "::"];
-      };
-      var peg$f18 = function(lbl) {
+      }
+      function peg$f18(lbl) {
         return [false, ":"];
-      };
-      var peg$f19 = function(lbl, stmt) {
+      }
+      function peg$f19(lbl, stmt) {
         if (stmt) {
           if (stmt[0]) {
             let node = Compound(range(), n.CaseStatement, [lbl, stmt[1]]);
@@ -9874,40 +9868,40 @@ var require_angelscript = __commonJS({
         } else {
           return Compound(range(), n.CaseStatement, [lbl, null]);
         }
-      };
-      var peg$f20 = function(inner) {
+      }
+      function peg$f20(inner) {
         return ExtendedCompound(range(), inner);
-      };
-      var peg$f21 = function(body) {
+      }
+      function peg$f21(body) {
         return Compound(range(), n.DefaultCaseStatement, [body]);
-      };
-      var peg$f22 = function() {
+      }
+      function peg$f22() {
         return Literal(range(), n.ConstInteger, text());
-      };
-      var peg$f23 = function(token) {
+      }
+      function peg$f23(token) {
         return Literal(range(), n.ContinueStatement, token);
-      };
-      var peg$f24 = function(token) {
+      }
+      function peg$f24(token) {
         return Literal(range(), n.BreakStatement, token);
-      };
-      var peg$f25 = function(token) {
+      }
+      function peg$f25(token) {
         return Literal(range(), n.FallthroughStatement, token);
-      };
-      var peg$f26 = function(cond, body) {
+      }
+      function peg$f26(cond, body) {
         return Compound(range(), n.WhileLoop, [cond, body]);
-      };
-      var peg$f27 = function(head, op, right) {
+      }
+      function peg$f27(head, op, right) {
         return [op, right];
-      };
-      var peg$f28 = function(head, tail) {
+      }
+      function peg$f28(head, tail) {
         return tail.reduce(function(result, element) {
           if (element[0] == "=")
             return Compound(range(), n.Assignment, [result, element[1]]);
           else
             return CompoundOperator(range(), n.CompoundAssignment, element[0], [result, element[1]]);
         }, head);
-      };
-      var peg$f29 = function(type, head, tail) {
+      }
+      function peg$f29(type, head, tail) {
         head.typename = type;
         if (tail.length != 0) {
           let vars = [head];
@@ -9919,14 +9913,14 @@ var require_angelscript = __commonJS({
         } else {
           return ExtendedCompound(range(), head);
         }
-      };
-      var peg$f30 = function(name, expr) {
+      }
+      function peg$f30(name, expr) {
         return [0, expr];
-      };
-      var peg$f31 = function(name, args) {
+      }
+      function peg$f31(name, args) {
         return [1, args];
-      };
-      var peg$f32 = function(name, value) {
+      }
+      function peg$f32(name, value) {
         let node = Compound(range(), n.VariableDecl, null);
         node.name = name;
         if (value) {
@@ -9937,38 +9931,38 @@ var require_angelscript = __commonJS({
           node.expression = value[1];
         }
         return node;
-      };
-      var peg$f33 = function(type) {
+      }
+      function peg$f33(type) {
         let node = Compound(range(), n.VariableDecl, null);
         node.name = null;
         node.typename = type;
         return node;
-      };
-      var peg$f34 = function(constq, name, refq) {
+      }
+      function peg$f34(constq, name, refq) {
         let node = ExtendedCompound(range(), name);
         node.const_qualifier = constq;
         node.ref_qualifier = refq;
         return node;
-      };
-      var peg$f35 = function(token) {
+      }
+      function peg$f35(token) {
         return Identifier(range(), token);
-      };
-      var peg$f36 = function(type) {
+      }
+      function peg$f36(type) {
         if (type)
           return "&" + type;
         else
           return "&";
-      };
-      var peg$f37 = function() {
+      }
+      function peg$f37() {
         return Literal(range(), n.Typename, text());
-      };
-      var peg$f38 = function(basetype, head, tail) {
+      }
+      function peg$f38(basetype, head, tail) {
         return [head].concat(tail);
-      };
-      var peg$f39 = function(basetype, types) {
+      }
+      function peg$f39(basetype, types) {
         return types;
-      };
-      var peg$f40 = function(basetype, subtypes) {
+      }
+      function peg$f40(basetype, subtypes) {
         if (subtypes) {
           let name = basetype.value + "<";
           for (let i = 0; i < subtypes.length; ++i) {
@@ -9986,22 +9980,22 @@ var require_angelscript = __commonJS({
           node.name = basetype;
           return node;
         }
-      };
-      var peg$f41 = function() {
+      }
+      function peg$f41() {
         let node = Literal(range(), n.Typename, text());
         node.name = node;
         return node;
-      };
-      var peg$f42 = function(identifiers) {
+      }
+      function peg$f42(identifiers) {
         return Literal(range(), n.Typename, text());
-      };
-      var peg$f43 = function(basetype, head, tail) {
+      }
+      function peg$f43(basetype, head, tail) {
         return [head].concat(tail);
-      };
-      var peg$f44 = function(basetype, types) {
+      }
+      function peg$f44(basetype, types) {
         return types;
-      };
-      var peg$f45 = function(basetype, subtypes) {
+      }
+      function peg$f45(basetype, subtypes) {
         if (subtypes) {
           let name = basetype.value + "<";
           for (let i = 0; i < subtypes.length; ++i) {
@@ -10019,14 +10013,14 @@ var require_angelscript = __commonJS({
           node.name = basetype;
           return node;
         }
-      };
-      var peg$f46 = function() {
+      }
+      function peg$f46() {
         return null;
-      };
-      var peg$f47 = function(token) {
+      }
+      function peg$f47(token) {
         return Literal(range(), n.This, token);
-      };
-      var peg$f48 = function(leading, ident, namespaces, trailing) {
+      }
+      function peg$f48(leading, ident, namespaces, trailing) {
         if (leading)
           ident = InnerCompound(range(), n.NamespaceAccess, [null, ident]);
         if (trailing)
@@ -10041,8 +10035,8 @@ var require_angelscript = __commonJS({
         } else {
           return ident;
         }
-      };
-      var peg$f49 = function(leading, ident, namespaces) {
+      }
+      function peg$f49(leading, ident, namespaces) {
         if (leading)
           ident = InnerCompound(range(), n.NamespaceAccess, [null, ident]);
         if (namespaces.length != 0) {
@@ -10053,17 +10047,17 @@ var require_angelscript = __commonJS({
         } else {
           return ident;
         }
-      };
-      var peg$f50 = function(head, args) {
+      }
+      function peg$f50(head, args) {
         return [0, args, range()];
-      };
-      var peg$f51 = function(head, inner) {
+      }
+      function peg$f51(head, inner) {
         return [1, inner, range()];
-      };
-      var peg$f52 = function(head, inner) {
+      }
+      function peg$f52(head, inner) {
         return [2, inner];
-      };
-      var peg$f53 = function(head, tail) {
+      }
+      function peg$f53(head, tail) {
         return tail.reduce(function(result, element) {
           if (element[0] == 0) {
             let expr = InnerCompound(
@@ -10091,18 +10085,18 @@ var require_angelscript = __commonJS({
             );
           }
         }, head);
-      };
-      var peg$f54 = function(head, tail) {
+      }
+      function peg$f54(head, tail) {
         return Compound(
           range(),
           n.ArgumentList,
           [head].concat(tail)
         );
-      };
-      var peg$f55 = function() {
+      }
+      function peg$f55() {
         return null;
-      };
-      var peg$f56 = function(name) {
+      }
+      function peg$f56(name) {
         let ident = Literal(range(), n.Identifier, name);
         ident.maybeTypename = true;
         return Compound(
@@ -10110,43 +10104,43 @@ var require_angelscript = __commonJS({
           n.ArgumentList,
           [ident]
         );
-      };
-      var peg$f57 = function(expr) {
+      }
+      function peg$f57(expr) {
         return Compound(
           range(),
           n.ArgumentList,
           [expr]
         );
-      };
-      var peg$f58 = function(name, expr) {
+      }
+      function peg$f58(name, expr) {
         return Compound(range(), n.NamedArgument, [name, expr]);
-      };
-      var peg$f59 = function(expr, trailing) {
+      }
+      function peg$f59(expr, trailing) {
         if (trailing && expr.type == n.Identifier)
           return Compound(range(), n.NamedArgument, [expr, trailing]);
         else
           return expr;
-      };
-      var peg$f60 = function(condition, first, second) {
+      }
+      function peg$f60(condition, first, second) {
         if (first.type == n.NamespaceAccess && first.incomplete_colon) {
           if (!second || !second[0])
             return [first.children[0], second ? second[1] : null];
         }
         return [first, second ? second[1] : null];
-      };
-      var peg$f61 = function(condition, result) {
+      }
+      function peg$f61(condition, result) {
         return result ? result : [null, null];
-      };
-      var peg$f62 = function(condition, conseq) {
+      }
+      function peg$f62(condition, conseq) {
         if (conseq)
           return Compound(range(), n.TernaryOperation, [condition, conseq[0], conseq[1]]);
         else
           return condition;
-      };
-      var peg$f63 = function(head, op, expr) {
+      }
+      function peg$f63(head, op, expr) {
         return [op, expr];
-      };
-      var peg$f64 = function(head, tail) {
+      }
+      function peg$f64(head, tail) {
         return tail.reduce(function(result, element) {
           return InnerCompoundOperator(
             range(),
@@ -10155,11 +10149,11 @@ var require_angelscript = __commonJS({
             [result, element[1]]
           );
         }, head);
-      };
-      var peg$f65 = function(head, op, expr) {
+      }
+      function peg$f65(head, op, expr) {
         return [op, expr];
-      };
-      var peg$f66 = function(head, tail) {
+      }
+      function peg$f66(head, tail) {
         return tail.reduce(function(result, element) {
           return InnerCompoundOperator(
             range(),
@@ -10168,11 +10162,11 @@ var require_angelscript = __commonJS({
             [result, element[1]]
           );
         }, head);
-      };
-      var peg$f67 = function(head, op, expr) {
+      }
+      function peg$f67(head, op, expr) {
         return [op, expr];
-      };
-      var peg$f68 = function(head, tail) {
+      }
+      function peg$f68(head, tail) {
         return tail.reduce(function(result, element) {
           return InnerCompoundOperator(
             range(),
@@ -10181,11 +10175,11 @@ var require_angelscript = __commonJS({
             [result, element[1]]
           );
         }, head);
-      };
-      var peg$f69 = function(head, op, expr) {
+      }
+      function peg$f69(head, op, expr) {
         return [op, expr];
-      };
-      var peg$f70 = function(head, tail) {
+      }
+      function peg$f70(head, tail) {
         return tail.reduce(function(result, element) {
           return InnerCompoundOperator(
             range(),
@@ -10194,11 +10188,11 @@ var require_angelscript = __commonJS({
             [result, element[1]]
           );
         }, head);
-      };
-      var peg$f71 = function(head, op, expr) {
+      }
+      function peg$f71(head, op, expr) {
         return [op, expr];
-      };
-      var peg$f72 = function(head, tail) {
+      }
+      function peg$f72(head, tail) {
         return tail.reduce(function(result, element) {
           return InnerCompoundOperator(
             range(),
@@ -10207,16 +10201,16 @@ var require_angelscript = __commonJS({
             [result, element[1]]
           );
         }, head);
-      };
-      var peg$f73 = function(op, expr) {
+      }
+      function peg$f73(op, expr) {
         return CompoundOperator(
           range(),
           n.UnaryOperation,
           op,
           [expr]
         );
-      };
-      var peg$f74 = function(expr, op) {
+      }
+      function peg$f74(expr, op) {
         if (op) {
           return CompoundOperator(
             range(),
@@ -10227,50 +10221,50 @@ var require_angelscript = __commonJS({
         } else {
           return expr;
         }
-      };
-      var peg$f75 = function(op) {
+      }
+      function peg$f75(op) {
         return CompoundOperator(range(), n.UnaryOperation, op, []);
-      };
-      var peg$f76 = function(type, expr) {
+      }
+      function peg$f76(type, expr) {
         return Compound(range(), n.CastOperation, [type, expr]);
-      };
-      var peg$f77 = function(type) {
+      }
+      function peg$f77(type) {
         return Compound(range(), n.CastOperation, [type, null]);
-      };
-      var peg$f78 = function() {
+      }
+      function peg$f78() {
         return Compound(range(), n.CastOperation, [null, null]);
-      };
-      var peg$f79 = function(inner) {
+      }
+      function peg$f79(inner) {
         return ExtendedCompound(range(), inner);
-      };
-      var peg$f80 = function(type, args) {
+      }
+      function peg$f80(type, args) {
         return Compound(range(), n.ConstructorCall, [type, args]);
-      };
-      var peg$f81 = function() {
+      }
+      function peg$f81() {
         return Literal(range(), n.ConstBool, "true");
-      };
-      var peg$f82 = function() {
+      }
+      function peg$f82() {
         return Literal(range(), n.ConstBool, "false");
-      };
-      var peg$f83 = function() {
+      }
+      function peg$f83() {
         return Literal(range(), n.ConstNullptr, "nullptr");
-      };
-      var peg$f84 = function() {
+      }
+      function peg$f84() {
         return Literal(range(), n.ConstString, text());
-      };
-      var peg$f85 = function() {
+      }
+      function peg$f85() {
         return Literal(range(), n.ConstString, text());
-      };
-      var peg$f86 = function() {
+      }
+      function peg$f86() {
         return Literal(range(), n.ConstFormatString, text());
-      };
-      var peg$f87 = function() {
+      }
+      function peg$f87() {
         return Literal(range(), n.ConstName, text());
-      };
-      var peg$f88 = function(content) {
+      }
+      function peg$f88(content) {
         return Literal(range(), n.ConstString, text());
-      };
-      var peg$f89 = function(head, exponent, suffix) {
+      }
+      function peg$f89(head, exponent, suffix) {
         let value = head[1];
         if (exponent)
           value += exponent;
@@ -10283,39 +10277,25 @@ var require_angelscript = __commonJS({
         } else {
           return Literal(range(), n.ConstInteger, text());
         }
-      };
-      var peg$f90 = function(sign, num) {
+      }
+      function peg$f90(sign, num) {
         if (sign)
           return Literal(range(), num.type, text());
         return num;
-      };
-      var peg$f91 = function() {
+      }
+      function peg$f91() {
         return Literal(range(), n.ConstHexInteger, text());
-      };
-      var peg$f92 = function() {
+      }
+      function peg$f92() {
         return Literal(range(), n.ConstBinaryInteger, text());
-      };
-      var peg$f93 = function() {
+      }
+      function peg$f93() {
         return Literal(range(), n.ConstOctalInteger, text());
-      };
-      var peg$f94 = function(start, rest) {
+      }
+      function peg$f94(start, rest) {
         return Identifier(range(), text());
-      };
-      var peg$f95 = function(head, tail) {
-        let identifier = InnerCompound(range(), n.Identifier, [head].concat(tail));
-        identifier.value = head.value;
-        for (let child of tail)
-          identifier.value += "." + child.value;
-        return Compound(range(), n.ImportStatement, [identifier]);
-      };
-      var peg$f96 = function(sig) {
-        let value = text();
-        return Identifier(range(), value.substring(1, value.length - 1));
-      };
-      var peg$f97 = function(sig, str) {
-        return Compound(range(), n.ImportFunctionStatement, [sig, str]);
-      };
-      var peg$f98 = function(docs) {
+      }
+      function peg$f95(docs) {
         if (docs.length == 0)
           return null;
         let result = "";
@@ -10328,49 +10308,49 @@ var require_angelscript = __commonJS({
             result = comment.substring(2);
         }
         return result;
-      };
-      var peg$f99 = function(ret, name) {
+      }
+      function peg$f96(ret, name) {
         return options.precedesBlock && !options.endsWithSemicolon;
-      };
-      var peg$f100 = function(ret, name) {
+      }
+      function peg$f97(ret, name) {
         return !options.precedesBlock || options.endsWithSemicolon;
-      };
-      var peg$f101 = function(ret, name, params, quals) {
+      }
+      function peg$f98(ret, name, params, quals) {
         let node = Compound(range(), n.FunctionDecl, null);
         node.name = name;
         node.returntype = ret;
         node.parameters = params;
         node.qualifiers = quals;
         return node;
-      };
-      var peg$f102 = function(name, params) {
+      }
+      function peg$f99(name, params) {
         let node = Compound(range(), n.FunctionDecl, null);
         node.name = name;
         node.returntype = null;
         node.parameters = params;
         node.qualifiers = [];
         return node;
-      };
-      var peg$f103 = function(ret, name, params, quals) {
+      }
+      function peg$f100(ret, name, params, quals) {
         let node = Compound(range(), n.FunctionDecl, null);
         node.name = name;
         node.returntype = ret;
         node.parameters = params;
         node.qualifiers = quals;
         return node;
-      };
-      var peg$f104 = function(name, params) {
+      }
+      function peg$f101(name, params) {
         let node = Compound(range(), n.FunctionDecl, null);
         node.name = name;
         node.returntype = null;
         node.parameters = params;
         node.qualifiers = [];
         return node;
-      };
-      var peg$f105 = function() {
+      }
+      function peg$f102() {
         return null;
-      };
-      var peg$f106 = function(head, tail) {
+      }
+      function peg$f103(head, tail) {
         let params = [];
         if (head)
           params.push(head);
@@ -10379,11 +10359,11 @@ var require_angelscript = __commonJS({
             params.push(p);
         }
         return params;
-      };
-      var peg$f107 = function(params) {
+      }
+      function peg$f104(params) {
         return params ? params : [];
-      };
-      var peg$f108 = function(head, tail) {
+      }
+      function peg$f105(head, tail) {
         let params = [];
         if (head)
           params.push(head);
@@ -10392,30 +10372,30 @@ var require_angelscript = __commonJS({
             params.push(p);
         }
         return params;
-      };
-      var peg$f109 = function(params) {
+      }
+      function peg$f106(params) {
         return params ? params : [];
-      };
-      var peg$f110 = function(type, name, expr) {
+      }
+      function peg$f107(type, name, expr) {
         let node = Compound(range(), n.Parameter, null);
         node.typename = type;
         node.name = name;
         node.expression = expr;
         return node;
-      };
-      var peg$f111 = function() {
+      }
+      function peg$f108() {
         return null;
-      };
-      var peg$f112 = function() {
+      }
+      function peg$f109() {
         return null;
-      };
-      var peg$f113 = function() {
+      }
+      function peg$f110() {
         return null;
-      };
-      var peg$f114 = function(type, name, expr) {
+      }
+      function peg$f111(type, name, expr) {
         return [name, expr];
-      };
-      var peg$f115 = function(type, decl) {
+      }
+      function peg$f112(type, decl) {
         let node = Compound(range(), n.Parameter, null);
         node.typename = type;
         if (decl) {
@@ -10423,29 +10403,29 @@ var require_angelscript = __commonJS({
           node.expression = decl[1];
         }
         return node;
-      };
-      var peg$f116 = function() {
+      }
+      function peg$f113() {
         return null;
-      };
-      var peg$f117 = function(macros) {
+      }
+      function peg$f114(macros) {
         return Compound(range(), n.Macro, macros);
-      };
-      var peg$f118 = function(macros) {
+      }
+      function peg$f115(macros) {
         return Compound(range(), n.Macro, macros);
-      };
-      var peg$f119 = function(macros) {
+      }
+      function peg$f116(macros) {
         return Compound(range(), n.Macro, macros);
-      };
-      var peg$f120 = function(macros) {
+      }
+      function peg$f117(macros) {
         return Compound(range(), n.Macro, macros);
-      };
-      var peg$f121 = function(macros) {
+      }
+      function peg$f118(macros) {
         return Compound(range(), n.Macro, macros);
-      };
-      var peg$f122 = function(macros) {
+      }
+      function peg$f119(macros) {
         return Compound(range(), n.Macro, macros);
-      };
-      var peg$f123 = function(head, tail) {
+      }
+      function peg$f120(head, tail) {
         let specifiers = [];
         if (head)
           specifiers.push(head);
@@ -10454,17 +10434,17 @@ var require_angelscript = __commonJS({
             specifiers.push(p);
         }
         return specifiers;
-      };
-      var peg$f124 = function(specifiers) {
+      }
+      function peg$f121(specifiers) {
         return specifiers ? specifiers : [];
-      };
-      var peg$f125 = function(name, value) {
+      }
+      function peg$f122(name, value) {
         return [0, value];
-      };
-      var peg$f126 = function(name, list) {
+      }
+      function peg$f123(name, list) {
         return [1, list];
-      };
-      var peg$f127 = function(name, value) {
+      }
+      function peg$f124(name, value) {
         let node = Compound(range(), n.MacroArgument, null);
         node.name = name;
         if (value) {
@@ -10474,136 +10454,136 @@ var require_angelscript = __commonJS({
             node.children = value[1];
         }
         return node;
-      };
-      var peg$f128 = function(str) {
+      }
+      function peg$f125(str) {
         return Identifier(range(), str.value.substring(1, str.value.length - 1));
-      };
-      var peg$f129 = function() {
+      }
+      function peg$f126() {
         return Identifier(range(), text());
-      };
-      var peg$f130 = function() {
+      }
+      function peg$f127() {
         return Identifier(range(), text());
-      };
-      var peg$f131 = function(sig) {
+      }
+      function peg$f128(sig) {
         return Compound(range(), n.DelegateDecl, [sig]);
-      };
-      var peg$f132 = function(sig) {
+      }
+      function peg$f129(sig) {
         return Compound(range(), n.EventDecl, [sig]);
-      };
-      var peg$f133 = function(macro, name) {
+      }
+      function peg$f130(macro, name) {
         let node = Compound(range(), n.StructDefinition, null);
         node.name = name;
         node.macro = macro;
         return node;
-      };
-      var peg$f134 = function(macro, name) {
+      }
+      function peg$f131(macro, name) {
         return Identifier(range(), text());
-      };
-      var peg$f135 = function(macro, name, superclass) {
+      }
+      function peg$f132(macro, name, superclass) {
         let node = Compound(range(), n.ClassDefinition, null);
         node.name = name;
         node.macro = macro;
         node.superclass = superclass;
         return node;
-      };
-      var peg$f136 = function(macro, name) {
+      }
+      function peg$f133(macro, name) {
         let node = Compound(range(), n.EnumDefinition, null);
         node.name = name;
         node.macro = macro;
         return node;
-      };
-      var peg$f137 = function() {
+      }
+      function peg$f134() {
         return Identifier(range(), text());
-      };
-      var peg$f138 = function(name) {
+      }
+      function peg$f135(name) {
         let node = Compound(range(), n.NamespaceDefinition, null);
         node.name = name;
         return node;
-      };
-      var peg$f139 = function(name, type) {
+      }
+      function peg$f136(name, type) {
         let node = Compound(range(), n.AssetDefinition, null);
         node.name = name;
         node.typename = type;
         return node;
-      };
-      var peg$f140 = function(pre_access, macro, post_access, decl) {
+      }
+      function peg$f137(pre_access, macro, post_access, decl) {
         decl.macro = macro;
         decl.access = pre_access ? pre_access : post_access;
         return decl;
-      };
-      var peg$f141 = function(name, params) {
+      }
+      function peg$f138(name, params) {
         let node = Compound(range(), n.ConstructorDecl, null);
         node.name = name;
         node.parameters = params;
         return node;
-      };
-      var peg$f142 = function() {
+      }
+      function peg$f139() {
         return Identifier(range(), text());
-      };
-      var peg$f143 = function(name) {
+      }
+      function peg$f140(name) {
         let node = Compound(range(), n.DestructorDecl, null);
         node.name = name;
         return node;
-      };
-      var peg$f144 = function(pre_access, macro, post_access, decl) {
+      }
+      function peg$f141(pre_access, macro, post_access, decl) {
         decl.macro = macro;
         decl.access = pre_access ? pre_access : post_access;
         return decl;
-      };
-      var peg$f145 = function() {
+      }
+      function peg$f142() {
         return Identifier(range(), text());
-      };
-      var peg$f146 = function(name, list) {
+      }
+      function peg$f143(name, list) {
         let node = Compound(range(), n.AccessDeclaration, null);
         node.name = name;
         node.classList = list ? list : [];
         return node;
-      };
-      var peg$f147 = function(body) {
+      }
+      function peg$f144(body) {
         if (!body)
           return null;
         return ExtendedCompound(range(), body);
-      };
-      var peg$f148 = function(head, tail) {
+      }
+      function peg$f145(head, tail) {
         return [head].concat(tail);
-      };
-      var peg$f149 = function() {
+      }
+      function peg$f146() {
         return Identifier(range(), text());
-      };
-      var peg$f150 = function(name, mods) {
+      }
+      function peg$f147(name, mods) {
         let node = Compound(range(), n.AccessClass, null);
         node.className = name;
         node.mods = mods;
         return node;
-      };
-      var peg$f151 = function(head, tail) {
+      }
+      function peg$f148(head, tail) {
         return [head].concat(tail);
-      };
-      var peg$f152 = function(name) {
+      }
+      function peg$f149(name) {
         return Compound(range(), n.IncompleteAccessSpecifier, [name]);
-      };
-      var peg$f153 = function(expr) {
+      }
+      function peg$f150(expr) {
         return Compound(range(), n.DefaultStatement, [expr]);
-      };
-      var peg$f154 = function(head, tail) {
+      }
+      function peg$f151(head, tail) {
         return Compound(range(), n.EnumValueList, [head].concat(tail));
-      };
-      var peg$f155 = function(comment, name, expr, meta) {
+      }
+      function peg$f152(comment, name, expr, meta) {
         let node = Compound(range(), n.EnumValue, null);
         node.name = name;
         node.documentation = comment;
         node.value = expr;
         node.meta = meta;
         return node;
-      };
-      var peg$currPos = 0;
-      var peg$savedPos = 0;
-      var peg$posDetailsCache = [{ line: 1, column: 1 }];
-      var peg$maxFailPos = 0;
-      var peg$maxFailExpected = [];
-      var peg$silentFails = 0;
-      var peg$result;
-      if ("startRule" in options) {
+      }
+      let peg$currPos = options.peg$currPos | 0;
+      let peg$savedPos = peg$currPos;
+      const peg$posDetailsCache = [{ line: 1, column: 1 }];
+      let peg$maxFailPos = peg$currPos;
+      let peg$maxFailExpected = options.peg$maxFailExpected || [];
+      let peg$silentFails = options.peg$silentFails | 0;
+      let peg$result;
+      if (options.startRule) {
         if (!(options.startRule in peg$startRuleFunctions)) {
           throw new Error(`Can't start parsing from rule "` + options.startRule + '".');
         }
@@ -10637,11 +10617,18 @@ var require_angelscript = __commonJS({
         location2 = location2 !== void 0 ? location2 : peg$computeLocation(peg$savedPos, peg$currPos);
         throw peg$buildSimpleError(message, location2);
       }
+      function peg$getUnicode(pos = peg$currPos) {
+        const cp = input.codePointAt(pos);
+        if (cp === void 0) {
+          return "";
+        }
+        return String.fromCodePoint(cp);
+      }
       function peg$literalExpectation(text2, ignoreCase) {
         return { type: "literal", text: text2, ignoreCase };
       }
-      function peg$classExpectation(parts, inverted, ignoreCase) {
-        return { type: "class", parts, inverted, ignoreCase };
+      function peg$classExpectation(parts, inverted, ignoreCase, unicode) {
+        return { type: "class", parts, inverted, ignoreCase, unicode };
       }
       function peg$anyExpectation() {
         return { type: "any" };
@@ -10653,14 +10640,17 @@ var require_angelscript = __commonJS({
         return { type: "other", description };
       }
       function peg$computePosDetails(pos) {
-        var details = peg$posDetailsCache[pos];
-        var p;
+        let details = peg$posDetailsCache[pos];
+        let p;
         if (details) {
           return details;
         } else {
-          p = pos - 1;
-          while (!peg$posDetailsCache[p]) {
-            p--;
+          if (pos >= peg$posDetailsCache.length) {
+            p = peg$posDetailsCache.length - 1;
+          } else {
+            p = pos;
+            while (!peg$posDetailsCache[--p]) {
+            }
           }
           details = peg$posDetailsCache[p];
           details = {
@@ -10681,9 +10671,9 @@ var require_angelscript = __commonJS({
         }
       }
       function peg$computeLocation(startPos, endPos, offset2) {
-        var startPosDetails = peg$computePosDetails(startPos);
-        var endPosDetails = peg$computePosDetails(endPos);
-        var res = {
+        const startPosDetails = peg$computePosDetails(startPos);
+        const endPosDetails = peg$computePosDetails(endPos);
+        const res = {
           source: peg$source,
           start: {
             offset: startPos,
@@ -10724,7 +10714,7 @@ var require_angelscript = __commonJS({
         );
       }
       function peg$parsestart() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$parse_();
         s2 = peg$parsestatement();
@@ -10745,41 +10735,29 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestart_global() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
-        s1 = peg$parse_();
-        s2 = peg$parseglobal_statement();
+        s1 = peg$parsecomment_documentation();
+        s2 = peg$parseglobal_declaration();
         if (s2 !== peg$FAILED) {
           s3 = peg$parse_();
-          s0 = s2;
+          peg$savedPos = s0;
+          s0 = peg$f1(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
         }
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
-          s1 = peg$parsecomment_documentation();
-          s2 = peg$parseglobal_declaration();
-          if (s2 !== peg$FAILED) {
-            s3 = peg$parse_();
-            peg$savedPos = s0;
-            s0 = peg$f1(s1, s2);
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-          if (s0 === peg$FAILED) {
-            s0 = peg$currPos;
-            s1 = peg$parse_();
-            peg$savedPos = s0;
-            s1 = peg$f2();
-            s0 = s1;
-          }
+          s1 = peg$parse_();
+          peg$savedPos = s0;
+          s1 = peg$f2();
+          s0 = s1;
         }
         return s0;
       }
       function peg$parsestart_class() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$parse_();
         s2 = peg$parseclass_default_statement();
@@ -10825,7 +10803,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestart_enum() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$parseenum_statement();
         if (s1 !== peg$FAILED) {
@@ -10845,7 +10823,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsecomment() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 47) {
           s1 = peg$c0;
@@ -11056,8 +11034,8 @@ var require_angelscript = __commonJS({
             }
             if (s2 !== peg$FAILED) {
               s3 = [];
-              if (peg$r0.test(input.charAt(peg$currPos))) {
-                s4 = input.charAt(peg$currPos);
+              s4 = input.charAt(peg$currPos);
+              if (peg$r0.test(s4)) {
                 peg$currPos++;
               } else {
                 s4 = peg$FAILED;
@@ -11067,8 +11045,8 @@ var require_angelscript = __commonJS({
               }
               while (s4 !== peg$FAILED) {
                 s3.push(s4);
-                if (peg$r0.test(input.charAt(peg$currPos))) {
-                  s4 = input.charAt(peg$currPos);
+                s4 = input.charAt(peg$currPos);
+                if (peg$r0.test(s4)) {
                   peg$currPos++;
                 } else {
                   s4 = peg$FAILED;
@@ -11100,8 +11078,8 @@ var require_angelscript = __commonJS({
             }
             if (s1 !== peg$FAILED) {
               s2 = [];
-              if (peg$r0.test(input.charAt(peg$currPos))) {
-                s3 = input.charAt(peg$currPos);
+              s3 = input.charAt(peg$currPos);
+              if (peg$r0.test(s3)) {
                 peg$currPos++;
               } else {
                 s3 = peg$FAILED;
@@ -11111,8 +11089,8 @@ var require_angelscript = __commonJS({
               }
               while (s3 !== peg$FAILED) {
                 s2.push(s3);
-                if (peg$r0.test(input.charAt(peg$currPos))) {
-                  s3 = input.charAt(peg$currPos);
+                s3 = input.charAt(peg$currPos);
+                if (peg$r0.test(s3)) {
                   peg$currPos++;
                 } else {
                   s3 = peg$FAILED;
@@ -11132,10 +11110,10 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parse__() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = [];
-        if (peg$r1.test(input.charAt(peg$currPos))) {
-          s1 = input.charAt(peg$currPos);
+        s1 = input.charAt(peg$currPos);
+        if (peg$r1.test(s1)) {
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
@@ -11146,8 +11124,8 @@ var require_angelscript = __commonJS({
         if (s1 !== peg$FAILED) {
           while (s1 !== peg$FAILED) {
             s0.push(s1);
-            if (peg$r1.test(input.charAt(peg$currPos))) {
-              s1 = input.charAt(peg$currPos);
+            s1 = input.charAt(peg$currPos);
+            if (peg$r1.test(s1)) {
               peg$currPos++;
             } else {
               s1 = peg$FAILED;
@@ -11162,8 +11140,8 @@ var require_angelscript = __commonJS({
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
           s1 = [];
-          if (peg$r1.test(input.charAt(peg$currPos))) {
-            s2 = input.charAt(peg$currPos);
+          s2 = input.charAt(peg$currPos);
+          if (peg$r1.test(s2)) {
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
@@ -11173,8 +11151,8 @@ var require_angelscript = __commonJS({
           }
           while (s2 !== peg$FAILED) {
             s1.push(s2);
-            if (peg$r1.test(input.charAt(peg$currPos))) {
-              s2 = input.charAt(peg$currPos);
+            s2 = input.charAt(peg$currPos);
+            if (peg$r1.test(s2)) {
               peg$currPos++;
             } else {
               s2 = peg$FAILED;
@@ -11187,8 +11165,8 @@ var require_angelscript = __commonJS({
           s3 = peg$currPos;
           s4 = peg$currPos;
           peg$silentFails++;
-          if (peg$r2.test(input.charAt(peg$currPos))) {
-            s5 = input.charAt(peg$currPos);
+          s5 = input.charAt(peg$currPos);
+          if (peg$r2.test(s5)) {
             peg$currPos++;
           } else {
             s5 = peg$FAILED;
@@ -11207,8 +11185,8 @@ var require_angelscript = __commonJS({
             s5 = peg$parsecomment();
             if (s5 !== peg$FAILED) {
               s6 = [];
-              if (peg$r1.test(input.charAt(peg$currPos))) {
-                s7 = input.charAt(peg$currPos);
+              s7 = input.charAt(peg$currPos);
+              if (peg$r1.test(s7)) {
                 peg$currPos++;
               } else {
                 s7 = peg$FAILED;
@@ -11218,8 +11196,8 @@ var require_angelscript = __commonJS({
               }
               while (s7 !== peg$FAILED) {
                 s6.push(s7);
-                if (peg$r1.test(input.charAt(peg$currPos))) {
-                  s7 = input.charAt(peg$currPos);
+                s7 = input.charAt(peg$currPos);
+                if (peg$r1.test(s7)) {
                   peg$currPos++;
                 } else {
                   s7 = peg$FAILED;
@@ -11244,8 +11222,8 @@ var require_angelscript = __commonJS({
               s3 = peg$currPos;
               s4 = peg$currPos;
               peg$silentFails++;
-              if (peg$r2.test(input.charAt(peg$currPos))) {
-                s5 = input.charAt(peg$currPos);
+              s5 = input.charAt(peg$currPos);
+              if (peg$r2.test(s5)) {
                 peg$currPos++;
               } else {
                 s5 = peg$FAILED;
@@ -11264,8 +11242,8 @@ var require_angelscript = __commonJS({
                 s5 = peg$parsecomment();
                 if (s5 !== peg$FAILED) {
                   s6 = [];
-                  if (peg$r1.test(input.charAt(peg$currPos))) {
-                    s7 = input.charAt(peg$currPos);
+                  s7 = input.charAt(peg$currPos);
+                  if (peg$r1.test(s7)) {
                     peg$currPos++;
                   } else {
                     s7 = peg$FAILED;
@@ -11275,8 +11253,8 @@ var require_angelscript = __commonJS({
                   }
                   while (s7 !== peg$FAILED) {
                     s6.push(s7);
-                    if (peg$r1.test(input.charAt(peg$currPos))) {
-                      s7 = input.charAt(peg$currPos);
+                    s7 = input.charAt(peg$currPos);
+                    if (peg$r1.test(s7)) {
                       peg$currPos++;
                     } else {
                       s7 = peg$FAILED;
@@ -11310,11 +11288,11 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parse_() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = [];
-        if (peg$r1.test(input.charAt(peg$currPos))) {
-          s2 = input.charAt(peg$currPos);
+        s2 = input.charAt(peg$currPos);
+        if (peg$r1.test(s2)) {
           peg$currPos++;
         } else {
           s2 = peg$FAILED;
@@ -11324,8 +11302,8 @@ var require_angelscript = __commonJS({
         }
         while (s2 !== peg$FAILED) {
           s1.push(s2);
-          if (peg$r1.test(input.charAt(peg$currPos))) {
-            s2 = input.charAt(peg$currPos);
+          s2 = input.charAt(peg$currPos);
+          if (peg$r1.test(s2)) {
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
@@ -11338,8 +11316,8 @@ var require_angelscript = __commonJS({
         s3 = peg$currPos;
         s4 = peg$currPos;
         peg$silentFails++;
-        if (peg$r2.test(input.charAt(peg$currPos))) {
-          s5 = input.charAt(peg$currPos);
+        s5 = input.charAt(peg$currPos);
+        if (peg$r2.test(s5)) {
           peg$currPos++;
         } else {
           s5 = peg$FAILED;
@@ -11358,8 +11336,8 @@ var require_angelscript = __commonJS({
           s5 = peg$parsecomment();
           if (s5 !== peg$FAILED) {
             s6 = [];
-            if (peg$r1.test(input.charAt(peg$currPos))) {
-              s7 = input.charAt(peg$currPos);
+            s7 = input.charAt(peg$currPos);
+            if (peg$r1.test(s7)) {
               peg$currPos++;
             } else {
               s7 = peg$FAILED;
@@ -11369,8 +11347,8 @@ var require_angelscript = __commonJS({
             }
             while (s7 !== peg$FAILED) {
               s6.push(s7);
-              if (peg$r1.test(input.charAt(peg$currPos))) {
-                s7 = input.charAt(peg$currPos);
+              s7 = input.charAt(peg$currPos);
+              if (peg$r1.test(s7)) {
                 peg$currPos++;
               } else {
                 s7 = peg$FAILED;
@@ -11394,8 +11372,8 @@ var require_angelscript = __commonJS({
           s3 = peg$currPos;
           s4 = peg$currPos;
           peg$silentFails++;
-          if (peg$r2.test(input.charAt(peg$currPos))) {
-            s5 = input.charAt(peg$currPos);
+          s5 = input.charAt(peg$currPos);
+          if (peg$r2.test(s5)) {
             peg$currPos++;
           } else {
             s5 = peg$FAILED;
@@ -11414,8 +11392,8 @@ var require_angelscript = __commonJS({
             s5 = peg$parsecomment();
             if (s5 !== peg$FAILED) {
               s6 = [];
-              if (peg$r1.test(input.charAt(peg$currPos))) {
-                s7 = input.charAt(peg$currPos);
+              s7 = input.charAt(peg$currPos);
+              if (peg$r1.test(s7)) {
                 peg$currPos++;
               } else {
                 s7 = peg$FAILED;
@@ -11425,8 +11403,8 @@ var require_angelscript = __commonJS({
               }
               while (s7 !== peg$FAILED) {
                 s6.push(s7);
-                if (peg$r1.test(input.charAt(peg$currPos))) {
-                  s7 = input.charAt(peg$currPos);
+                s7 = input.charAt(peg$currPos);
+                if (peg$r1.test(s7)) {
                   peg$currPos++;
                 } else {
                   s7 = peg$FAILED;
@@ -11451,7 +11429,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_postfix() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 43) {
@@ -11525,7 +11503,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_binary_logic() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 38) {
@@ -11599,7 +11577,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_binary_sum() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 43) {
           s1 = peg$c3;
@@ -11613,24 +11591,13 @@ var require_angelscript = __commonJS({
         if (s1 !== peg$FAILED) {
           s2 = peg$currPos;
           peg$silentFails++;
-          if (input.charCodeAt(peg$currPos) === 61) {
-            s3 = peg$c7;
+          s3 = input.charAt(peg$currPos);
+          if (peg$r3.test(s3)) {
             peg$currPos++;
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
               peg$fail(peg$e11);
-            }
-          }
-          if (s3 === peg$FAILED) {
-            if (input.charCodeAt(peg$currPos) === 43) {
-              s3 = peg$c3;
-              peg$currPos++;
-            } else {
-              s3 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e7);
-              }
             }
           }
           peg$silentFails--;
@@ -11664,24 +11631,13 @@ var require_angelscript = __commonJS({
           if (s1 !== peg$FAILED) {
             s2 = peg$currPos;
             peg$silentFails++;
-            if (input.charCodeAt(peg$currPos) === 61) {
-              s3 = peg$c7;
+            s3 = input.charAt(peg$currPos);
+            if (peg$r4.test(s3)) {
               peg$currPos++;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
-              }
-            }
-            if (s3 === peg$FAILED) {
-              if (input.charCodeAt(peg$currPos) === 45) {
-                s3 = peg$c4;
-                peg$currPos++;
-              } else {
-                s3 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e8);
-                }
+                peg$fail(peg$e12);
               }
             }
             peg$silentFails--;
@@ -11705,7 +11661,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_binary_product() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 42) {
           s1 = peg$c1;
@@ -11725,7 +11681,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           peg$silentFails--;
@@ -11765,7 +11721,7 @@ var require_angelscript = __commonJS({
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
+                peg$fail(peg$e13);
               }
             }
             peg$silentFails--;
@@ -11793,7 +11749,7 @@ var require_angelscript = __commonJS({
             } else {
               s1 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e12);
+                peg$fail(peg$e14);
               }
             }
             if (s1 !== peg$FAILED) {
@@ -11805,7 +11761,7 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
+                  peg$fail(peg$e13);
                 }
               }
               peg$silentFails--;
@@ -11830,7 +11786,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_binary_compare() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 61) {
@@ -11839,7 +11795,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e11);
+            peg$fail(peg$e13);
           }
         }
         if (s2 !== peg$FAILED) {
@@ -11849,7 +11805,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -11871,7 +11827,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e13);
+              peg$fail(peg$e15);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -11881,7 +11837,7 @@ var require_angelscript = __commonJS({
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
+                peg$fail(peg$e13);
               }
             }
             if (s3 !== peg$FAILED) {
@@ -11903,7 +11859,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e14);
+                peg$fail(peg$e16);
               }
             }
             if (s2 !== peg$FAILED) {
@@ -11913,7 +11869,7 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
+                  peg$fail(peg$e13);
                 }
               }
               if (s3 !== peg$FAILED) {
@@ -11935,7 +11891,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e15);
+                  peg$fail(peg$e17);
                 }
               }
               if (s2 !== peg$FAILED) {
@@ -11945,7 +11901,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s3 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e11);
+                    peg$fail(peg$e13);
                   }
                 }
                 if (s3 !== peg$FAILED) {
@@ -11967,7 +11923,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e15);
+                    peg$fail(peg$e17);
                   }
                 }
                 if (s2 !== peg$FAILED) {
@@ -11977,7 +11933,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s3 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e15);
+                      peg$fail(peg$e17);
                     }
                   }
                   if (s3 !== peg$FAILED) {
@@ -11999,7 +11955,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e14);
+                      peg$fail(peg$e16);
                     }
                   }
                   if (s2 !== peg$FAILED) {
@@ -12009,7 +11965,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s3 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e14);
+                        peg$fail(peg$e16);
                       }
                     }
                     if (s3 !== peg$FAILED) {
@@ -12024,24 +11980,13 @@ var require_angelscript = __commonJS({
                     s1 = peg$FAILED;
                   }
                   if (s1 === peg$FAILED) {
-                    if (input.charCodeAt(peg$currPos) === 62) {
-                      s1 = peg$c11;
+                    s1 = input.charAt(peg$currPos);
+                    if (peg$r5.test(s1)) {
                       peg$currPos++;
                     } else {
                       s1 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e15);
-                      }
-                    }
-                    if (s1 === peg$FAILED) {
-                      if (input.charCodeAt(peg$currPos) === 60) {
-                        s1 = peg$c10;
-                        peg$currPos++;
-                      } else {
-                        s1 = peg$FAILED;
-                        if (peg$silentFails === 0) {
-                          peg$fail(peg$e14);
-                        }
+                        peg$fail(peg$e18);
                       }
                     }
                   }
@@ -12058,7 +12003,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_binary_bitwise() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 124) {
           s1 = peg$c6;
@@ -12072,24 +12017,13 @@ var require_angelscript = __commonJS({
         if (s1 !== peg$FAILED) {
           s2 = peg$currPos;
           peg$silentFails++;
-          if (input.charCodeAt(peg$currPos) === 124) {
-            s3 = peg$c6;
+          s3 = input.charAt(peg$currPos);
+          if (peg$r6.test(s3)) {
             peg$currPos++;
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e10);
-            }
-          }
-          if (s3 === peg$FAILED) {
-            if (input.charCodeAt(peg$currPos) === 61) {
-              s3 = peg$c7;
-              peg$currPos++;
-            } else {
-              s3 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
-              }
+              peg$fail(peg$e19);
             }
           }
           peg$silentFails--;
@@ -12123,24 +12057,13 @@ var require_angelscript = __commonJS({
           if (s1 !== peg$FAILED) {
             s2 = peg$currPos;
             peg$silentFails++;
-            if (input.charCodeAt(peg$currPos) === 38) {
-              s3 = peg$c5;
+            s3 = input.charAt(peg$currPos);
+            if (peg$r7.test(s3)) {
               peg$currPos++;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e9);
-              }
-            }
-            if (s3 === peg$FAILED) {
-              if (input.charCodeAt(peg$currPos) === 61) {
-                s3 = peg$c7;
-                peg$currPos++;
-              } else {
-                s3 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
-                }
+                peg$fail(peg$e20);
               }
             }
             peg$silentFails--;
@@ -12168,7 +12091,7 @@ var require_angelscript = __commonJS({
             } else {
               s1 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e16);
+                peg$fail(peg$e21);
               }
             }
             if (s1 !== peg$FAILED) {
@@ -12180,7 +12103,7 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
+                  peg$fail(peg$e13);
                 }
               }
               peg$silentFails--;
@@ -12205,7 +12128,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_assignment() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 61) {
           s1 = peg$c7;
@@ -12213,7 +12136,7 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e11);
+            peg$fail(peg$e13);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -12225,7 +12148,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           peg$silentFails--;
@@ -12248,7 +12171,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_compound_assignment() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 43) {
@@ -12267,7 +12190,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -12299,7 +12222,7 @@ var require_angelscript = __commonJS({
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
+                peg$fail(peg$e13);
               }
             }
             if (s3 !== peg$FAILED) {
@@ -12331,7 +12254,7 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
+                  peg$fail(peg$e13);
                 }
               }
               if (s3 !== peg$FAILED) {
@@ -12363,7 +12286,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s3 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e11);
+                    peg$fail(peg$e13);
                   }
                 }
                 if (s3 !== peg$FAILED) {
@@ -12385,7 +12308,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e17);
+                    peg$fail(peg$e22);
                   }
                 }
                 if (s2 !== peg$FAILED) {
@@ -12395,7 +12318,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s3 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e11);
+                      peg$fail(peg$e13);
                     }
                   }
                   if (s3 !== peg$FAILED) {
@@ -12417,7 +12340,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e16);
+                      peg$fail(peg$e21);
                     }
                   }
                   if (s2 !== peg$FAILED) {
@@ -12427,7 +12350,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s3 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e11);
+                        peg$fail(peg$e13);
                       }
                     }
                     if (s3 !== peg$FAILED) {
@@ -12459,7 +12382,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s3 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e11);
+                          peg$fail(peg$e13);
                         }
                       }
                       if (s3 !== peg$FAILED) {
@@ -12491,7 +12414,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s3 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e11);
+                            peg$fail(peg$e13);
                           }
                         }
                         if (s3 !== peg$FAILED) {
@@ -12513,7 +12436,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s2 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e12);
+                            peg$fail(peg$e14);
                           }
                         }
                         if (s2 !== peg$FAILED) {
@@ -12523,7 +12446,7 @@ var require_angelscript = __commonJS({
                           } else {
                             s3 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e11);
+                              peg$fail(peg$e13);
                             }
                           }
                           if (s3 !== peg$FAILED) {
@@ -12553,7 +12476,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseop_unary() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 33) {
           s1 = peg$c9;
@@ -12561,7 +12484,7 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e13);
+            peg$fail(peg$e15);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -12573,7 +12496,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           peg$silentFails--;
@@ -12601,7 +12524,7 @@ var require_angelscript = __commonJS({
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e17);
+              peg$fail(peg$e22);
             }
           }
           if (s1 !== peg$FAILED) {
@@ -12613,7 +12536,7 @@ var require_angelscript = __commonJS({
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
+                peg$fail(peg$e13);
               }
             }
             peg$silentFails--;
@@ -12636,16 +12559,8 @@ var require_angelscript = __commonJS({
         }
         return s0;
       }
-      function peg$parseglobal_statement() {
-        var s0;
-        s0 = peg$parseimport_statement();
-        if (s0 === peg$FAILED) {
-          s0 = peg$parseimport_function_statement();
-        }
-        return s0;
-      }
       function peg$parseglobal_declaration() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$parsedelegate_decl();
         if (s0 === peg$FAILED) {
           s0 = peg$parseevent_decl();
@@ -12680,7 +12595,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s3 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e18);
+                          peg$fail(peg$e23);
                         }
                       }
                       if (s3 === peg$FAILED) {
@@ -12690,7 +12605,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s3 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e19);
+                            peg$fail(peg$e24);
                           }
                         }
                       }
@@ -12728,7 +12643,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseclass_declaration() {
-        var s0;
+        let s0;
         s0 = peg$parseaccess_decl();
         if (s0 === peg$FAILED) {
           s0 = peg$parseconstructor_decl();
@@ -12745,7 +12660,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestatement() {
-        var s0;
+        let s0;
         s0 = peg$parseif_statement();
         if (s0 === peg$FAILED) {
           s0 = peg$parsereturn_statement();
@@ -12789,7 +12704,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseoptional_statement() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$parse_();
         s2 = peg$currPos;
@@ -12828,7 +12743,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseoptional_expression() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -12865,47 +12780,8 @@ var require_angelscript = __commonJS({
         }
         return s0;
       }
-      function peg$parseoptional_assignment() {
-        var s0, s1, s2, s3;
-        s0 = peg$currPos;
-        s1 = peg$parse_();
-        s2 = peg$currPos;
-        peg$silentFails++;
-        if (input.length > peg$currPos) {
-          s3 = input.charAt(peg$currPos);
-          peg$currPos++;
-        } else {
-          s3 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e2);
-          }
-        }
-        peg$silentFails--;
-        if (s3 !== peg$FAILED) {
-          peg$currPos = s2;
-          s2 = void 0;
-        } else {
-          s2 = peg$FAILED;
-        }
-        if (s2 !== peg$FAILED) {
-          s3 = peg$parseassignment();
-          if (s3 !== peg$FAILED) {
-            s0 = s3;
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s0;
-          s0 = peg$FAILED;
-        }
-        if (s0 === peg$FAILED) {
-          s0 = null;
-        }
-        return s0;
-      }
       function peg$parseif_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -12915,7 +12791,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e20);
+            peg$fail(peg$e25);
           }
         }
         peg$silentFails--;
@@ -12932,7 +12808,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e21);
+              peg$fail(peg$e26);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -12943,7 +12819,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -12955,7 +12831,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -12981,7 +12857,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsereturn_statement() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -12991,7 +12867,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e24);
+            peg$fail(peg$e29);
           }
         }
         peg$silentFails--;
@@ -13008,7 +12884,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e25);
+              peg$fail(peg$e30);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13027,7 +12903,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseelse_statement() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13037,7 +12913,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e26);
+            peg$fail(peg$e31);
           }
         }
         peg$silentFails--;
@@ -13054,7 +12930,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e27);
+              peg$fail(peg$e32);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13072,7 +12948,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseswitch_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13082,7 +12958,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e28);
+            peg$fail(peg$e33);
           }
         }
         peg$silentFails--;
@@ -13099,7 +12975,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e29);
+              peg$fail(peg$e34);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13110,7 +12986,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -13122,7 +12998,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -13147,7 +13023,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefor_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13157,7 +13033,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e30);
+            peg$fail(peg$e35);
           }
         }
         peg$silentFails--;
@@ -13174,7 +13050,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e31);
+              peg$fail(peg$e36);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13185,7 +13061,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -13210,7 +13086,7 @@ var require_angelscript = __commonJS({
               } else {
                 s9 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e32);
+                  peg$fail(peg$e37);
                 }
               }
               if (s9 !== peg$FAILED) {
@@ -13223,7 +13099,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s13 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e32);
+                    peg$fail(peg$e37);
                   }
                 }
                 if (s13 !== peg$FAILED) {
@@ -13255,7 +13131,7 @@ var require_angelscript = __commonJS({
               } else {
                 s8 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s8 !== peg$FAILED) {
@@ -13281,7 +13157,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s11 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e33);
+                        peg$fail(peg$e38);
                       }
                     }
                     if (s11 !== peg$FAILED) {
@@ -13293,7 +13169,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s14 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e23);
+                          peg$fail(peg$e28);
                         }
                       }
                       if (s14 !== peg$FAILED) {
@@ -13339,7 +13215,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefor_declaration() {
-        var s0;
+        let s0;
         s0 = peg$parsevar_decl();
         if (s0 === peg$FAILED) {
           s0 = peg$parseassignment();
@@ -13347,7 +13223,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefor_comma_expression_list() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$parseassignment();
         if (s1 !== peg$FAILED) {
@@ -13360,7 +13236,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -13386,7 +13262,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -13412,7 +13288,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsecase_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13422,7 +13298,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e35);
+            peg$fail(peg$e40);
           }
         }
         peg$silentFails--;
@@ -13439,7 +13315,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e36);
+              peg$fail(peg$e41);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13455,7 +13331,7 @@ var require_angelscript = __commonJS({
               } else {
                 s8 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s8 !== peg$FAILED) {
@@ -13481,7 +13357,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s8 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e33);
+                    peg$fail(peg$e38);
                   }
                 }
                 if (s8 !== peg$FAILED) {
@@ -13491,7 +13367,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s9 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e33);
+                      peg$fail(peg$e38);
                     }
                   }
                   if (s9 !== peg$FAILED) {
@@ -13514,7 +13390,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s8 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e33);
+                      peg$fail(peg$e38);
                     }
                   }
                   if (s8 !== peg$FAILED) {
@@ -13553,7 +13429,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsedefault_case_statement() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13563,7 +13439,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e37);
+            peg$fail(peg$e42);
           }
         }
         peg$silentFails--;
@@ -13580,7 +13456,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e38);
+              peg$fail(peg$e43);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13591,7 +13467,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -13613,7 +13489,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsecase_label() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 40) {
           s1 = peg$c18;
@@ -13621,7 +13497,7 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e22);
+            peg$fail(peg$e27);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -13635,7 +13511,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -13676,25 +13552,25 @@ var require_angelscript = __commonJS({
             s1 = null;
           }
           s2 = [];
-          if (peg$r3.test(input.charAt(peg$currPos))) {
-            s3 = input.charAt(peg$currPos);
+          s3 = input.charAt(peg$currPos);
+          if (peg$r8.test(s3)) {
             peg$currPos++;
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e39);
+              peg$fail(peg$e44);
             }
           }
           if (s3 !== peg$FAILED) {
             while (s3 !== peg$FAILED) {
               s2.push(s3);
-              if (peg$r3.test(input.charAt(peg$currPos))) {
-                s3 = input.charAt(peg$currPos);
+              s3 = input.charAt(peg$currPos);
+              if (peg$r8.test(s3)) {
                 peg$currPos++;
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e39);
+                  peg$fail(peg$e44);
                 }
               }
             }
@@ -13715,7 +13591,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsecontinue_statement() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13725,7 +13601,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e35);
+            peg$fail(peg$e40);
           }
         }
         peg$silentFails--;
@@ -13742,7 +13618,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e40);
+              peg$fail(peg$e45);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13759,7 +13635,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsebreak_statement() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13769,7 +13645,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e41);
+            peg$fail(peg$e46);
           }
         }
         peg$silentFails--;
@@ -13786,7 +13662,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e42);
+              peg$fail(peg$e47);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13803,7 +13679,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefallthrough_statement() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13813,7 +13689,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e30);
+            peg$fail(peg$e35);
           }
         }
         peg$silentFails--;
@@ -13830,7 +13706,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e43);
+              peg$fail(peg$e48);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13847,7 +13723,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsewhile_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -13857,7 +13733,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e44);
+            peg$fail(peg$e49);
           }
         }
         peg$silentFails--;
@@ -13874,7 +13750,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e45);
+              peg$fail(peg$e50);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -13885,7 +13761,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -13897,7 +13773,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -13923,7 +13799,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseassignment() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpression();
         if (s1 !== peg$FAILED) {
@@ -13974,7 +13850,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsevar_decl() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
         s0 = peg$currPos;
         s1 = peg$parsetypename();
         if (s1 !== peg$FAILED) {
@@ -13990,7 +13866,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s7 !== peg$FAILED) {
@@ -14016,7 +13892,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e34);
+                  peg$fail(peg$e39);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -14046,7 +13922,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsevar_decl_part() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$parseidentifier();
         if (s1 !== peg$FAILED) {
@@ -14058,7 +13934,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           if (s4 !== peg$FAILED) {
@@ -14089,7 +13965,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -14104,7 +13980,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -14123,24 +13999,13 @@ var require_angelscript = __commonJS({
               peg$silentFails++;
               s3 = peg$currPos;
               s4 = peg$parse_();
-              if (input.charCodeAt(peg$currPos) === 61) {
-                s5 = peg$c7;
+              s5 = input.charAt(peg$currPos);
+              if (peg$r9.test(s5)) {
                 peg$currPos++;
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
-                }
-              }
-              if (s5 === peg$FAILED) {
-                if (input.charCodeAt(peg$currPos) === 40) {
-                  s5 = peg$c18;
-                  peg$currPos++;
-                } else {
-                  s5 = peg$FAILED;
-                  if (peg$silentFails === 0) {
-                    peg$fail(peg$e22);
-                  }
+                  peg$fail(peg$e51);
                 }
               }
               if (s5 !== peg$FAILED) {
@@ -14173,7 +14038,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseincomplete_var_decl() {
-        var s0, s1;
+        let s0, s1;
         s0 = peg$currPos;
         s1 = peg$parsetypename();
         if (s1 !== peg$FAILED) {
@@ -14184,7 +14049,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsetypename() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$parseconst_qualifier();
         if (s1 === peg$FAILED) {
@@ -14205,7 +14070,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseconst_qualifier() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -14215,7 +14080,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e35);
+            peg$fail(peg$e40);
           }
         }
         peg$silentFails--;
@@ -14232,7 +14097,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e46);
+              peg$fail(peg$e52);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -14250,7 +14115,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseref_qualifiers() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$parse_();
         if (input.charCodeAt(peg$currPos) === 38) {
@@ -14274,7 +14139,7 @@ var require_angelscript = __commonJS({
           } else {
             s7 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e20);
+              peg$fail(peg$e25);
             }
           }
           peg$silentFails--;
@@ -14291,7 +14156,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e47);
+                peg$fail(peg$e53);
               }
             }
             if (s7 === peg$FAILED) {
@@ -14301,7 +14166,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e48);
+                  peg$fail(peg$e54);
                 }
               }
             }
@@ -14325,7 +14190,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e49);
+                peg$fail(peg$e55);
               }
             }
             peg$silentFails--;
@@ -14342,7 +14207,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e50);
+                  peg$fail(peg$e56);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -14389,7 +14254,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsetemplate_typename() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parsetypename_name();
@@ -14424,7 +14289,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e14);
+              peg$fail(peg$e16);
             }
           }
           if (s4 !== peg$FAILED) {
@@ -14441,7 +14306,7 @@ var require_angelscript = __commonJS({
               } else {
                 s11 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e34);
+                  peg$fail(peg$e39);
                 }
               }
               if (s11 !== peg$FAILED) {
@@ -14467,7 +14332,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s11 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e34);
+                    peg$fail(peg$e39);
                   }
                 }
                 if (s11 !== peg$FAILED) {
@@ -14501,7 +14366,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -14521,7 +14386,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e15);
+                peg$fail(peg$e17);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -14549,7 +14414,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseprimitive_typename() {
-        var s0, s1;
+        let s0, s1;
         s0 = peg$currPos;
         s1 = peg$parseprimitive_types();
         if (s1 !== peg$FAILED) {
@@ -14560,7 +14425,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseunqualified_typename() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$currPos;
@@ -14577,7 +14442,7 @@ var require_angelscript = __commonJS({
           } else {
             s7 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e33);
+              peg$fail(peg$e38);
             }
           }
           if (s7 !== peg$FAILED) {
@@ -14587,7 +14452,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -14634,7 +14499,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e14);
+              peg$fail(peg$e16);
             }
           }
           if (s4 !== peg$FAILED) {
@@ -14651,7 +14516,7 @@ var require_angelscript = __commonJS({
               } else {
                 s11 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e34);
+                  peg$fail(peg$e39);
                 }
               }
               if (s11 !== peg$FAILED) {
@@ -14677,7 +14542,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s11 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e34);
+                    peg$fail(peg$e39);
                   }
                 }
                 if (s11 !== peg$FAILED) {
@@ -14711,7 +14576,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -14731,7 +14596,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e15);
+                peg$fail(peg$e17);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -14757,7 +14622,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpression() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$parseexpr_ternary();
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
@@ -14789,7 +14654,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseprimary_expression() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -14799,7 +14664,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e51);
+            peg$fail(peg$e57);
           }
         }
         peg$silentFails--;
@@ -14816,7 +14681,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e52);
+              peg$fail(peg$e58);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -14839,7 +14704,7 @@ var require_angelscript = __commonJS({
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e22);
+              peg$fail(peg$e27);
             }
           }
           if (s1 !== peg$FAILED) {
@@ -14852,7 +14717,7 @@ var require_angelscript = __commonJS({
               } else {
                 s4 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s4 !== peg$FAILED) {
@@ -14884,7 +14749,7 @@ var require_angelscript = __commonJS({
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e14);
+                  peg$fail(peg$e16);
                 }
               }
               if (s5 !== peg$FAILED) {
@@ -14902,7 +14767,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s11 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e34);
+                      peg$fail(peg$e39);
                     }
                   }
                   if (s11 !== peg$FAILED) {
@@ -14932,7 +14797,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s9 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e15);
+                    peg$fail(peg$e17);
                   }
                 }
                 if (s9 !== peg$FAILED) {
@@ -14943,7 +14808,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s11 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e22);
+                      peg$fail(peg$e27);
                     }
                   }
                   if (s11 !== peg$FAILED) {
@@ -15005,7 +14870,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsenamespaced_identifier() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 58) {
@@ -15014,7 +14879,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e33);
+            peg$fail(peg$e38);
           }
         }
         if (s2 !== peg$FAILED) {
@@ -15024,7 +14889,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e33);
+              peg$fail(peg$e38);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -15053,7 +14918,7 @@ var require_angelscript = __commonJS({
           } else {
             s6 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e33);
+              peg$fail(peg$e38);
             }
           }
           if (s6 !== peg$FAILED) {
@@ -15063,7 +14928,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s7 !== peg$FAILED) {
@@ -15091,7 +14956,7 @@ var require_angelscript = __commonJS({
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s6 !== peg$FAILED) {
@@ -15101,7 +14966,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -15126,7 +14991,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e33);
+              peg$fail(peg$e38);
             }
           }
           if (s4 === peg$FAILED) {
@@ -15141,7 +15006,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsenamespaced_identifier_no_trailing() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 58) {
@@ -15150,7 +15015,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e33);
+            peg$fail(peg$e38);
           }
         }
         if (s2 !== peg$FAILED) {
@@ -15160,7 +15025,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e33);
+              peg$fail(peg$e38);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -15189,7 +15054,7 @@ var require_angelscript = __commonJS({
           } else {
             s6 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e33);
+              peg$fail(peg$e38);
             }
           }
           if (s6 !== peg$FAILED) {
@@ -15199,7 +15064,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s7 !== peg$FAILED) {
@@ -15229,7 +15094,7 @@ var require_angelscript = __commonJS({
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s6 !== peg$FAILED) {
@@ -15239,7 +15104,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -15269,7 +15134,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsecall_expression() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$parseprimary_expression();
         if (s1 !== peg$FAILED) {
@@ -15282,7 +15147,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e22);
+              peg$fail(peg$e27);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -15297,7 +15162,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -15319,7 +15184,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e53);
+                peg$fail(peg$e59);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -15332,7 +15197,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s8 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e54);
+                    peg$fail(peg$e60);
                   }
                 }
                 if (s8 !== peg$FAILED) {
@@ -15358,7 +15223,7 @@ var require_angelscript = __commonJS({
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e55);
+                  peg$fail(peg$e61);
                 }
               }
               if (s5 !== peg$FAILED) {
@@ -15399,7 +15264,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -15414,7 +15279,7 @@ var require_angelscript = __commonJS({
               } else {
                 s8 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s8 !== peg$FAILED) {
@@ -15436,7 +15301,7 @@ var require_angelscript = __commonJS({
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e53);
+                  peg$fail(peg$e59);
                 }
               }
               if (s5 !== peg$FAILED) {
@@ -15449,7 +15314,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s8 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e54);
+                      peg$fail(peg$e60);
                     }
                   }
                   if (s8 !== peg$FAILED) {
@@ -15475,7 +15340,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s5 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e55);
+                    peg$fail(peg$e61);
                   }
                 }
                 if (s5 !== peg$FAILED) {
@@ -15516,7 +15381,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseargument_list() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseargument();
         if (s1 !== peg$FAILED) {
@@ -15528,7 +15393,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s4 !== peg$FAILED) {
@@ -15551,7 +15416,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -15580,7 +15445,7 @@ var require_angelscript = __commonJS({
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s1 !== peg$FAILED) {
@@ -15592,7 +15457,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseargument_list_or_typename() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$parsetypename_name();
         if (s1 !== peg$FAILED) {
@@ -15605,7 +15470,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e23);
+              peg$fail(peg$e28);
             }
           }
           peg$silentFails--;
@@ -15639,7 +15504,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             peg$silentFails--;
@@ -15667,7 +15532,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseargument() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$parseidentifier();
         if (s1 !== peg$FAILED) {
@@ -15698,13 +15563,13 @@ var require_angelscript = __commonJS({
             s2 = peg$currPos;
             s3 = peg$currPos;
             peg$silentFails++;
-            if (peg$r4.test(input.charAt(peg$currPos))) {
-              s4 = input.charAt(peg$currPos);
+            s4 = input.charAt(peg$currPos);
+            if (peg$r10.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e56);
+                peg$fail(peg$e62);
               }
             }
             peg$silentFails--;
@@ -15739,7 +15604,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_ternary() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
         s0 = peg$currPos;
         s1 = peg$parseexpr_binary_compare();
         if (s1 !== peg$FAILED) {
@@ -15750,7 +15615,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e57);
+              peg$fail(peg$e63);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -15766,7 +15631,7 @@ var require_angelscript = __commonJS({
               } else {
                 s9 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s9 !== peg$FAILED) {
@@ -15817,7 +15682,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_binary_compare() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpr_binary_logic();
         if (s1 !== peg$FAILED) {
@@ -15862,7 +15727,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_binary_logic() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpr_binary_bitwise();
         if (s1 !== peg$FAILED) {
@@ -15907,7 +15772,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_binary_bitwise() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpr_binary_sum();
         if (s1 !== peg$FAILED) {
@@ -15952,7 +15817,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_binary_sum() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpr_binary_product();
         if (s1 !== peg$FAILED) {
@@ -15997,7 +15862,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_binary_product() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpr_unary();
         if (s1 !== peg$FAILED) {
@@ -16042,7 +15907,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_unary() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$parseop_unary();
         if (s1 === peg$FAILED) {
@@ -16072,7 +15937,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_postfix() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseexpr_leaf();
         if (s1 !== peg$FAILED) {
@@ -16086,7 +15951,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e13);
+                peg$fail(peg$e15);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -16098,7 +15963,7 @@ var require_angelscript = __commonJS({
               } else {
                 s6 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
+                  peg$fail(peg$e13);
                 }
               }
               peg$silentFails--;
@@ -16138,7 +16003,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseexpr_leaf() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$parsecall_expression();
         if (s1 !== peg$FAILED) {
@@ -16179,7 +16044,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsecast_expression() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -16189,7 +16054,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e58);
+            peg$fail(peg$e64);
           }
         }
         peg$silentFails--;
@@ -16206,7 +16071,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e59);
+              peg$fail(peg$e65);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -16218,7 +16083,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e14);
+                peg$fail(peg$e16);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -16232,7 +16097,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s9 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e15);
+                    peg$fail(peg$e17);
                   }
                 }
                 if (s9 !== peg$FAILED) {
@@ -16243,7 +16108,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s11 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e22);
+                      peg$fail(peg$e27);
                     }
                   }
                   if (s11 !== peg$FAILED) {
@@ -16256,7 +16121,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s14 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e23);
+                          peg$fail(peg$e28);
                         }
                       }
                       if (s14 !== peg$FAILED) {
@@ -16294,7 +16159,7 @@ var require_angelscript = __commonJS({
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e14);
+                  peg$fail(peg$e16);
                 }
               }
               if (s5 !== peg$FAILED) {
@@ -16309,7 +16174,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s10 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e15);
+                      peg$fail(peg$e17);
                     }
                   }
                   if (s10 !== peg$FAILED) {
@@ -16342,7 +16207,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s7 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e14);
+                    peg$fail(peg$e16);
                   }
                 }
                 if (s7 !== peg$FAILED) {
@@ -16378,7 +16243,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseconstructor_call() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parsetemplate_typename();
         if (s1 === peg$FAILED) {
@@ -16392,7 +16257,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e22);
+              peg$fail(peg$e27);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -16407,7 +16272,7 @@ var require_angelscript = __commonJS({
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             if (s6 !== peg$FAILED) {
@@ -16428,7 +16293,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseconstant() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -16438,7 +16303,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e51);
+            peg$fail(peg$e57);
           }
         }
         peg$silentFails--;
@@ -16455,7 +16320,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e60);
+              peg$fail(peg$e66);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -16494,7 +16359,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e30);
+              peg$fail(peg$e35);
             }
           }
           peg$silentFails--;
@@ -16511,7 +16376,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e61);
+                peg$fail(peg$e67);
               }
             }
             if (s2 !== peg$FAILED) {
@@ -16550,7 +16415,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e62);
+                peg$fail(peg$e68);
               }
             }
             peg$silentFails--;
@@ -16567,7 +16432,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e63);
+                  peg$fail(peg$e69);
                 }
               }
               if (s2 !== peg$FAILED) {
@@ -16607,39 +16472,17 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e64);
+                  peg$fail(peg$e70);
                 }
               }
               if (s3 !== peg$FAILED) {
-                if (input.charCodeAt(peg$currPos) === 120) {
-                  s4 = peg$c59;
+                s4 = input.charAt(peg$currPos);
+                if (peg$r11.test(s4)) {
                   peg$currPos++;
                 } else {
                   s4 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e65);
-                  }
-                }
-                if (s4 === peg$FAILED) {
-                  if (input.charCodeAt(peg$currPos) === 98) {
-                    s4 = peg$c36;
-                    peg$currPos++;
-                  } else {
-                    s4 = peg$FAILED;
-                    if (peg$silentFails === 0) {
-                      peg$fail(peg$e41);
-                    }
-                  }
-                  if (s4 === peg$FAILED) {
-                    if (input.charCodeAt(peg$currPos) === 111) {
-                      s4 = peg$c44;
-                      peg$currPos++;
-                    } else {
-                      s4 = peg$FAILED;
-                      if (peg$silentFails === 0) {
-                        peg$fail(peg$e49);
-                      }
-                    }
+                    peg$fail(peg$e71);
                   }
                 }
                 if (s4 !== peg$FAILED) {
@@ -16699,35 +16542,35 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestring_literal() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 34) {
-          s1 = peg$c60;
+          s1 = peg$c59;
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e66);
+            peg$fail(peg$e72);
           }
         }
         if (s1 !== peg$FAILED) {
           if (input.charCodeAt(peg$currPos) === 34) {
-            s2 = peg$c60;
+            s2 = peg$c59;
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e66);
+              peg$fail(peg$e72);
             }
           }
           if (s2 !== peg$FAILED) {
             if (input.charCodeAt(peg$currPos) === 34) {
-              s3 = peg$c60;
+              s3 = peg$c59;
               peg$currPos++;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             if (s3 !== peg$FAILED) {
@@ -16738,32 +16581,32 @@ var require_angelscript = __commonJS({
                 s5 = peg$parsemultiline_string_content();
               }
               if (input.charCodeAt(peg$currPos) === 34) {
-                s5 = peg$c60;
+                s5 = peg$c59;
                 peg$currPos++;
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e66);
+                  peg$fail(peg$e72);
                 }
               }
               if (s5 !== peg$FAILED) {
                 if (input.charCodeAt(peg$currPos) === 34) {
-                  s6 = peg$c60;
+                  s6 = peg$c59;
                   peg$currPos++;
                 } else {
                   s6 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e66);
+                    peg$fail(peg$e72);
                   }
                 }
                 if (s6 !== peg$FAILED) {
                   if (input.charCodeAt(peg$currPos) === 34) {
-                    s7 = peg$c60;
+                    s7 = peg$c59;
                     peg$currPos++;
                   } else {
                     s7 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e66);
+                      peg$fail(peg$e72);
                     }
                   }
                   if (s7 !== peg$FAILED) {
@@ -16796,12 +16639,12 @@ var require_angelscript = __commonJS({
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
           if (input.charCodeAt(peg$currPos) === 34) {
-            s1 = peg$c60;
+            s1 = peg$c59;
             peg$currPos++;
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e66);
+              peg$fail(peg$e72);
             }
           }
           if (s1 !== peg$FAILED) {
@@ -16812,12 +16655,12 @@ var require_angelscript = __commonJS({
               s3 = peg$parsestring_content();
             }
             if (input.charCodeAt(peg$currPos) === 34) {
-              s3 = peg$c60;
+              s3 = peg$c59;
               peg$currPos++;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             if (s3 !== peg$FAILED) {
@@ -16835,27 +16678,27 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestring_content() {
-        var s0, s1;
+        let s0, s1;
         s0 = [];
-        if (peg$r5.test(input.charAt(peg$currPos))) {
-          s1 = input.charAt(peg$currPos);
+        s1 = input.charAt(peg$currPos);
+        if (peg$r12.test(s1)) {
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e67);
+            peg$fail(peg$e73);
           }
         }
         if (s1 !== peg$FAILED) {
           while (s1 !== peg$FAILED) {
             s0.push(s1);
-            if (peg$r5.test(input.charAt(peg$currPos))) {
-              s1 = input.charAt(peg$currPos);
+            s1 = input.charAt(peg$currPos);
+            if (peg$r12.test(s1)) {
               peg$currPos++;
             } else {
               s1 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e67);
+                peg$fail(peg$e73);
               }
             }
           }
@@ -16868,27 +16711,27 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsemultiline_string_content() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
         if (input.charCodeAt(peg$currPos) === 92) {
-          s2 = peg$c61;
+          s2 = peg$c60;
           peg$currPos++;
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e68);
+            peg$fail(peg$e74);
           }
         }
         if (s2 === peg$FAILED) {
-          if (input.substr(peg$currPos, 3) === peg$c62) {
-            s2 = peg$c62;
+          if (input.substr(peg$currPos, 3) === peg$c61) {
+            s2 = peg$c61;
             peg$currPos += 3;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e69);
+              peg$fail(peg$e75);
             }
           }
         }
@@ -16926,48 +16769,48 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseescape_sequence() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 92) {
-          s1 = peg$c61;
+          s1 = peg$c60;
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e68);
+            peg$fail(peg$e74);
           }
         }
         if (s1 !== peg$FAILED) {
-          if (peg$r6.test(input.charAt(peg$currPos))) {
-            s2 = input.charAt(peg$currPos);
+          s2 = input.charAt(peg$currPos);
+          if (peg$r13.test(s2)) {
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e70);
+              peg$fail(peg$e76);
             }
           }
           if (s2 === peg$FAILED) {
             s2 = [];
-            if (peg$r3.test(input.charAt(peg$currPos))) {
-              s3 = input.charAt(peg$currPos);
+            s3 = input.charAt(peg$currPos);
+            if (peg$r8.test(s3)) {
               peg$currPos++;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e39);
+                peg$fail(peg$e44);
               }
             }
             if (s3 !== peg$FAILED) {
               while (s3 !== peg$FAILED) {
                 s2.push(s3);
-                if (peg$r3.test(input.charAt(peg$currPos))) {
-                  s3 = input.charAt(peg$currPos);
+                s3 = input.charAt(peg$currPos);
+                if (peg$r8.test(s3)) {
                   peg$currPos++;
                 } else {
                   s3 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e39);
+                    peg$fail(peg$e44);
                   }
                 }
               }
@@ -16989,7 +16832,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefstring_literal() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 102) {
           s1 = peg$c26;
@@ -16997,17 +16840,17 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e30);
+            peg$fail(peg$e35);
           }
         }
         if (s1 !== peg$FAILED) {
           if (input.charCodeAt(peg$currPos) === 34) {
-            s2 = peg$c60;
+            s2 = peg$c59;
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e66);
+              peg$fail(peg$e72);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -17018,12 +16861,12 @@ var require_angelscript = __commonJS({
               s4 = peg$parsestring_content();
             }
             if (input.charCodeAt(peg$currPos) === 34) {
-              s4 = peg$c60;
+              s4 = peg$c59;
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -17044,7 +16887,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsename_literal() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 110) {
           s1 = peg$c56;
@@ -17052,17 +16895,17 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e62);
+            peg$fail(peg$e68);
           }
         }
         if (s1 !== peg$FAILED) {
           if (input.charCodeAt(peg$currPos) === 34) {
-            s2 = peg$c60;
+            s2 = peg$c59;
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e66);
+              peg$fail(peg$e72);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -17073,12 +16916,12 @@ var require_angelscript = __commonJS({
               s4 = peg$parsestring_content();
             }
             if (input.charCodeAt(peg$currPos) === 34) {
-              s4 = peg$c60;
+              s4 = peg$c59;
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -17099,15 +16942,15 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsechar_literal() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 39) {
-          s1 = peg$c63;
+          s1 = peg$c62;
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e71);
+            peg$fail(peg$e77);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -17118,12 +16961,12 @@ var require_angelscript = __commonJS({
             s3 = peg$parsechar_content();
           }
           if (input.charCodeAt(peg$currPos) === 39) {
-            s3 = peg$c63;
+            s3 = peg$c62;
             peg$currPos++;
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e71);
+              peg$fail(peg$e77);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -17140,27 +16983,27 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsechar_content() {
-        var s0, s1;
+        let s0, s1;
         s0 = [];
-        if (peg$r7.test(input.charAt(peg$currPos))) {
-          s1 = input.charAt(peg$currPos);
+        s1 = input.charAt(peg$currPos);
+        if (peg$r14.test(s1)) {
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e72);
+            peg$fail(peg$e78);
           }
         }
         if (s1 !== peg$FAILED) {
           while (s1 !== peg$FAILED) {
             s0.push(s1);
-            if (peg$r7.test(input.charAt(peg$currPos))) {
-              s1 = input.charAt(peg$currPos);
+            s1 = input.charAt(peg$currPos);
+            if (peg$r14.test(s1)) {
               peg$currPos++;
             } else {
               s1 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e72);
+                peg$fail(peg$e78);
               }
             }
           }
@@ -17173,29 +17016,29 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsedecimal_literal() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = [];
-        if (peg$r3.test(input.charAt(peg$currPos))) {
-          s3 = input.charAt(peg$currPos);
+        s3 = input.charAt(peg$currPos);
+        if (peg$r8.test(s3)) {
           peg$currPos++;
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e39);
+            peg$fail(peg$e44);
           }
         }
         if (s3 !== peg$FAILED) {
           while (s3 !== peg$FAILED) {
             s2.push(s3);
-            if (peg$r3.test(input.charAt(peg$currPos))) {
-              s3 = input.charAt(peg$currPos);
+            s3 = input.charAt(peg$currPos);
+            if (peg$r8.test(s3)) {
               peg$currPos++;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e39);
+                peg$fail(peg$e44);
               }
             }
           }
@@ -17210,29 +17053,29 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e55);
+              peg$fail(peg$e61);
             }
           }
           if (s4 !== peg$FAILED) {
             s5 = [];
-            if (peg$r3.test(input.charAt(peg$currPos))) {
-              s6 = input.charAt(peg$currPos);
+            s6 = input.charAt(peg$currPos);
+            if (peg$r8.test(s6)) {
               peg$currPos++;
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e39);
+                peg$fail(peg$e44);
               }
             }
             while (s6 !== peg$FAILED) {
               s5.push(s6);
-              if (peg$r3.test(input.charAt(peg$currPos))) {
-                s6 = input.charAt(peg$currPos);
+              s6 = input.charAt(peg$currPos);
+              if (peg$r8.test(s6)) {
                 peg$currPos++;
               } else {
                 s6 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e39);
+                  peg$fail(peg$e44);
                 }
               }
             }
@@ -17259,30 +17102,30 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e55);
+              peg$fail(peg$e61);
             }
           }
           if (s2 !== peg$FAILED) {
             s3 = [];
-            if (peg$r3.test(input.charAt(peg$currPos))) {
-              s4 = input.charAt(peg$currPos);
+            s4 = input.charAt(peg$currPos);
+            if (peg$r8.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e39);
+                peg$fail(peg$e44);
               }
             }
             if (s4 !== peg$FAILED) {
               while (s4 !== peg$FAILED) {
                 s3.push(s4);
-                if (peg$r3.test(input.charAt(peg$currPos))) {
-                  s4 = input.charAt(peg$currPos);
+                s4 = input.charAt(peg$currPos);
+                if (peg$r8.test(s4)) {
                   peg$currPos++;
                 } else {
                   s4 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e39);
+                    peg$fail(peg$e44);
                   }
                 }
               }
@@ -17309,53 +17152,42 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e26);
+              peg$fail(peg$e31);
             }
           }
           if (s3 !== peg$FAILED) {
-            if (input.charCodeAt(peg$currPos) === 45) {
-              s4 = peg$c4;
+            s4 = input.charAt(peg$currPos);
+            if (peg$r15.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e8);
-              }
-            }
-            if (s4 === peg$FAILED) {
-              if (input.charCodeAt(peg$currPos) === 43) {
-                s4 = peg$c3;
-                peg$currPos++;
-              } else {
-                s4 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e7);
-                }
+                peg$fail(peg$e79);
               }
             }
             if (s4 === peg$FAILED) {
               s4 = null;
             }
             s5 = [];
-            if (peg$r3.test(input.charAt(peg$currPos))) {
-              s6 = input.charAt(peg$currPos);
+            s6 = input.charAt(peg$currPos);
+            if (peg$r8.test(s6)) {
               peg$currPos++;
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e39);
+                peg$fail(peg$e44);
               }
             }
             if (s6 !== peg$FAILED) {
               while (s6 !== peg$FAILED) {
                 s5.push(s6);
-                if (peg$r3.test(input.charAt(peg$currPos))) {
-                  s6 = input.charAt(peg$currPos);
+                s6 = input.charAt(peg$currPos);
+                if (peg$r8.test(s6)) {
                   peg$currPos++;
                 } else {
                   s6 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e39);
+                    peg$fail(peg$e44);
                   }
                 }
               }
@@ -17382,7 +17214,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e30);
+              peg$fail(peg$e35);
             }
           }
           if (s3 === peg$FAILED) {
@@ -17397,7 +17229,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsesigned_decimal_literal() {
-        var s0, s1, s2, s3;
+        let s0, s1, s2, s3;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 45) {
@@ -17431,7 +17263,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsehex_literal() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 48) {
           s1 = peg$c58;
@@ -17439,39 +17271,39 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e64);
+            peg$fail(peg$e70);
           }
         }
         if (s1 !== peg$FAILED) {
           if (input.charCodeAt(peg$currPos) === 120) {
-            s2 = peg$c59;
+            s2 = peg$c63;
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e65);
+              peg$fail(peg$e80);
             }
           }
           if (s2 !== peg$FAILED) {
             s3 = [];
-            if (peg$r8.test(input.charAt(peg$currPos))) {
-              s4 = input.charAt(peg$currPos);
+            s4 = input.charAt(peg$currPos);
+            if (peg$r16.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e73);
+                peg$fail(peg$e81);
               }
             }
             while (s4 !== peg$FAILED) {
               s3.push(s4);
-              if (peg$r8.test(input.charAt(peg$currPos))) {
-                s4 = input.charAt(peg$currPos);
+              s4 = input.charAt(peg$currPos);
+              if (peg$r16.test(s4)) {
                 peg$currPos++;
               } else {
                 s4 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e73);
+                  peg$fail(peg$e81);
                 }
               }
             }
@@ -17488,7 +17320,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsebinary_literal() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 48) {
           s1 = peg$c58;
@@ -17496,7 +17328,7 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e64);
+            peg$fail(peg$e70);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -17506,29 +17338,29 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e41);
+              peg$fail(peg$e46);
             }
           }
           if (s2 !== peg$FAILED) {
             s3 = [];
-            if (peg$r9.test(input.charAt(peg$currPos))) {
-              s4 = input.charAt(peg$currPos);
+            s4 = input.charAt(peg$currPos);
+            if (peg$r17.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e74);
+                peg$fail(peg$e82);
               }
             }
             while (s4 !== peg$FAILED) {
               s3.push(s4);
-              if (peg$r9.test(input.charAt(peg$currPos))) {
-                s4 = input.charAt(peg$currPos);
+              s4 = input.charAt(peg$currPos);
+              if (peg$r17.test(s4)) {
                 peg$currPos++;
               } else {
                 s4 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e74);
+                  peg$fail(peg$e82);
                 }
               }
             }
@@ -17545,7 +17377,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseoctal_literal() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 48) {
           s1 = peg$c58;
@@ -17553,7 +17385,7 @@ var require_angelscript = __commonJS({
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e64);
+            peg$fail(peg$e70);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -17563,29 +17395,29 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e49);
+              peg$fail(peg$e55);
             }
           }
           if (s2 !== peg$FAILED) {
             s3 = [];
-            if (peg$r10.test(input.charAt(peg$currPos))) {
-              s4 = input.charAt(peg$currPos);
+            s4 = input.charAt(peg$currPos);
+            if (peg$r18.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e75);
+                peg$fail(peg$e83);
               }
             }
             while (s4 !== peg$FAILED) {
               s3.push(s4);
-              if (peg$r10.test(input.charAt(peg$currPos))) {
-                s4 = input.charAt(peg$currPos);
+              s4 = input.charAt(peg$currPos);
+              if (peg$r18.test(s4)) {
                 peg$currPos++;
               } else {
                 s4 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e75);
+                  peg$fail(peg$e83);
                 }
               }
             }
@@ -17602,7 +17434,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsekeyword() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -17612,7 +17444,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e20);
+            peg$fail(peg$e25);
           }
         }
         peg$silentFails--;
@@ -17629,7 +17461,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e21);
+              peg$fail(peg$e26);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -17652,7 +17484,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e24);
+              peg$fail(peg$e29);
             }
           }
           peg$silentFails--;
@@ -17669,7 +17501,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e25);
+                peg$fail(peg$e30);
               }
             }
             if (s2 !== peg$FAILED) {
@@ -17692,7 +17524,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e41);
+                peg$fail(peg$e46);
               }
             }
             peg$silentFails--;
@@ -17709,7 +17541,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e42);
+                  peg$fail(peg$e47);
                 }
               }
               if (s2 !== peg$FAILED) {
@@ -17732,7 +17564,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e44);
+                  peg$fail(peg$e49);
                 }
               }
               peg$silentFails--;
@@ -17749,7 +17581,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e45);
+                    peg$fail(peg$e50);
                   }
                 }
                 if (s2 !== peg$FAILED) {
@@ -17772,7 +17604,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e35);
+                    peg$fail(peg$e40);
                   }
                 }
                 peg$silentFails--;
@@ -17789,7 +17621,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e76);
+                      peg$fail(peg$e84);
                     }
                   }
                   if (s2 === peg$FAILED) {
@@ -17799,7 +17631,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s2 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e40);
+                        peg$fail(peg$e45);
                       }
                     }
                     if (s2 === peg$FAILED) {
@@ -17809,7 +17641,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s2 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e36);
+                          peg$fail(peg$e41);
                         }
                       }
                       if (s2 === peg$FAILED) {
@@ -17819,7 +17651,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s2 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e46);
+                            peg$fail(peg$e52);
                           }
                         }
                       }
@@ -17845,7 +17677,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e28);
+                      peg$fail(peg$e33);
                     }
                   }
                   peg$silentFails--;
@@ -17862,7 +17694,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s2 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e77);
+                        peg$fail(peg$e85);
                       }
                     }
                     if (s2 === peg$FAILED) {
@@ -17872,7 +17704,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s2 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e29);
+                          peg$fail(peg$e34);
                         }
                       }
                     }
@@ -17896,7 +17728,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s2 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e78);
+                        peg$fail(peg$e86);
                       }
                     }
                     peg$silentFails--;
@@ -17913,7 +17745,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s2 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e79);
+                          peg$fail(peg$e87);
                         }
                       }
                       if (s2 !== peg$FAILED) {
@@ -17936,7 +17768,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s2 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e49);
+                          peg$fail(peg$e55);
                         }
                       }
                       peg$silentFails--;
@@ -17953,7 +17785,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s2 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e80);
+                            peg$fail(peg$e88);
                           }
                         }
                         if (s2 !== peg$FAILED) {
@@ -17976,7 +17808,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s2 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e37);
+                            peg$fail(peg$e42);
                           }
                         }
                         peg$silentFails--;
@@ -17993,7 +17825,7 @@ var require_angelscript = __commonJS({
                           } else {
                             s2 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e81);
+                              peg$fail(peg$e89);
                             }
                           }
                           if (s2 === peg$FAILED) {
@@ -18003,7 +17835,7 @@ var require_angelscript = __commonJS({
                             } else {
                               s2 = peg$FAILED;
                               if (peg$silentFails === 0) {
-                                peg$fail(peg$e38);
+                                peg$fail(peg$e43);
                               }
                             }
                           }
@@ -18027,7 +17859,7 @@ var require_angelscript = __commonJS({
                           } else {
                             s2 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e82);
+                              peg$fail(peg$e90);
                             }
                           }
                           peg$silentFails--;
@@ -18044,7 +17876,7 @@ var require_angelscript = __commonJS({
                             } else {
                               s2 = peg$FAILED;
                               if (peg$silentFails === 0) {
-                                peg$fail(peg$e83);
+                                peg$fail(peg$e91);
                               }
                             }
                             if (s2 !== peg$FAILED) {
@@ -18067,7 +17899,7 @@ var require_angelscript = __commonJS({
                             } else {
                               s2 = peg$FAILED;
                               if (peg$silentFails === 0) {
-                                peg$fail(peg$e26);
+                                peg$fail(peg$e31);
                               }
                             }
                             peg$silentFails--;
@@ -18084,7 +17916,7 @@ var require_angelscript = __commonJS({
                               } else {
                                 s2 = peg$FAILED;
                                 if (peg$silentFails === 0) {
-                                  peg$fail(peg$e84);
+                                  peg$fail(peg$e92);
                                 }
                               }
                               if (s2 === peg$FAILED) {
@@ -18094,7 +17926,7 @@ var require_angelscript = __commonJS({
                                 } else {
                                   s2 = peg$FAILED;
                                   if (peg$silentFails === 0) {
-                                    peg$fail(peg$e85);
+                                    peg$fail(peg$e93);
                                   }
                                 }
                                 if (s2 === peg$FAILED) {
@@ -18104,7 +17936,7 @@ var require_angelscript = __commonJS({
                                   } else {
                                     s2 = peg$FAILED;
                                     if (peg$silentFails === 0) {
-                                      peg$fail(peg$e27);
+                                      peg$fail(peg$e32);
                                     }
                                   }
                                 }
@@ -18129,7 +17961,7 @@ var require_angelscript = __commonJS({
                               } else {
                                 s2 = peg$FAILED;
                                 if (peg$silentFails === 0) {
-                                  peg$fail(peg$e86);
+                                  peg$fail(peg$e94);
                                 }
                               }
                               peg$silentFails--;
@@ -18146,7 +17978,7 @@ var require_angelscript = __commonJS({
                                 } else {
                                   s2 = peg$FAILED;
                                   if (peg$silentFails === 0) {
-                                    peg$fail(peg$e18);
+                                    peg$fail(peg$e23);
                                   }
                                 }
                                 if (s2 !== peg$FAILED) {
@@ -18169,7 +18001,7 @@ var require_angelscript = __commonJS({
                                 } else {
                                   s2 = peg$FAILED;
                                   if (peg$silentFails === 0) {
-                                    peg$fail(peg$e87);
+                                    peg$fail(peg$e95);
                                   }
                                 }
                                 peg$silentFails--;
@@ -18186,7 +18018,7 @@ var require_angelscript = __commonJS({
                                   } else {
                                     s2 = peg$FAILED;
                                     if (peg$silentFails === 0) {
-                                      peg$fail(peg$e19);
+                                      peg$fail(peg$e24);
                                     }
                                   }
                                   if (s2 !== peg$FAILED) {
@@ -18209,7 +18041,7 @@ var require_angelscript = __commonJS({
                                   } else {
                                     s2 = peg$FAILED;
                                     if (peg$silentFails === 0) {
-                                      peg$fail(peg$e58);
+                                      peg$fail(peg$e64);
                                     }
                                   }
                                   peg$silentFails--;
@@ -18226,7 +18058,7 @@ var require_angelscript = __commonJS({
                                     } else {
                                       s2 = peg$FAILED;
                                       if (peg$silentFails === 0) {
-                                        peg$fail(peg$e59);
+                                        peg$fail(peg$e65);
                                       }
                                     }
                                     if (s2 !== peg$FAILED) {
@@ -18249,7 +18081,7 @@ var require_angelscript = __commonJS({
                                     } else {
                                       s2 = peg$FAILED;
                                       if (peg$silentFails === 0) {
-                                        peg$fail(peg$e51);
+                                        peg$fail(peg$e57);
                                       }
                                     }
                                     peg$silentFails--;
@@ -18266,7 +18098,7 @@ var require_angelscript = __commonJS({
                                       } else {
                                         s2 = peg$FAILED;
                                         if (peg$silentFails === 0) {
-                                          peg$fail(peg$e60);
+                                          peg$fail(peg$e66);
                                         }
                                       }
                                       if (s2 === peg$FAILED) {
@@ -18276,7 +18108,7 @@ var require_angelscript = __commonJS({
                                         } else {
                                           s2 = peg$FAILED;
                                           if (peg$silentFails === 0) {
-                                            peg$fail(peg$e52);
+                                            peg$fail(peg$e58);
                                           }
                                         }
                                       }
@@ -18300,7 +18132,7 @@ var require_angelscript = __commonJS({
                                       } else {
                                         s2 = peg$FAILED;
                                         if (peg$silentFails === 0) {
-                                          peg$fail(peg$e30);
+                                          peg$fail(peg$e35);
                                         }
                                       }
                                       peg$silentFails--;
@@ -18317,7 +18149,7 @@ var require_angelscript = __commonJS({
                                         } else {
                                           s2 = peg$FAILED;
                                           if (peg$silentFails === 0) {
-                                            peg$fail(peg$e61);
+                                            peg$fail(peg$e67);
                                           }
                                         }
                                         if (s2 === peg$FAILED) {
@@ -18327,7 +18159,7 @@ var require_angelscript = __commonJS({
                                           } else {
                                             s2 = peg$FAILED;
                                             if (peg$silentFails === 0) {
-                                              peg$fail(peg$e88);
+                                              peg$fail(peg$e96);
                                             }
                                           }
                                           if (s2 === peg$FAILED) {
@@ -18337,7 +18169,7 @@ var require_angelscript = __commonJS({
                                             } else {
                                               s2 = peg$FAILED;
                                               if (peg$silentFails === 0) {
-                                                peg$fail(peg$e31);
+                                                peg$fail(peg$e36);
                                               }
                                             }
                                             if (s2 === peg$FAILED) {
@@ -18347,7 +18179,7 @@ var require_angelscript = __commonJS({
                                               } else {
                                                 s2 = peg$FAILED;
                                                 if (peg$silentFails === 0) {
-                                                  peg$fail(peg$e43);
+                                                  peg$fail(peg$e48);
                                                 }
                                               }
                                             }
@@ -18373,7 +18205,7 @@ var require_angelscript = __commonJS({
                                         } else {
                                           s2 = peg$FAILED;
                                           if (peg$silentFails === 0) {
-                                            peg$fail(peg$e89);
+                                            peg$fail(peg$e97);
                                           }
                                         }
                                         peg$silentFails--;
@@ -18390,7 +18222,7 @@ var require_angelscript = __commonJS({
                                           } else {
                                             s2 = peg$FAILED;
                                             if (peg$silentFails === 0) {
-                                              peg$fail(peg$e90);
+                                              peg$fail(peg$e98);
                                             }
                                           }
                                           if (s2 !== peg$FAILED) {
@@ -18413,7 +18245,7 @@ var require_angelscript = __commonJS({
                                           } else {
                                             s2 = peg$FAILED;
                                             if (peg$silentFails === 0) {
-                                              peg$fail(peg$e62);
+                                              peg$fail(peg$e68);
                                             }
                                           }
                                           peg$silentFails--;
@@ -18430,7 +18262,7 @@ var require_angelscript = __commonJS({
                                             } else {
                                               s2 = peg$FAILED;
                                               if (peg$silentFails === 0) {
-                                                peg$fail(peg$e63);
+                                                peg$fail(peg$e69);
                                               }
                                             }
                                             if (s2 === peg$FAILED) {
@@ -18440,7 +18272,7 @@ var require_angelscript = __commonJS({
                                               } else {
                                                 s2 = peg$FAILED;
                                                 if (peg$silentFails === 0) {
-                                                  peg$fail(peg$e91);
+                                                  peg$fail(peg$e99);
                                                 }
                                               }
                                             }
@@ -18464,7 +18296,7 @@ var require_angelscript = __commonJS({
                                             } else {
                                               s2 = peg$FAILED;
                                               if (peg$silentFails === 0) {
-                                                peg$fail(peg$e92);
+                                                peg$fail(peg$e100);
                                               }
                                             }
                                             peg$silentFails--;
@@ -18481,7 +18313,7 @@ var require_angelscript = __commonJS({
                                               } else {
                                                 s2 = peg$FAILED;
                                                 if (peg$silentFails === 0) {
-                                                  peg$fail(peg$e93);
+                                                  peg$fail(peg$e101);
                                                 }
                                               }
                                               if (s2 === peg$FAILED) {
@@ -18491,7 +18323,7 @@ var require_angelscript = __commonJS({
                                                 } else {
                                                   s2 = peg$FAILED;
                                                   if (peg$silentFails === 0) {
-                                                    peg$fail(peg$e94);
+                                                    peg$fail(peg$e102);
                                                   }
                                                 }
                                                 if (s2 === peg$FAILED) {
@@ -18501,7 +18333,7 @@ var require_angelscript = __commonJS({
                                                   } else {
                                                     s2 = peg$FAILED;
                                                     if (peg$silentFails === 0) {
-                                                      peg$fail(peg$e95);
+                                                      peg$fail(peg$e103);
                                                     }
                                                   }
                                                   if (s2 === peg$FAILED) {
@@ -18511,7 +18343,7 @@ var require_angelscript = __commonJS({
                                                     } else {
                                                       s2 = peg$FAILED;
                                                       if (peg$silentFails === 0) {
-                                                        peg$fail(peg$e96);
+                                                        peg$fail(peg$e104);
                                                       }
                                                     }
                                                     if (s2 === peg$FAILED) {
@@ -18521,7 +18353,7 @@ var require_angelscript = __commonJS({
                                                       } else {
                                                         s2 = peg$FAILED;
                                                         if (peg$silentFails === 0) {
-                                                          peg$fail(peg$e97);
+                                                          peg$fail(peg$e105);
                                                         }
                                                       }
                                                       if (s2 === peg$FAILED) {
@@ -18531,7 +18363,7 @@ var require_angelscript = __commonJS({
                                                         } else {
                                                           s2 = peg$FAILED;
                                                           if (peg$silentFails === 0) {
-                                                            peg$fail(peg$e98);
+                                                            peg$fail(peg$e106);
                                                           }
                                                         }
                                                       }
@@ -18570,7 +18402,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestandard_template_basetype() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -18580,7 +18412,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e99);
+            peg$fail(peg$e107);
           }
         }
         peg$silentFails--;
@@ -18597,7 +18429,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e100);
+              peg$fail(peg$e108);
             }
           }
           if (s2 === peg$FAILED) {
@@ -18607,7 +18439,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e101);
+                peg$fail(peg$e109);
               }
             }
             if (s2 === peg$FAILED) {
@@ -18617,7 +18449,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e102);
+                  peg$fail(peg$e110);
                 }
               }
               if (s2 === peg$FAILED) {
@@ -18627,7 +18459,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e103);
+                    peg$fail(peg$e111);
                   }
                 }
                 if (s2 === peg$FAILED) {
@@ -18637,7 +18469,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e104);
+                      peg$fail(peg$e112);
                     }
                   }
                   if (s2 === peg$FAILED) {
@@ -18647,7 +18479,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s2 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e105);
+                        peg$fail(peg$e113);
                       }
                     }
                     if (s2 === peg$FAILED) {
@@ -18657,7 +18489,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s2 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e106);
+                          peg$fail(peg$e114);
                         }
                       }
                       if (s2 === peg$FAILED) {
@@ -18667,7 +18499,7 @@ var require_angelscript = __commonJS({
                         } else {
                           s2 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e107);
+                            peg$fail(peg$e115);
                           }
                         }
                         if (s2 === peg$FAILED) {
@@ -18677,7 +18509,7 @@ var require_angelscript = __commonJS({
                           } else {
                             s2 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e108);
+                              peg$fail(peg$e116);
                             }
                           }
                           if (s2 === peg$FAILED) {
@@ -18687,7 +18519,7 @@ var require_angelscript = __commonJS({
                             } else {
                               s2 = peg$FAILED;
                               if (peg$silentFails === 0) {
-                                peg$fail(peg$e109);
+                                peg$fail(peg$e117);
                               }
                             }
                           }
@@ -18712,7 +18544,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseprimitive_types() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -18722,7 +18554,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e30);
+            peg$fail(peg$e35);
           }
         }
         peg$silentFails--;
@@ -18739,7 +18571,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e110);
+              peg$fail(peg$e118);
             }
           }
           if (s2 === peg$FAILED) {
@@ -18749,7 +18581,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e111);
+                peg$fail(peg$e119);
               }
             }
             if (s2 === peg$FAILED) {
@@ -18759,7 +18591,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e112);
+                  peg$fail(peg$e120);
                 }
               }
             }
@@ -18784,7 +18616,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e20);
+              peg$fail(peg$e25);
             }
           }
           peg$silentFails--;
@@ -18801,7 +18633,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e113);
+                peg$fail(peg$e121);
               }
             }
             if (s2 === peg$FAILED) {
@@ -18811,7 +18643,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e114);
+                  peg$fail(peg$e122);
                 }
               }
               if (s2 === peg$FAILED) {
@@ -18821,7 +18653,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e115);
+                    peg$fail(peg$e123);
                   }
                 }
                 if (s2 === peg$FAILED) {
@@ -18831,7 +18663,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e116);
+                      peg$fail(peg$e124);
                     }
                   }
                   if (s2 === peg$FAILED) {
@@ -18841,7 +18673,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s2 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e117);
+                        peg$fail(peg$e125);
                       }
                     }
                   }
@@ -18868,7 +18700,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e118);
+                peg$fail(peg$e126);
               }
             }
             peg$silentFails--;
@@ -18885,7 +18717,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e119);
+                  peg$fail(peg$e127);
                 }
               }
               if (s2 === peg$FAILED) {
@@ -18895,7 +18727,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e120);
+                    peg$fail(peg$e128);
                   }
                 }
                 if (s2 === peg$FAILED) {
@@ -18905,7 +18737,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s2 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e121);
+                      peg$fail(peg$e129);
                     }
                   }
                   if (s2 === peg$FAILED) {
@@ -18915,7 +18747,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s2 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e122);
+                        peg$fail(peg$e130);
                       }
                     }
                     if (s2 === peg$FAILED) {
@@ -18925,7 +18757,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s2 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e123);
+                          peg$fail(peg$e131);
                         }
                       }
                     }
@@ -18952,7 +18784,7 @@ var require_angelscript = __commonJS({
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e41);
+                  peg$fail(peg$e46);
                 }
               }
               peg$silentFails--;
@@ -18969,7 +18801,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s2 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e124);
+                    peg$fail(peg$e132);
                   }
                 }
                 if (s2 !== peg$FAILED) {
@@ -18988,7 +18820,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseidentifier() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -19036,12 +18868,12 @@ var require_angelscript = __commonJS({
             s4 = peg$currPos;
             peg$silentFails++;
             if (input.charCodeAt(peg$currPos) === 34) {
-              s5 = peg$c60;
+              s5 = peg$c59;
               peg$currPos++;
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             peg$silentFails--;
@@ -19069,7 +18901,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseidentifier_name() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$currPos;
@@ -19118,12 +18950,12 @@ var require_angelscript = __commonJS({
             s5 = peg$currPos;
             peg$silentFails++;
             if (input.charCodeAt(peg$currPos) === 34) {
-              s6 = peg$c60;
+              s6 = peg$c59;
               peg$currPos++;
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             peg$silentFails--;
@@ -19156,7 +18988,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsetypename_name() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$currPos;
@@ -19199,12 +19031,12 @@ var require_angelscript = __commonJS({
             s5 = peg$currPos;
             peg$silentFails++;
             if (input.charCodeAt(peg$currPos) === 34) {
-              s6 = peg$c60;
+              s6 = peg$c59;
               peg$currPos++;
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e66);
+                peg$fail(peg$e72);
               }
             }
             peg$silentFails--;
@@ -19237,244 +19069,63 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseidentifier_start() {
-        var s0;
-        if (peg$r11.test(input.charAt(peg$currPos))) {
-          s0 = input.charAt(peg$currPos);
+        let s0;
+        s0 = input.charAt(peg$currPos);
+        if (peg$r19.test(s0)) {
           peg$currPos++;
         } else {
           s0 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e125);
+            peg$fail(peg$e133);
           }
         }
         return s0;
       }
       function peg$parseidentifier_rest() {
-        var s0, s1;
+        let s0, s1;
         s0 = [];
-        if (peg$r12.test(input.charAt(peg$currPos))) {
-          s1 = input.charAt(peg$currPos);
+        s1 = input.charAt(peg$currPos);
+        if (peg$r20.test(s1)) {
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e126);
+            peg$fail(peg$e134);
           }
         }
         while (s1 !== peg$FAILED) {
           s0.push(s1);
-          if (peg$r12.test(input.charAt(peg$currPos))) {
-            s1 = input.charAt(peg$currPos);
+          s1 = input.charAt(peg$currPos);
+          if (peg$r20.test(s1)) {
             peg$currPos++;
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e126);
+              peg$fail(peg$e134);
             }
           }
         }
         return s0;
       }
       function peg$parseidentifier_char() {
-        var s0;
-        if (peg$r12.test(input.charAt(peg$currPos))) {
-          s0 = input.charAt(peg$currPos);
+        let s0;
+        s0 = input.charAt(peg$currPos);
+        if (peg$r20.test(s0)) {
           peg$currPos++;
         } else {
           s0 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e126);
+            peg$fail(peg$e134);
           }
-        }
-        return s0;
-      }
-      function peg$parseimport_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
-        s0 = peg$currPos;
-        s1 = peg$currPos;
-        peg$silentFails++;
-        if (input.charCodeAt(peg$currPos) === 105) {
-          s2 = peg$c16;
-          peg$currPos++;
-        } else {
-          s2 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e20);
-          }
-        }
-        peg$silentFails--;
-        if (s2 !== peg$FAILED) {
-          peg$currPos = s1;
-          s1 = void 0;
-        } else {
-          s1 = peg$FAILED;
-        }
-        if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 6) === peg$c113) {
-            s2 = peg$c113;
-            peg$currPos += 6;
-          } else {
-            s2 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e127);
-            }
-          }
-          if (s2 !== peg$FAILED) {
-            s3 = peg$parse_();
-            s4 = peg$parseidentifier();
-            if (s4 !== peg$FAILED) {
-              s5 = [];
-              s6 = peg$currPos;
-              if (input.charCodeAt(peg$currPos) === 46) {
-                s7 = peg$c50;
-                peg$currPos++;
-              } else {
-                s7 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e55);
-                }
-              }
-              if (s7 !== peg$FAILED) {
-                s8 = peg$parseidentifier();
-                if (s8 !== peg$FAILED) {
-                  s6 = s8;
-                } else {
-                  peg$currPos = s6;
-                  s6 = peg$FAILED;
-                }
-              } else {
-                peg$currPos = s6;
-                s6 = peg$FAILED;
-              }
-              while (s6 !== peg$FAILED) {
-                s5.push(s6);
-                s6 = peg$currPos;
-                if (input.charCodeAt(peg$currPos) === 46) {
-                  s7 = peg$c50;
-                  peg$currPos++;
-                } else {
-                  s7 = peg$FAILED;
-                  if (peg$silentFails === 0) {
-                    peg$fail(peg$e55);
-                  }
-                }
-                if (s7 !== peg$FAILED) {
-                  s8 = peg$parseidentifier();
-                  if (s8 !== peg$FAILED) {
-                    s6 = s8;
-                  } else {
-                    peg$currPos = s6;
-                    s6 = peg$FAILED;
-                  }
-                } else {
-                  peg$currPos = s6;
-                  s6 = peg$FAILED;
-                }
-              }
-              peg$savedPos = s0;
-              s0 = peg$f95(s4, s5);
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s0;
-          s0 = peg$FAILED;
-        }
-        return s0;
-      }
-      function peg$parseimport_function_statement() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
-        s0 = peg$currPos;
-        s1 = peg$currPos;
-        peg$silentFails++;
-        if (input.charCodeAt(peg$currPos) === 105) {
-          s2 = peg$c16;
-          peg$currPos++;
-        } else {
-          s2 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e20);
-          }
-        }
-        peg$silentFails--;
-        if (s2 !== peg$FAILED) {
-          peg$currPos = s1;
-          s1 = void 0;
-        } else {
-          s1 = peg$FAILED;
-        }
-        if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 6) === peg$c113) {
-            s2 = peg$c113;
-            peg$currPos += 6;
-          } else {
-            s2 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e127);
-            }
-          }
-          if (s2 !== peg$FAILED) {
-            s3 = peg$parse_();
-            s4 = peg$parsefunction_signature();
-            if (s4 !== peg$FAILED) {
-              s5 = peg$parse_();
-              if (input.substr(peg$currPos, 4) === peg$c114) {
-                s6 = peg$c114;
-                peg$currPos += 4;
-              } else {
-                s6 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e128);
-                }
-              }
-              if (s6 !== peg$FAILED) {
-                s7 = peg$parse_();
-                s8 = peg$currPos;
-                s9 = peg$parsestring_literal();
-                if (s9 === peg$FAILED) {
-                  s9 = peg$parsechar_literal();
-                }
-                if (s9 !== peg$FAILED) {
-                  peg$savedPos = s8;
-                  s9 = peg$f96(s4);
-                }
-                s8 = s9;
-                if (s8 !== peg$FAILED) {
-                  peg$savedPos = s0;
-                  s0 = peg$f97(s4, s8);
-                } else {
-                  peg$currPos = s0;
-                  s0 = peg$FAILED;
-                }
-              } else {
-                peg$currPos = s0;
-                s0 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s0;
-          s0 = peg$FAILED;
         }
         return s0;
       }
       function peg$parsecomment_documentation() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = [];
-        if (peg$r1.test(input.charAt(peg$currPos))) {
-          s2 = input.charAt(peg$currPos);
+        s2 = input.charAt(peg$currPos);
+        if (peg$r1.test(s2)) {
           peg$currPos++;
         } else {
           s2 = peg$FAILED;
@@ -19484,8 +19135,8 @@ var require_angelscript = __commonJS({
         }
         while (s2 !== peg$FAILED) {
           s1.push(s2);
-          if (peg$r1.test(input.charAt(peg$currPos))) {
-            s2 = input.charAt(peg$currPos);
+          s2 = input.charAt(peg$currPos);
+          if (peg$r1.test(s2)) {
             peg$currPos++;
           } else {
             s2 = peg$FAILED;
@@ -19498,8 +19149,8 @@ var require_angelscript = __commonJS({
         s3 = peg$currPos;
         s4 = peg$currPos;
         peg$silentFails++;
-        if (peg$r2.test(input.charAt(peg$currPos))) {
-          s5 = input.charAt(peg$currPos);
+        s5 = input.charAt(peg$currPos);
+        if (peg$r2.test(s5)) {
           peg$currPos++;
         } else {
           s5 = peg$FAILED;
@@ -19524,8 +19175,8 @@ var require_angelscript = __commonJS({
           }
           if (s5 !== peg$FAILED) {
             s6 = [];
-            if (peg$r1.test(input.charAt(peg$currPos))) {
-              s7 = input.charAt(peg$currPos);
+            s7 = input.charAt(peg$currPos);
+            if (peg$r1.test(s7)) {
               peg$currPos++;
             } else {
               s7 = peg$FAILED;
@@ -19535,8 +19186,8 @@ var require_angelscript = __commonJS({
             }
             while (s7 !== peg$FAILED) {
               s6.push(s7);
-              if (peg$r1.test(input.charAt(peg$currPos))) {
-                s7 = input.charAt(peg$currPos);
+              s7 = input.charAt(peg$currPos);
+              if (peg$r1.test(s7)) {
                 peg$currPos++;
               } else {
                 s7 = peg$FAILED;
@@ -19559,8 +19210,8 @@ var require_angelscript = __commonJS({
           s3 = peg$currPos;
           s4 = peg$currPos;
           peg$silentFails++;
-          if (peg$r2.test(input.charAt(peg$currPos))) {
-            s5 = input.charAt(peg$currPos);
+          s5 = input.charAt(peg$currPos);
+          if (peg$r2.test(s5)) {
             peg$currPos++;
           } else {
             s5 = peg$FAILED;
@@ -19585,8 +19236,8 @@ var require_angelscript = __commonJS({
             }
             if (s5 !== peg$FAILED) {
               s6 = [];
-              if (peg$r1.test(input.charAt(peg$currPos))) {
-                s7 = input.charAt(peg$currPos);
+              s7 = input.charAt(peg$currPos);
+              if (peg$r1.test(s7)) {
                 peg$currPos++;
               } else {
                 s7 = peg$FAILED;
@@ -19596,8 +19247,8 @@ var require_angelscript = __commonJS({
               }
               while (s7 !== peg$FAILED) {
                 s6.push(s7);
-                if (peg$r1.test(input.charAt(peg$currPos))) {
-                  s7 = input.charAt(peg$currPos);
+                s7 = input.charAt(peg$currPos);
+                if (peg$r1.test(s7)) {
                   peg$currPos++;
                 } else {
                   s7 = peg$FAILED;
@@ -19617,11 +19268,11 @@ var require_angelscript = __commonJS({
           }
         }
         peg$savedPos = s0;
-        s0 = peg$f98(s2);
+        s0 = peg$f95(s2);
         return s0;
       }
       function peg$parsefunction_signature() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
         s0 = peg$currPos;
         s1 = peg$parsefunction_return();
         if (s1 !== peg$FAILED) {
@@ -19634,13 +19285,13 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
               s5 = peg$currPos;
               peg$savedPos = peg$currPos;
-              s6 = peg$f99(s1, s2);
+              s6 = peg$f96(s1, s2);
               if (s6) {
                 s6 = void 0;
               } else {
@@ -19656,7 +19307,7 @@ var require_angelscript = __commonJS({
               if (s5 === peg$FAILED) {
                 s5 = peg$currPos;
                 peg$savedPos = peg$currPos;
-                s6 = peg$f100(s1, s2);
+                s6 = peg$f97(s1, s2);
                 if (s6) {
                   s6 = void 0;
                 } else {
@@ -19678,13 +19329,13 @@ var require_angelscript = __commonJS({
                 } else {
                   s7 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e23);
+                    peg$fail(peg$e28);
                   }
                 }
                 if (s7 !== peg$FAILED) {
                   s8 = peg$parsefunc_qualifiers();
                   peg$savedPos = s0;
-                  s0 = peg$f101(s1, s2, s5, s8);
+                  s0 = peg$f98(s1, s2, s5, s8);
                 } else {
                   peg$currPos = s0;
                   s0 = peg$FAILED;
@@ -19721,7 +19372,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s6 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e22);
+                    peg$fail(peg$e27);
                   }
                 }
                 if (s6 !== peg$FAILED) {
@@ -19733,7 +19384,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s9 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e23);
+                      peg$fail(peg$e28);
                     }
                   }
                   if (s9 !== peg$FAILED) {
@@ -19750,7 +19401,7 @@ var require_angelscript = __commonJS({
                   s4 = null;
                 }
                 peg$savedPos = s0;
-                s0 = peg$f102(s3, s4);
+                s0 = peg$f99(s3, s4);
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;
@@ -19767,7 +19418,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefunction_signature_incomplete() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
         s0 = peg$currPos;
         s1 = peg$parsefunction_return();
         if (s1 !== peg$FAILED) {
@@ -19780,7 +19431,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -19792,13 +19443,13 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
                 s8 = peg$parsefunc_qualifiers();
                 peg$savedPos = s0;
-                s0 = peg$f103(s1, s2, s5, s8);
+                s0 = peg$f100(s1, s2, s5, s8);
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;
@@ -19831,7 +19482,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s6 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e22);
+                    peg$fail(peg$e27);
                   }
                 }
                 if (s6 !== peg$FAILED) {
@@ -19843,7 +19494,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s9 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e23);
+                      peg$fail(peg$e28);
                     }
                   }
                   if (s9 !== peg$FAILED) {
@@ -19860,7 +19511,7 @@ var require_angelscript = __commonJS({
                   s4 = null;
                 }
                 peg$savedPos = s0;
-                s0 = peg$f104(s3, s4);
+                s0 = peg$f101(s3, s4);
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;
@@ -19877,7 +19528,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefunction_return() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$parsevoid_type();
         if (s1 !== peg$FAILED) {
@@ -19906,7 +19557,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsevoid_type() {
-        var s0, s1, s2;
+        let s0, s1, s2;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -19916,7 +19567,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e78);
+            peg$fail(peg$e86);
           }
         }
         peg$silentFails--;
@@ -19933,12 +19584,12 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e79);
+              peg$fail(peg$e87);
             }
           }
           if (s2 !== peg$FAILED) {
             peg$savedPos = s0;
-            s0 = peg$f105();
+            s0 = peg$f102();
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -19950,7 +19601,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsefunc_qualifiers() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = [];
         s1 = peg$currPos;
         s2 = peg$parse_();
@@ -19960,7 +19611,7 @@ var require_angelscript = __commonJS({
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e46);
+            peg$fail(peg$e52);
           }
         }
         if (s3 === peg$FAILED) {
@@ -19970,7 +19621,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e88);
+              peg$fail(peg$e96);
             }
           }
           if (s3 === peg$FAILED) {
@@ -19980,7 +19631,7 @@ var require_angelscript = __commonJS({
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e80);
+                peg$fail(peg$e88);
               }
             }
             if (s3 === peg$FAILED) {
@@ -19990,20 +19641,20 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e83);
+                  peg$fail(peg$e91);
                 }
               }
               if (s3 === peg$FAILED) {
                 s3 = peg$currPos;
                 s4 = peg$currPos;
                 peg$silentFails++;
-                if (input.substr(peg$currPos, 4) === peg$c114) {
-                  s5 = peg$c114;
+                if (input.substr(peg$currPos, 4) === peg$c113) {
+                  s5 = peg$c113;
                   peg$currPos += 4;
                 } else {
                   s5 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e128);
+                    peg$fail(peg$e135);
                   }
                 }
                 peg$silentFails--;
@@ -20045,7 +19696,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e46);
+              peg$fail(peg$e52);
             }
           }
           if (s3 === peg$FAILED) {
@@ -20055,7 +19706,7 @@ var require_angelscript = __commonJS({
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e88);
+                peg$fail(peg$e96);
               }
             }
             if (s3 === peg$FAILED) {
@@ -20065,7 +19716,7 @@ var require_angelscript = __commonJS({
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e80);
+                  peg$fail(peg$e88);
                 }
               }
               if (s3 === peg$FAILED) {
@@ -20075,20 +19726,20 @@ var require_angelscript = __commonJS({
                 } else {
                   s3 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e83);
+                    peg$fail(peg$e91);
                   }
                 }
                 if (s3 === peg$FAILED) {
                   s3 = peg$currPos;
                   s4 = peg$currPos;
                   peg$silentFails++;
-                  if (input.substr(peg$currPos, 4) === peg$c114) {
-                    s5 = peg$c114;
+                  if (input.substr(peg$currPos, 4) === peg$c113) {
+                    s5 = peg$c113;
                     peg$currPos += 4;
                   } else {
                     s5 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e128);
+                      peg$fail(peg$e135);
                     }
                   }
                   peg$silentFails--;
@@ -20124,7 +19775,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseparameter_list() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parse_();
@@ -20135,7 +19786,7 @@ var require_angelscript = __commonJS({
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e34);
+            peg$fail(peg$e39);
           }
         }
         if (s4 !== peg$FAILED) {
@@ -20160,7 +19811,7 @@ var require_angelscript = __commonJS({
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s8 !== peg$FAILED) {
@@ -20186,7 +19837,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -20211,7 +19862,7 @@ var require_angelscript = __commonJS({
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s8 !== peg$FAILED) {
@@ -20225,7 +19876,7 @@ var require_angelscript = __commonJS({
             s6 = null;
           }
           peg$savedPos = s1;
-          s1 = peg$f106(s4, s5);
+          s1 = peg$f103(s4, s5);
         } else {
           peg$currPos = s1;
           s1 = peg$FAILED;
@@ -20234,12 +19885,12 @@ var require_angelscript = __commonJS({
           s1 = null;
         }
         peg$savedPos = s0;
-        s1 = peg$f107(s1);
+        s1 = peg$f104(s1);
         s0 = s1;
         return s0;
       }
       function peg$parseparameter_list_incomplete() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parse_();
@@ -20250,7 +19901,7 @@ var require_angelscript = __commonJS({
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e34);
+            peg$fail(peg$e39);
           }
         }
         if (s4 !== peg$FAILED) {
@@ -20275,7 +19926,7 @@ var require_angelscript = __commonJS({
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s8 !== peg$FAILED) {
@@ -20301,7 +19952,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -20326,7 +19977,7 @@ var require_angelscript = __commonJS({
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s8 !== peg$FAILED) {
@@ -20340,7 +19991,7 @@ var require_angelscript = __commonJS({
             s6 = null;
           }
           peg$savedPos = s1;
-          s1 = peg$f108(s4, s5);
+          s1 = peg$f105(s4, s5);
         } else {
           peg$currPos = s1;
           s1 = peg$FAILED;
@@ -20349,12 +20000,12 @@ var require_angelscript = __commonJS({
           s1 = null;
         }
         peg$savedPos = s0;
-        s1 = peg$f109(s1);
+        s1 = peg$f106(s1);
         s0 = s1;
         return s0;
       }
       function peg$parseparameter() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$parsetypename();
         if (s1 !== peg$FAILED) {
@@ -20369,7 +20020,7 @@ var require_angelscript = __commonJS({
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
+                peg$fail(peg$e13);
               }
             }
             if (s6 !== peg$FAILED) {
@@ -20384,7 +20035,7 @@ var require_angelscript = __commonJS({
               s4 = null;
             }
             peg$savedPos = s0;
-            s0 = peg$f110(s1, s3, s4);
+            s0 = peg$f107(s1, s3, s4);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -20401,12 +20052,12 @@ var require_angelscript = __commonJS({
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e46);
+              peg$fail(peg$e52);
             }
           }
           if (s1 !== peg$FAILED) {
             peg$savedPos = s0;
-            s1 = peg$f111();
+            s1 = peg$f108();
           }
           s0 = s1;
           if (s0 === peg$FAILED) {
@@ -20425,7 +20076,7 @@ var require_angelscript = __commonJS({
               }
               if (s2 !== peg$FAILED) {
                 peg$savedPos = s0;
-                s0 = peg$f112();
+                s0 = peg$f109();
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;
@@ -20450,7 +20101,7 @@ var require_angelscript = __commonJS({
                 }
                 if (s2 !== peg$FAILED) {
                   peg$savedPos = s0;
-                  s0 = peg$f113();
+                  s0 = peg$f110();
                 } else {
                   peg$currPos = s0;
                   s0 = peg$FAILED;
@@ -20465,7 +20116,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseparameter_incomplete() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
         s0 = peg$currPos;
         s1 = peg$parsetypename();
         if (s1 !== peg$FAILED) {
@@ -20481,7 +20132,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e11);
+                peg$fail(peg$e13);
               }
             }
             if (s7 !== peg$FAILED) {
@@ -20496,7 +20147,7 @@ var require_angelscript = __commonJS({
               s5 = null;
             }
             peg$savedPos = s2;
-            s2 = peg$f114(s1, s4, s5);
+            s2 = peg$f111(s1, s4, s5);
           } else {
             peg$currPos = s2;
             s2 = peg$FAILED;
@@ -20505,7 +20156,7 @@ var require_angelscript = __commonJS({
             s2 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f115(s1, s2);
+          s0 = peg$f112(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -20518,19 +20169,19 @@ var require_angelscript = __commonJS({
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e46);
+              peg$fail(peg$e52);
             }
           }
           if (s1 !== peg$FAILED) {
             peg$savedPos = s0;
-            s1 = peg$f116();
+            s1 = peg$f113();
           }
           s0 = s1;
         }
         return s0;
       }
       function peg$parseufunction_macro() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -20540,7 +20191,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e92);
+            peg$fail(peg$e100);
           }
         }
         peg$silentFails--;
@@ -20557,7 +20208,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e93);
+              peg$fail(peg$e101);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -20568,7 +20219,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -20580,7 +20231,232 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
+                }
+              }
+              if (s7 !== peg$FAILED) {
+                peg$savedPos = s0;
+                s0 = peg$f114(s5);
+              } else {
+                peg$currPos = s0;
+                s0 = peg$FAILED;
+              }
+            } else {
+              peg$currPos = s0;
+              s0 = peg$FAILED;
+            }
+          } else {
+            peg$currPos = s0;
+            s0 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s0;
+          s0 = peg$FAILED;
+        }
+        return s0;
+      }
+      function peg$parseuproperty_macro() {
+        let s0, s1, s2, s3, s4, s5, s6, s7;
+        s0 = peg$currPos;
+        s1 = peg$currPos;
+        peg$silentFails++;
+        if (input.charCodeAt(peg$currPos) === 85) {
+          s2 = peg$c80;
+          peg$currPos++;
+        } else {
+          s2 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e100);
+          }
+        }
+        peg$silentFails--;
+        if (s2 !== peg$FAILED) {
+          peg$currPos = s1;
+          s1 = void 0;
+        } else {
+          s1 = peg$FAILED;
+        }
+        if (s1 !== peg$FAILED) {
+          if (input.substr(peg$currPos, 9) === peg$c82) {
+            s2 = peg$c82;
+            peg$currPos += 9;
+          } else {
+            s2 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e102);
+            }
+          }
+          if (s2 !== peg$FAILED) {
+            s3 = peg$parse_();
+            if (input.charCodeAt(peg$currPos) === 40) {
+              s4 = peg$c18;
+              peg$currPos++;
+            } else {
+              s4 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e27);
+              }
+            }
+            if (s4 !== peg$FAILED) {
+              s5 = peg$parsemacro_list();
+              s6 = peg$parse_();
+              if (input.charCodeAt(peg$currPos) === 41) {
+                s7 = peg$c19;
+                peg$currPos++;
+              } else {
+                s7 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e28);
+                }
+              }
+              if (s7 !== peg$FAILED) {
+                peg$savedPos = s0;
+                s0 = peg$f115(s5);
+              } else {
+                peg$currPos = s0;
+                s0 = peg$FAILED;
+              }
+            } else {
+              peg$currPos = s0;
+              s0 = peg$FAILED;
+            }
+          } else {
+            peg$currPos = s0;
+            s0 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s0;
+          s0 = peg$FAILED;
+        }
+        return s0;
+      }
+      function peg$parseustruct_macro() {
+        let s0, s1, s2, s3, s4, s5, s6, s7;
+        s0 = peg$currPos;
+        s1 = peg$currPos;
+        peg$silentFails++;
+        if (input.charCodeAt(peg$currPos) === 85) {
+          s2 = peg$c80;
+          peg$currPos++;
+        } else {
+          s2 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e100);
+          }
+        }
+        peg$silentFails--;
+        if (s2 !== peg$FAILED) {
+          peg$currPos = s1;
+          s1 = void 0;
+        } else {
+          s1 = peg$FAILED;
+        }
+        if (s1 !== peg$FAILED) {
+          if (input.substr(peg$currPos, 7) === peg$c86) {
+            s2 = peg$c86;
+            peg$currPos += 7;
+          } else {
+            s2 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e106);
+            }
+          }
+          if (s2 !== peg$FAILED) {
+            s3 = peg$parse_();
+            if (input.charCodeAt(peg$currPos) === 40) {
+              s4 = peg$c18;
+              peg$currPos++;
+            } else {
+              s4 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e27);
+              }
+            }
+            if (s4 !== peg$FAILED) {
+              s5 = peg$parsemacro_list();
+              s6 = peg$parse_();
+              if (input.charCodeAt(peg$currPos) === 41) {
+                s7 = peg$c19;
+                peg$currPos++;
+              } else {
+                s7 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e28);
+                }
+              }
+              if (s7 !== peg$FAILED) {
+                peg$savedPos = s0;
+                s0 = peg$f116(s5);
+              } else {
+                peg$currPos = s0;
+                s0 = peg$FAILED;
+              }
+            } else {
+              peg$currPos = s0;
+              s0 = peg$FAILED;
+            }
+          } else {
+            peg$currPos = s0;
+            s0 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s0;
+          s0 = peg$FAILED;
+        }
+        return s0;
+      }
+      function peg$parseuclass_macro() {
+        let s0, s1, s2, s3, s4, s5, s6, s7;
+        s0 = peg$currPos;
+        s1 = peg$currPos;
+        peg$silentFails++;
+        if (input.charCodeAt(peg$currPos) === 85) {
+          s2 = peg$c80;
+          peg$currPos++;
+        } else {
+          s2 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e100);
+          }
+        }
+        peg$silentFails--;
+        if (s2 !== peg$FAILED) {
+          peg$currPos = s1;
+          s1 = void 0;
+        } else {
+          s1 = peg$FAILED;
+        }
+        if (s1 !== peg$FAILED) {
+          if (input.substr(peg$currPos, 6) === peg$c83) {
+            s2 = peg$c83;
+            peg$currPos += 6;
+          } else {
+            s2 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e103);
+            }
+          }
+          if (s2 !== peg$FAILED) {
+            s3 = peg$parse_();
+            if (input.charCodeAt(peg$currPos) === 40) {
+              s4 = peg$c18;
+              peg$currPos++;
+            } else {
+              s4 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e27);
+              }
+            }
+            if (s4 !== peg$FAILED) {
+              s5 = peg$parsemacro_list();
+              s6 = peg$parse_();
+              if (input.charCodeAt(peg$currPos) === 41) {
+                s7 = peg$c19;
+                peg$currPos++;
+              } else {
+                s7 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -20604,8 +20480,8 @@ var require_angelscript = __commonJS({
         }
         return s0;
       }
-      function peg$parseuproperty_macro() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+      function peg$parseuenum_macro() {
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -20615,7 +20491,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e92);
+            peg$fail(peg$e100);
           }
         }
         peg$silentFails--;
@@ -20626,13 +20502,13 @@ var require_angelscript = __commonJS({
           s1 = peg$FAILED;
         }
         if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 9) === peg$c82) {
-            s2 = peg$c82;
-            peg$currPos += 9;
+          if (input.substr(peg$currPos, 5) === peg$c84) {
+            s2 = peg$c84;
+            peg$currPos += 5;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e94);
+              peg$fail(peg$e104);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -20643,7 +20519,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -20655,7 +20531,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -20679,8 +20555,8 @@ var require_angelscript = __commonJS({
         }
         return s0;
       }
-      function peg$parseustruct_macro() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+      function peg$parseumeta_macro() {
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -20690,7 +20566,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e92);
+            peg$fail(peg$e100);
           }
         }
         peg$silentFails--;
@@ -20701,13 +20577,13 @@ var require_angelscript = __commonJS({
           s1 = peg$FAILED;
         }
         if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 7) === peg$c86) {
-            s2 = peg$c86;
-            peg$currPos += 7;
+          if (input.substr(peg$currPos, 5) === peg$c85) {
+            s2 = peg$c85;
+            peg$currPos += 5;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e98);
+              peg$fail(peg$e105);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -20718,7 +20594,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
+                peg$fail(peg$e27);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -20730,7 +20606,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
+                  peg$fail(peg$e28);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -20754,233 +20630,8 @@ var require_angelscript = __commonJS({
         }
         return s0;
       }
-      function peg$parseuclass_macro() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
-        s0 = peg$currPos;
-        s1 = peg$currPos;
-        peg$silentFails++;
-        if (input.charCodeAt(peg$currPos) === 85) {
-          s2 = peg$c80;
-          peg$currPos++;
-        } else {
-          s2 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e92);
-          }
-        }
-        peg$silentFails--;
-        if (s2 !== peg$FAILED) {
-          peg$currPos = s1;
-          s1 = void 0;
-        } else {
-          s1 = peg$FAILED;
-        }
-        if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 6) === peg$c83) {
-            s2 = peg$c83;
-            peg$currPos += 6;
-          } else {
-            s2 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e95);
-            }
-          }
-          if (s2 !== peg$FAILED) {
-            s3 = peg$parse_();
-            if (input.charCodeAt(peg$currPos) === 40) {
-              s4 = peg$c18;
-              peg$currPos++;
-            } else {
-              s4 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
-              }
-            }
-            if (s4 !== peg$FAILED) {
-              s5 = peg$parsemacro_list();
-              s6 = peg$parse_();
-              if (input.charCodeAt(peg$currPos) === 41) {
-                s7 = peg$c19;
-                peg$currPos++;
-              } else {
-                s7 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
-                }
-              }
-              if (s7 !== peg$FAILED) {
-                peg$savedPos = s0;
-                s0 = peg$f120(s5);
-              } else {
-                peg$currPos = s0;
-                s0 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s0;
-          s0 = peg$FAILED;
-        }
-        return s0;
-      }
-      function peg$parseuenum_macro() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
-        s0 = peg$currPos;
-        s1 = peg$currPos;
-        peg$silentFails++;
-        if (input.charCodeAt(peg$currPos) === 85) {
-          s2 = peg$c80;
-          peg$currPos++;
-        } else {
-          s2 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e92);
-          }
-        }
-        peg$silentFails--;
-        if (s2 !== peg$FAILED) {
-          peg$currPos = s1;
-          s1 = void 0;
-        } else {
-          s1 = peg$FAILED;
-        }
-        if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 5) === peg$c84) {
-            s2 = peg$c84;
-            peg$currPos += 5;
-          } else {
-            s2 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e96);
-            }
-          }
-          if (s2 !== peg$FAILED) {
-            s3 = peg$parse_();
-            if (input.charCodeAt(peg$currPos) === 40) {
-              s4 = peg$c18;
-              peg$currPos++;
-            } else {
-              s4 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
-              }
-            }
-            if (s4 !== peg$FAILED) {
-              s5 = peg$parsemacro_list();
-              s6 = peg$parse_();
-              if (input.charCodeAt(peg$currPos) === 41) {
-                s7 = peg$c19;
-                peg$currPos++;
-              } else {
-                s7 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
-                }
-              }
-              if (s7 !== peg$FAILED) {
-                peg$savedPos = s0;
-                s0 = peg$f121(s5);
-              } else {
-                peg$currPos = s0;
-                s0 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s0;
-          s0 = peg$FAILED;
-        }
-        return s0;
-      }
-      function peg$parseumeta_macro() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
-        s0 = peg$currPos;
-        s1 = peg$currPos;
-        peg$silentFails++;
-        if (input.charCodeAt(peg$currPos) === 85) {
-          s2 = peg$c80;
-          peg$currPos++;
-        } else {
-          s2 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e92);
-          }
-        }
-        peg$silentFails--;
-        if (s2 !== peg$FAILED) {
-          peg$currPos = s1;
-          s1 = void 0;
-        } else {
-          s1 = peg$FAILED;
-        }
-        if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 5) === peg$c85) {
-            s2 = peg$c85;
-            peg$currPos += 5;
-          } else {
-            s2 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e97);
-            }
-          }
-          if (s2 !== peg$FAILED) {
-            s3 = peg$parse_();
-            if (input.charCodeAt(peg$currPos) === 40) {
-              s4 = peg$c18;
-              peg$currPos++;
-            } else {
-              s4 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e22);
-              }
-            }
-            if (s4 !== peg$FAILED) {
-              s5 = peg$parsemacro_list();
-              s6 = peg$parse_();
-              if (input.charCodeAt(peg$currPos) === 41) {
-                s7 = peg$c19;
-                peg$currPos++;
-              } else {
-                s7 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e23);
-                }
-              }
-              if (s7 !== peg$FAILED) {
-                peg$savedPos = s0;
-                s0 = peg$f122(s5);
-              } else {
-                peg$currPos = s0;
-                s0 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s0;
-          s0 = peg$FAILED;
-        }
-        return s0;
-      }
       function peg$parsemacro_list() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parse_();
@@ -20991,7 +20642,7 @@ var require_angelscript = __commonJS({
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e34);
+            peg$fail(peg$e39);
           }
         }
         if (s4 !== peg$FAILED) {
@@ -21016,7 +20667,7 @@ var require_angelscript = __commonJS({
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s8 !== peg$FAILED) {
@@ -21042,7 +20693,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -21067,7 +20718,7 @@ var require_angelscript = __commonJS({
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s8 !== peg$FAILED) {
@@ -21081,7 +20732,7 @@ var require_angelscript = __commonJS({
             s6 = null;
           }
           peg$savedPos = s1;
-          s1 = peg$f123(s4, s5);
+          s1 = peg$f120(s4, s5);
         } else {
           peg$currPos = s1;
           s1 = peg$FAILED;
@@ -21090,12 +20741,12 @@ var require_angelscript = __commonJS({
           s1 = null;
         }
         peg$savedPos = s0;
-        s1 = peg$f124(s1);
+        s1 = peg$f121(s1);
         s0 = s1;
         return s0;
       }
       function peg$parsemacro_argument() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
         s0 = peg$currPos;
         s1 = peg$parsemacro_identifier();
         if (s1 !== peg$FAILED) {
@@ -21107,7 +20758,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           if (s4 !== peg$FAILED) {
@@ -21116,7 +20767,7 @@ var require_angelscript = __commonJS({
             s7 = peg$parsemacro_value();
             if (s7 !== peg$FAILED) {
               peg$savedPos = s6;
-              s7 = peg$f125(s1, s7);
+              s7 = peg$f122(s1, s7);
             }
             s6 = s7;
             if (s6 === peg$FAILED) {
@@ -21127,7 +20778,7 @@ var require_angelscript = __commonJS({
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e22);
+                  peg$fail(peg$e27);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -21140,12 +20791,12 @@ var require_angelscript = __commonJS({
                   } else {
                     s10 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e23);
+                      peg$fail(peg$e28);
                     }
                   }
                   if (s10 !== peg$FAILED) {
                     peg$savedPos = s6;
-                    s6 = peg$f126(s1, s8);
+                    s6 = peg$f123(s1, s8);
                   } else {
                     peg$currPos = s6;
                     s6 = peg$FAILED;
@@ -21171,7 +20822,7 @@ var require_angelscript = __commonJS({
             s2 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f127(s1, s2);
+          s0 = peg$f124(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -21179,7 +20830,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsemacro_identifier() {
-        var s0, s1;
+        let s0, s1;
         s0 = peg$parseidentifier();
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
@@ -21189,14 +20840,14 @@ var require_angelscript = __commonJS({
           }
           if (s1 !== peg$FAILED) {
             peg$savedPos = s0;
-            s1 = peg$f128(s1);
+            s1 = peg$f125(s1);
           }
           s0 = s1;
         }
         return s0;
       }
       function peg$parsemacro_value() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 33) {
@@ -21205,7 +20856,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e13);
+            peg$fail(peg$e15);
           }
         }
         if (s2 !== peg$FAILED) {
@@ -21228,25 +20879,25 @@ var require_angelscript = __commonJS({
           s5 = peg$currPos;
           s6 = peg$parse_();
           s7 = [];
-          if (peg$r13.test(input.charAt(peg$currPos))) {
-            s8 = input.charAt(peg$currPos);
+          s8 = input.charAt(peg$currPos);
+          if (peg$r21.test(s8)) {
             peg$currPos++;
           } else {
             s8 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e129);
+              peg$fail(peg$e136);
             }
           }
           if (s8 !== peg$FAILED) {
             while (s8 !== peg$FAILED) {
               s7.push(s8);
-              if (peg$r13.test(input.charAt(peg$currPos))) {
-                s8 = input.charAt(peg$currPos);
+              s8 = input.charAt(peg$currPos);
+              if (peg$r21.test(s8)) {
                 peg$currPos++;
               } else {
                 s8 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e129);
+                  peg$fail(peg$e136);
                 }
               }
             }
@@ -21281,7 +20932,7 @@ var require_angelscript = __commonJS({
         }
         if (s2 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f129();
+          s0 = peg$f126();
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -21291,7 +20942,7 @@ var require_angelscript = __commonJS({
           s1 = peg$parsekeyword();
           if (s1 !== peg$FAILED) {
             peg$savedPos = s0;
-            s1 = peg$f130();
+            s1 = peg$f127();
           }
           s0 = s1;
           if (s0 === peg$FAILED) {
@@ -21304,7 +20955,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsedelegate_decl() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -21314,7 +20965,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e37);
+            peg$fail(peg$e42);
           }
         }
         peg$silentFails--;
@@ -21331,7 +20982,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e81);
+              peg$fail(peg$e89);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -21339,7 +20990,7 @@ var require_angelscript = __commonJS({
             s4 = peg$parsefunction_signature_incomplete();
             if (s4 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f131(s4);
+              s0 = peg$f128(s4);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -21355,7 +21006,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseevent_decl() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -21365,7 +21016,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e26);
+            peg$fail(peg$e31);
           }
         }
         peg$silentFails--;
@@ -21382,7 +21033,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e84);
+              peg$fail(peg$e92);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -21390,7 +21041,7 @@ var require_angelscript = __commonJS({
             s4 = peg$parsefunction_signature_incomplete();
             if (s4 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f132(s4);
+              s0 = peg$f129(s4);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -21406,7 +21057,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsestruct_decl() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parseustruct_macro();
@@ -21428,7 +21079,7 @@ var require_angelscript = __commonJS({
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e28);
+            peg$fail(peg$e33);
           }
         }
         peg$silentFails--;
@@ -21445,7 +21096,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e77);
+              peg$fail(peg$e85);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -21453,7 +21104,7 @@ var require_angelscript = __commonJS({
             s5 = peg$parseidentifier();
             if (s5 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f133(s1, s5);
+              s0 = peg$f130(s1, s5);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -21469,7 +21120,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseclass_decl() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parseuclass_macro();
@@ -21491,7 +21142,7 @@ var require_angelscript = __commonJS({
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e35);
+            peg$fail(peg$e40);
           }
         }
         peg$silentFails--;
@@ -21508,7 +21159,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e76);
+              peg$fail(peg$e84);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -21523,7 +21174,7 @@ var require_angelscript = __commonJS({
               } else {
                 s8 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s8 !== peg$FAILED) {
@@ -21541,7 +21192,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s16 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e33);
+                      peg$fail(peg$e38);
                     }
                   }
                   if (s16 !== peg$FAILED) {
@@ -21551,7 +21202,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s17 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e33);
+                        peg$fail(peg$e38);
                       }
                     }
                     if (s17 !== peg$FAILED) {
@@ -21582,7 +21233,7 @@ var require_angelscript = __commonJS({
                     } else {
                       s16 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e33);
+                        peg$fail(peg$e38);
                       }
                     }
                     if (s16 !== peg$FAILED) {
@@ -21592,7 +21243,7 @@ var require_angelscript = __commonJS({
                       } else {
                         s17 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e33);
+                          peg$fail(peg$e38);
                         }
                       }
                       if (s17 !== peg$FAILED) {
@@ -21615,7 +21266,7 @@ var require_angelscript = __commonJS({
                     }
                   }
                   peg$savedPos = s11;
-                  s11 = peg$f134(s1, s5);
+                  s11 = peg$f131(s1, s5);
                 } else {
                   peg$currPos = s11;
                   s11 = peg$FAILED;
@@ -21638,7 +21289,7 @@ var require_angelscript = __commonJS({
                 s6 = null;
               }
               peg$savedPos = s0;
-              s0 = peg$f135(s1, s5, s6);
+              s0 = peg$f132(s1, s5, s6);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -21654,7 +21305,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseenum_decl() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parseuenum_macro();
@@ -21676,7 +21327,7 @@ var require_angelscript = __commonJS({
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e26);
+            peg$fail(peg$e31);
           }
         }
         peg$silentFails--;
@@ -21693,7 +21344,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e85);
+              peg$fail(peg$e93);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -21701,7 +21352,7 @@ var require_angelscript = __commonJS({
             s5 = peg$parseidentifier();
             if (s5 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f136(s1, s5);
+              s0 = peg$f133(s1, s5);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -21717,7 +21368,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsenamespace_decl() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -21727,7 +21378,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e62);
+            peg$fail(peg$e68);
           }
         }
         peg$silentFails--;
@@ -21744,7 +21395,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e91);
+              peg$fail(peg$e99);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -21761,7 +21412,7 @@ var require_angelscript = __commonJS({
               } else {
                 s9 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s9 !== peg$FAILED) {
@@ -21771,7 +21422,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s10 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e33);
+                    peg$fail(peg$e38);
                   }
                 }
                 if (s10 !== peg$FAILED) {
@@ -21802,7 +21453,7 @@ var require_angelscript = __commonJS({
                 } else {
                   s9 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e33);
+                    peg$fail(peg$e38);
                   }
                 }
                 if (s9 !== peg$FAILED) {
@@ -21812,7 +21463,7 @@ var require_angelscript = __commonJS({
                   } else {
                     s10 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e33);
+                      peg$fail(peg$e38);
                     }
                   }
                   if (s10 !== peg$FAILED) {
@@ -21835,14 +21486,14 @@ var require_angelscript = __commonJS({
                 }
               }
               peg$savedPos = s4;
-              s4 = peg$f137();
+              s4 = peg$f134();
             } else {
               peg$currPos = s4;
               s4 = peg$FAILED;
             }
             if (s4 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f138(s4);
+              s0 = peg$f135(s4);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -21858,7 +21509,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseasset_decl() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -21868,7 +21519,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e89);
+            peg$fail(peg$e97);
           }
         }
         peg$silentFails--;
@@ -21879,13 +21530,13 @@ var require_angelscript = __commonJS({
           s1 = peg$FAILED;
         }
         if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 5) === peg$c115) {
-            s2 = peg$c115;
+          if (input.substr(peg$currPos, 5) === peg$c114) {
+            s2 = peg$c114;
             peg$currPos += 5;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e130);
+              peg$fail(peg$e137);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -21893,13 +21544,13 @@ var require_angelscript = __commonJS({
             s4 = peg$parseidentifier();
             if (s4 !== peg$FAILED) {
               s5 = peg$parse_();
-              if (input.substr(peg$currPos, 2) === peg$c116) {
-                s6 = peg$c116;
+              if (input.substr(peg$currPos, 2) === peg$c115) {
+                s6 = peg$c115;
                 peg$currPos += 2;
               } else {
                 s6 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e131);
+                  peg$fail(peg$e138);
                 }
               }
               if (s6 !== peg$FAILED) {
@@ -21907,7 +21558,7 @@ var require_angelscript = __commonJS({
                 s8 = peg$parsetypename();
                 if (s8 !== peg$FAILED) {
                   peg$savedPos = s0;
-                  s0 = peg$f139(s4, s8);
+                  s0 = peg$f136(s4, s8);
                 } else {
                   peg$currPos = s0;
                   s0 = peg$FAILED;
@@ -21931,7 +21582,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseclass_method_decl() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parseaccess_specifier();
@@ -21972,7 +21623,7 @@ var require_angelscript = __commonJS({
         s4 = peg$parsefunction_signature();
         if (s4 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f140(s1, s2, s3, s4);
+          s0 = peg$f137(s1, s2, s3, s4);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -21980,7 +21631,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseconstructor_decl() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseidentifier();
         if (s1 !== peg$FAILED) {
@@ -21991,7 +21642,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e22);
+              peg$fail(peg$e27);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -22003,12 +21654,12 @@ var require_angelscript = __commonJS({
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             if (s6 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f141(s1, s4);
+              s0 = peg$f138(s1, s4);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -22024,7 +21675,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parsedestructor_decl() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         if (input.charCodeAt(peg$currPos) === 126) {
@@ -22033,14 +21684,14 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e17);
+            peg$fail(peg$e22);
           }
         }
         if (s2 !== peg$FAILED) {
           s3 = peg$parseidentifier_name();
           if (s3 !== peg$FAILED) {
             peg$savedPos = s1;
-            s1 = peg$f142();
+            s1 = peg$f139();
           } else {
             peg$currPos = s1;
             s1 = peg$FAILED;
@@ -22057,7 +21708,7 @@ var require_angelscript = __commonJS({
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e22);
+              peg$fail(peg$e27);
             }
           }
           if (s3 !== peg$FAILED) {
@@ -22068,12 +21719,12 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             if (s5 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f143(s1);
+              s0 = peg$f140(s1);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -22089,7 +21740,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseclass_property_decl() {
-        var s0, s1, s2, s3, s4, s5;
+        let s0, s1, s2, s3, s4, s5;
         s0 = peg$currPos;
         s1 = peg$currPos;
         s2 = peg$parseaccess_specifier();
@@ -22133,7 +21784,7 @@ var require_angelscript = __commonJS({
         }
         if (s4 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f144(s1, s2, s3, s4);
+          s0 = peg$f141(s1, s2, s3, s4);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -22141,7 +21792,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseaccess_specifier() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -22151,7 +21802,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e82);
+            peg$fail(peg$e90);
           }
         }
         peg$silentFails--;
@@ -22162,40 +21813,40 @@ var require_angelscript = __commonJS({
           s1 = peg$FAILED;
         }
         if (s1 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 7) === peg$c117) {
-            s2 = peg$c117;
+          if (input.substr(peg$currPos, 7) === peg$c116) {
+            s2 = peg$c116;
             peg$currPos += 7;
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e132);
+              peg$fail(peg$e139);
             }
           }
           if (s2 === peg$FAILED) {
-            if (input.substr(peg$currPos, 9) === peg$c118) {
-              s2 = peg$c118;
+            if (input.substr(peg$currPos, 9) === peg$c117) {
+              s2 = peg$c117;
               peg$currPos += 9;
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e133);
+                peg$fail(peg$e140);
               }
             }
             if (s2 === peg$FAILED) {
-              if (input.substr(peg$currPos, 6) === peg$c119) {
-                s2 = peg$c119;
+              if (input.substr(peg$currPos, 6) === peg$c118) {
+                s2 = peg$c118;
                 peg$currPos += 6;
               } else {
                 s2 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e134);
+                  peg$fail(peg$e141);
                 }
               }
             }
           }
           if (s2 !== peg$FAILED) {
             peg$savedPos = s0;
-            s0 = peg$f145();
+            s0 = peg$f142();
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -22214,7 +21865,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e89);
+              peg$fail(peg$e97);
             }
           }
           peg$silentFails--;
@@ -22231,7 +21882,7 @@ var require_angelscript = __commonJS({
             } else {
               s2 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e90);
+                peg$fail(peg$e98);
               }
             }
             if (s2 !== peg$FAILED) {
@@ -22243,7 +21894,7 @@ var require_angelscript = __commonJS({
               } else {
                 s5 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e33);
+                  peg$fail(peg$e38);
                 }
               }
               if (s5 !== peg$FAILED) {
@@ -22275,7 +21926,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseaccess_decl() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -22285,7 +21936,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e89);
+            peg$fail(peg$e97);
           }
         }
         peg$silentFails--;
@@ -22302,7 +21953,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e90);
+              peg$fail(peg$e98);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -22318,7 +21969,7 @@ var require_angelscript = __commonJS({
               } else {
                 s8 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e11);
+                  peg$fail(peg$e13);
                 }
               }
               if (s8 !== peg$FAILED) {
@@ -22343,7 +21994,7 @@ var require_angelscript = __commonJS({
                 s6 = null;
               }
               peg$savedPos = s3;
-              s3 = peg$f146(s5, s6);
+              s3 = peg$f143(s5, s6);
             } else {
               peg$currPos = s3;
               s3 = peg$FAILED;
@@ -22361,7 +22012,7 @@ var require_angelscript = __commonJS({
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s7 !== peg$FAILED) {
@@ -22380,7 +22031,7 @@ var require_angelscript = __commonJS({
             }
             if (s4 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f147(s3);
+              s0 = peg$f144(s3);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -22396,7 +22047,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseaccess_list() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$parseaccess_class();
         if (s1 !== peg$FAILED) {
@@ -22409,7 +22060,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22435,7 +22086,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -22460,7 +22111,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22474,7 +22125,7 @@ var require_angelscript = __commonJS({
             s3 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f148(s1, s2);
+          s0 = peg$f145(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -22482,7 +22133,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseaccess_class() {
-        var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+        let s0, s1, s2, s3, s4, s5, s6, s7, s8;
         s0 = peg$currPos;
         s1 = peg$parseidentifier();
         if (s1 === peg$FAILED) {
@@ -22498,7 +22149,7 @@ var require_angelscript = __commonJS({
           }
           if (s2 !== peg$FAILED) {
             peg$savedPos = s1;
-            s2 = peg$f149();
+            s2 = peg$f146();
           }
           s1 = s2;
         }
@@ -22511,7 +22162,7 @@ var require_angelscript = __commonJS({
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e22);
+              peg$fail(peg$e27);
             }
           }
           if (s4 !== peg$FAILED) {
@@ -22527,7 +22178,7 @@ var require_angelscript = __commonJS({
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e23);
+                peg$fail(peg$e28);
               }
             }
             if (s8 !== peg$FAILED) {
@@ -22544,7 +22195,7 @@ var require_angelscript = __commonJS({
             s2 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f150(s1, s2);
+          s0 = peg$f147(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -22552,7 +22203,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseaccess_mod_list() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$parseidentifier();
         if (s1 !== peg$FAILED) {
@@ -22565,7 +22216,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22591,7 +22242,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -22616,7 +22267,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22630,7 +22281,7 @@ var require_angelscript = __commonJS({
             s3 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f151(s1, s2);
+          s0 = peg$f148(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -22638,7 +22289,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseincomplete_access_specifier() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -22648,7 +22299,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e89);
+            peg$fail(peg$e97);
           }
         }
         peg$silentFails--;
@@ -22665,7 +22316,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e90);
+              peg$fail(peg$e98);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -22676,7 +22327,7 @@ var require_angelscript = __commonJS({
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e33);
+                peg$fail(peg$e38);
               }
             }
             if (s4 !== peg$FAILED) {
@@ -22693,7 +22344,7 @@ var require_angelscript = __commonJS({
                 s5 = null;
               }
               peg$savedPos = s0;
-              s0 = peg$f152(s5);
+              s0 = peg$f149(s5);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -22709,7 +22360,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseclass_default_statement() {
-        var s0, s1, s2, s3, s4;
+        let s0, s1, s2, s3, s4;
         s0 = peg$currPos;
         s1 = peg$currPos;
         peg$silentFails++;
@@ -22719,7 +22370,7 @@ var require_angelscript = __commonJS({
         } else {
           s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e37);
+            peg$fail(peg$e42);
           }
         }
         peg$silentFails--;
@@ -22736,7 +22387,7 @@ var require_angelscript = __commonJS({
           } else {
             s2 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e38);
+              peg$fail(peg$e43);
             }
           }
           if (s2 !== peg$FAILED) {
@@ -22744,7 +22395,7 @@ var require_angelscript = __commonJS({
             s4 = peg$parseassignment();
             if (s4 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f153(s4);
+              s0 = peg$f150(s4);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -22760,7 +22411,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseenum_statement() {
-        var s0, s1, s2, s3, s4, s5, s6;
+        let s0, s1, s2, s3, s4, s5, s6;
         s0 = peg$currPos;
         s1 = peg$parseenum_value_decl();
         if (s1 !== peg$FAILED) {
@@ -22773,7 +22424,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22798,7 +22449,7 @@ var require_angelscript = __commonJS({
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e34);
+                peg$fail(peg$e39);
               }
             }
             if (s5 !== peg$FAILED) {
@@ -22822,7 +22473,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e34);
+              peg$fail(peg$e39);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22836,7 +22487,7 @@ var require_angelscript = __commonJS({
             s3 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f154(s1, s2);
+          s0 = peg$f151(s1, s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -22844,7 +22495,7 @@ var require_angelscript = __commonJS({
         return s0;
       }
       function peg$parseenum_value_decl() {
-        var s0, s1, s2, s3, s4, s5, s6, s7;
+        let s0, s1, s2, s3, s4, s5, s6, s7;
         s0 = peg$currPos;
         s1 = peg$parsecomment_documentation();
         s2 = peg$parseidentifier();
@@ -22857,7 +22508,7 @@ var require_angelscript = __commonJS({
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e11);
+              peg$fail(peg$e13);
             }
           }
           if (s5 !== peg$FAILED) {
@@ -22884,7 +22535,7 @@ var require_angelscript = __commonJS({
             s4 = null;
           }
           peg$savedPos = s0;
-          s0 = peg$f155(s1, s2, s3, s4);
+          s0 = peg$f152(s1, s2, s3, s4);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -22892,20 +22543,36 @@ var require_angelscript = __commonJS({
         return s0;
       }
       peg$result = peg$startRuleFunction();
-      if (peg$result !== peg$FAILED && peg$currPos === input.length) {
-        return peg$result;
-      } else {
+      const peg$success = peg$result !== peg$FAILED && peg$currPos === input.length;
+      function peg$throw() {
         if (peg$result !== peg$FAILED && peg$currPos < input.length) {
           peg$fail(peg$endExpectation());
         }
         throw peg$buildStructuredError(
           peg$maxFailExpected,
-          peg$maxFailPos < input.length ? input.charAt(peg$maxFailPos) : null,
+          peg$maxFailPos < input.length ? peg$getUnicode(peg$maxFailPos) : null,
           peg$maxFailPos < input.length ? peg$computeLocation(peg$maxFailPos, peg$maxFailPos + 1) : peg$computeLocation(peg$maxFailPos, peg$maxFailPos)
         );
       }
+      if (options.peg$library) {
+        return {
+          peg$result,
+          peg$currPos,
+          peg$FAILED,
+          peg$maxFailExpected,
+          peg$maxFailPos,
+          peg$success,
+          peg$throw: peg$success ? void 0 : peg$throw
+        };
+      }
+      if (peg$success) {
+        return peg$result;
+      } else {
+        peg$throw();
+      }
     }
     module2.exports = {
+      StartRules: ["start", "start_global", "start_class", "start_enum"],
       SyntaxError: peg$SyntaxError,
       parse: peg$parse
     };
@@ -26849,7 +26516,7 @@ function LookupType(namespace, typename) {
       inst.name = identifier;
       if (!inst)
         return null;
-      AddTypeToDatabase(namespace, inst);
+      AddTypeToDatabase(dbbasetype.namespace, inst);
       return inst;
     }
   }
@@ -27592,7 +27259,6 @@ function ApplyProjectGeneratedCode(asmodule, dbtype, nsType, generator) {
 // third-party/vscode-unreal-angelscript/language-server/src/as_parser.ts
 var PEGGY_GRAMMAR = require_angelscript();
 var ScriptSettings = {
-  automaticImports: false,
   floatIsFloat64: false,
   useAngelscriptHaze: false,
   deprecateStaticClass: false,
@@ -27617,7 +27283,6 @@ var ASKeywords = [
   "return",
   "continue",
   "break",
-  "import",
   "class",
   "struct",
   "default",
@@ -27666,12 +27331,9 @@ var ASModule = class {
     this.globalSymbols = [];
     this.semanticSymbols = [];
     this.literalAssets = [];
-    this.importedModules = [];
     this.delegateBinds = [];
     this.annotatedFunctionCalls = [];
     this.moduleDependencies = /* @__PURE__ */ new Set();
-    this.flatImportList = /* @__PURE__ */ new Set();
-    this.preParsedImports = new Array();
     this.preParsedIdentifiers = new Array();
     this.parseDelay = null;
     this.parseAfterDelay = false;
@@ -27778,9 +27440,6 @@ var ASModule = class {
     }
     return null;
   }
-  isModuleImported(modulename) {
-    return this.flatImportList.has(modulename);
-  }
   markDependencyModule(dependency) {
     if (dependency)
       this.moduleDependencies.add(dependency);
@@ -27823,7 +27482,7 @@ var ASModule = class {
     if (dependencyType)
       this.markDependencyType(dependencyType);
     else
-      this.markDependencyIdentifier(typename);
+      this.markDependencyIdentifier(CleanTypeName(typename));
   }
   markDependencyIdentifier(identifier) {
     let moduleList = PreParsedIdentifiersInModules.get(identifier);
@@ -27907,7 +27566,6 @@ var ASSemanticSymbol = class {
     this.container_type = null;
     this.symbol_name = null;
     this.isWriteAccess = false;
-    this.isUnimported = false;
     this.isAuto = false;
     this.noColor = false;
   }
@@ -28187,21 +27845,13 @@ function ParseModule(module2, debug = false) {
   ParseAllStatements(module2.rootscope, debug);
   GenerateTypeInformation(module2.rootscope);
 }
-function ParseModuleAndDependencies(module2, visited = null) {
-  let visitList = visited;
-  if (visitList == null)
-    visitList = /* @__PURE__ */ new Set();
-  else if (visitList.has(module2))
-    return;
+function LoadAndParseModule(module2) {
   if (!module2.loaded)
     UpdateModuleFromDisk(module2);
   if (!module2.loaded)
     return;
   if (!module2.parsed)
     ParseModule(module2);
-  visitList.add(module2);
-  for (let importedModule of module2.importedModules)
-    ParseModuleAndDependencies(importedModule, visitList);
 }
 function PostProcessModuleTypes(module2) {
   if (module2.typesPostProcessed)
@@ -28212,20 +27862,6 @@ function PostProcessModuleTypes(module2) {
   for (let dbtype of module2.types)
     ProcessScriptTypeGeneratedCode(dbtype, module2);
 }
-function PostProcessModuleTypesAndDependencies(module2, visited = null) {
-  let visitList = visited;
-  if (visitList == null)
-    visitList = /* @__PURE__ */ new Set();
-  else if (visitList.has(module2))
-    return;
-  if (!module2.parsed)
-    return;
-  if (!module2.typesPostProcessed)
-    PostProcessModuleTypes(module2);
-  visitList.add(module2);
-  for (let importedModule of module2.importedModules)
-    PostProcessModuleTypesAndDependencies(importedModule, visitList);
-}
 function ResolveModule(module2) {
   if (!module2.parsed)
     return;
@@ -28233,42 +27869,28 @@ function ResolveModule(module2) {
     return;
   while (!module2.resolved) {
     module2.resolved = true;
-    module2.flatImportList.clear();
-    let importList = new Array();
-    importList.push(module2);
-    for (let i = 0; i < importList.length; ++i) {
-      if (!importList[i].parsed)
-        continue;
-      if (module2.flatImportList.has(importList[i].modulename))
-        continue;
-      module2.flatImportList.add(importList[i].modulename);
-      for (let importMod of importList[i].importedModules)
-        importList.push(importMod);
-    }
     ResolveAutos(module2.rootscope);
     DetectScopeSymbols(module2.rootscope);
-    if (ScriptSettings.automaticImports) {
-      for (let dependencyModule of module2.moduleDependencies) {
-        if (!dependencyModule.parsed) {
-          ParseModuleAndDependencies(dependencyModule);
-          module2.resolved = false;
-        }
-        if (!dependencyModule.resolved) {
-          for (let dependencyClass of dependencyModule.types) {
-            let newTypesLoaded = EnsureTypeHierarchyFullyParsed(dependencyClass);
-            if (newTypesLoaded)
-              module2.resolved = false;
-          }
-        }
-        if (!dependencyModule.typesPostProcessed) {
-          PostProcessModuleTypesAndDependencies(dependencyModule);
-          module2.resolved = false;
+    for (let dependencyModule of module2.moduleDependencies) {
+      if (!dependencyModule.parsed) {
+        LoadAndParseModule(dependencyModule);
+        module2.resolved = false;
+      }
+      if (!dependencyModule.resolved) {
+        for (let dependencyClass of dependencyModule.types) {
+          let newTypesLoaded = EnsureTypeHierarchyFullyParsed(dependencyClass);
+          if (newTypesLoaded)
+            module2.resolved = false;
         }
       }
-      if (!module2.resolved) {
-        module2.semanticSymbols = [];
-        module2.moduleDependencies.clear();
+      if (!dependencyModule.typesPostProcessed) {
+        PostProcessModuleTypes(dependencyModule);
+        module2.resolved = false;
       }
+    }
+    if (!module2.resolved) {
+      module2.semanticSymbols = [];
+      module2.moduleDependencies.clear();
     }
   }
   if (module2.resolveCallbacks) {
@@ -28302,7 +27924,7 @@ function EnsureTypeHierarchyFullyParsed(dbtype) {
       let potentialModules = PreParsedIdentifiersInModules.get(superTypeName);
       if (potentialModules) {
         for (let moduleWithSuper of potentialModules)
-          ParseModuleAndDependencies(moduleWithSuper);
+          LoadAndParseModule(moduleWithSuper);
         let superType2 = LookupType(superNamespace, superTypeName);
         if (superType2) {
           newTypesLoaded = true;
@@ -28435,7 +28057,6 @@ function UpdateModuleFromDisk(module2) {
   module2.lastEditStart = -1;
   module2.lastEditEnd = -1;
   LoadModule(module2);
-  PreParseImports(module2);
   PreParseTypes(module2);
 }
 function ClearAllResolvedModules() {
@@ -28453,17 +28074,6 @@ function LoadModule(module2) {
     return;
   module2.loaded = true;
   module2.textDocument = import_vscode_languageserver_textdocument.TextDocument.create(module2.uri, "angelscript", 1, module2.content);
-}
-var re_import_statement = /\s*import\s+([A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*);/g;
-function PreParseImports(module2) {
-  module2.preParsedImports = [];
-  re_import_statement.lastIndex = 0;
-  while (true) {
-    let match = re_import_statement.exec(module2.content);
-    if (!match)
-      break;
-    module2.preParsedImports.push(match[1]);
-  }
 }
 var re_preparse_type = /\s*(class|struct|namespace|enum)\s+([A-Za-z0-9_]+)(\s*:\s*([A-Za-z0-9_]+))?\s*\{/g;
 var re_preparse_function = /(\n|^)[ \t]*((mixin|delegate|event)[ \t]+)?((const[ \t]+)?([A-Za-z_0-9]+(\<[A-Za-z0-9_]+(,\s*[A-Za-z0-9_]+)*\>)?)([ \t]*&)?)[\t ]+([A-Za-z0-9_]+)\(((.|\n|\r)*?)\)/g;
@@ -28498,7 +28108,7 @@ function PreParseTypes(module2) {
     list.add(module2);
   }
 }
-function GetModulesPotentiallyImportingSymbol(asmodule, findSymbol) {
+function GetModulesPotentiallyDependentOnSymbol(asmodule, findSymbol) {
   switch (findSymbol.type) {
     case 0 /* Typename */:
     case 2 /* TemplateBaseType */:
@@ -28506,7 +28116,7 @@ function GetModulesPotentiallyImportingSymbol(asmodule, findSymbol) {
         let dbtype = GetTypeByName(findSymbol.symbol_name);
         if (dbtype) {
           if (dbtype.declaredModule)
-            return GetModulesPotentiallyImporting(dbtype.declaredModule);
+            return GetModulesPotentiallyDependentOn(dbtype.declaredModule);
           else
             return GetAllLoadedModules();
         }
@@ -28516,7 +28126,7 @@ function GetModulesPotentiallyImportingSymbol(asmodule, findSymbol) {
       {
         let dbnamespace = LookupNamespace(null, findSymbol.symbol_name);
         if (dbnamespace)
-          return GetModulesPotentiallyImportingNamespace(dbnamespace);
+          return GetModulesPotentiallyDependentOnNamespace(dbnamespace);
       }
       break;
     case 10 /* GlobalFunction */:
@@ -28525,7 +28135,7 @@ function GetModulesPotentiallyImportingSymbol(asmodule, findSymbol) {
       {
         let dbnamespace = LookupNamespace(null, findSymbol.container_type);
         if (dbnamespace)
-          return GetModulesPotentiallyImportingNamespace(dbnamespace);
+          return GetModulesPotentiallyDependentOnNamespace(dbnamespace);
       }
       break;
     case 9 /* MemberFunction */:
@@ -28535,7 +28145,7 @@ function GetModulesPotentiallyImportingSymbol(asmodule, findSymbol) {
         let dbtype = GetTypeByName(findSymbol.container_type);
         if (dbtype) {
           if (dbtype.declaredModule)
-            return GetModulesPotentiallyImporting(dbtype.declaredModule);
+            return GetModulesPotentiallyDependentOn(dbtype.declaredModule);
           else
             return GetAllLoadedModules();
         }
@@ -28552,7 +28162,7 @@ function GetModulesPotentiallyImportingSymbol(asmodule, findSymbol) {
   }
   return GetAllLoadedModules();
 }
-function GetModulesPotentiallyImporting(findModule) {
+function GetModulesPotentiallyDependentOn(findModule) {
   let markedModules = /* @__PURE__ */ new Set();
   markedModules.add(findModule);
   RecursiveMarkDependentModules(markedModules);
@@ -28561,7 +28171,7 @@ function GetModulesPotentiallyImporting(findModule) {
     modules.push(GetModule(markedName));
   return modules;
 }
-function GetModulesPotentiallyImportingMultiple(findModules) {
+function GetModulesPotentiallyDependentOnMultiple(findModules) {
   let markedModules = /* @__PURE__ */ new Set();
   for (let module2 of findModules)
     markedModules.add(module2);
@@ -28571,14 +28181,14 @@ function GetModulesPotentiallyImportingMultiple(findModules) {
     modules.push(GetModule(markedName));
   return modules;
 }
-function GetModulesPotentiallyImportingNamespace(namespace) {
+function GetModulesPotentiallyDependentOnNamespace(namespace) {
   let allDeclaredModules = [];
   for (let decl of namespace.declarations) {
     if (!decl.declaredModule)
       return GetAllLoadedModules();
     allDeclaredModules.push(decl.declaredModule);
   }
-  return GetModulesPotentiallyImportingMultiple(allDeclaredModules);
+  return GetModulesPotentiallyDependentOnMultiple(allDeclaredModules);
 }
 function RecursiveMarkDependentModules(markedModules) {
   let anyMarked = true;
@@ -28588,33 +28198,15 @@ function RecursiveMarkDependentModules(markedModules) {
       if (markedModules.has(module2.modulename))
         continue;
       let isPotentialUser = false;
-      if (ScriptSettings.automaticImports) {
-        if (module2.resolved) {
-          for (let dependency of module2.moduleDependencies) {
-            if (markedModules.has(dependency.modulename)) {
-              isPotentialUser = true;
-              break;
-            }
+      if (module2.resolved) {
+        for (let dependency of module2.moduleDependencies) {
+          if (markedModules.has(dependency.modulename)) {
+            isPotentialUser = true;
+            break;
           }
-        } else {
-          isPotentialUser = true;
         }
       } else {
-        if (module2.parsed) {
-          for (let parsedImport of module2.importedModules) {
-            if (markedModules.has(parsedImport.modulename)) {
-              isPotentialUser = true;
-              break;
-            }
-          }
-        } else if (module2.preParsedImports) {
-          for (let foundImport of module2.preParsedImports) {
-            if (markedModules.has(foundImport)) {
-              isPotentialUser = true;
-              break;
-            }
-          }
-        }
+        isPotentialUser = true;
       }
       if (isPotentialUser) {
         markedModules.add(module2.modulename);
@@ -28648,9 +28240,6 @@ function ClearModule(module2) {
   module2.rootscope = null;
   module2.textDocument = null;
   module2.content = null;
-  module2.importedModules = [];
-  module2.flatImportList.clear();
-  module2.preParsedImports = [];
   module2.cachedStatements = module2.rawStatements;
   module2.rawStatements = [];
   module2.loadedFromCacheCount = 0;
@@ -29076,14 +28665,6 @@ function GenerateTypeInformation(scope) {
     if (!statement.ast)
       continue;
     switch (statement.ast.type) {
-      case node_types.ImportStatement:
-        {
-          if (statement.ast.children[0]) {
-            let importedModule = GetModule(statement.ast.children[0].value);
-            scope.module.importedModules.push(importedModule);
-          }
-        }
-        break;
       case node_types.VariableDecl:
         {
           AddVarDeclToScope(scope, statement, statement.ast);
@@ -29163,24 +28744,6 @@ function GenerateTypeInformation(scope) {
             }
             scope.module.types.push(dbtype);
           }
-        }
-        break;
-      case node_types.ImportFunctionStatement:
-        {
-          let funcdef = statement.ast.children[0];
-          let dbfunc = AddDBMethod(scope, funcdef.name.value);
-          if (funcdef.documentation)
-            dbfunc.documentation = FormatDocumentationComment(funcdef.documentation);
-          dbfunc.moduleOffset = statement.start_offset + funcdef.name.start;
-          dbfunc.moduleOffsetEnd = statement.start_offset + funcdef.name.end;
-          if (funcdef.returntype)
-            dbfunc.returnType = GetQualifiedTypename(funcdef.returntype);
-          else
-            dbfunc.returnType = "void";
-          AddParametersToFunction(scope, statement, dbfunc, funcdef.parameters);
-          let namespace = scope.getNamespace();
-          scope.module.globalSymbols.push(dbfunc);
-          namespace.addSymbol(dbfunc);
         }
         break;
       case node_types.AssetDefinition:
@@ -29470,8 +29033,6 @@ function AddTypenameSymbol(scope, statement, node, errorOnUnknown = true) {
         if (exists instanceof DBType) {
           if (exists.isEnum)
             addSymbol.symbol_name = exists.name;
-          if (exists.declaredModule && !ScriptSettings.automaticImports && !scope.module.isModuleImported(exists.declaredModule))
-            addSymbol.isUnimported = true;
           scope.module.markDependencyType(exists);
         }
         return addSymbol;
@@ -29876,6 +29437,12 @@ function ResolveIteratorType(dbtype) {
     let return_type = LookupType(iterator_sym.namespace, iterator_sym.returnType);
     if (!return_type)
       return dbtype;
+    let iterate_sym = return_type.findFirstSymbol("Iterate", 2 /* Functions */);
+    if (iterate_sym && iterate_sym instanceof DBMethod) {
+      let iterate_return = LookupType(iterate_sym.namespace, iterate_sym.returnType);
+      if (iterate_return)
+        return iterate_return;
+    }
     let proceed_sym = return_type.findFirstSymbol("Proceed", 2 /* Functions */);
     if (proceed_sym && proceed_sym instanceof DBMethod) {
       let proceed_return = LookupType(proceed_sym.namespace, proceed_sym.returnType);
@@ -29988,12 +29555,6 @@ function ResolveTypeFromIdentifier(scope, identifier) {
         if (!sym.isLiteralAsset && sym.declaredModule != scope.module.modulename)
           continue;
         return LookupType(sym.namespace, sym.typename);
-      }
-    }
-    if (!ScriptSettings.automaticImports) {
-      for (let sym of globalSymbols) {
-        if (sym instanceof DBProperty)
-          return LookupType(sym.namespace, sym.typename);
       }
     }
   }
@@ -30614,9 +30175,7 @@ function DetectNodeSymbols(scope, statement, node, parseContext, symbol_type = 1
           let refType = LookupType(scope.getNamespace(), node.children[0].value);
           if (refType && refType.isEnum) {
             left_type = refType;
-            let addedSymbol = AddIdentifierSymbol(scope, statement, node.children[0], 0 /* Typename */, null, refType.name);
-            if (refType.declaredModule && !ScriptSettings.automaticImports && !scope.module.isModuleImported(refType.declaredModule))
-              addedSymbol.isUnimported = true;
+            AddIdentifierSymbol(scope, statement, node.children[0], 0 /* Typename */, null, refType.name);
             scope.module.markDependencyType(refType);
           } else if (refType) {
             scope.module.markDependencyType(refType);
@@ -30626,9 +30185,7 @@ function DetectNodeSymbols(scope, statement, node, parseContext, symbol_type = 1
             else
               left_symbol = null;
             left_type = refType;
-            let addedSymbol = AddIdentifierSymbol(scope, statement, node.children[0], 0 /* Typename */, null, refType.name);
-            if (refType.declaredModule && !ScriptSettings.automaticImports && !scope.module.isModuleImported(refType.declaredModule))
-              addedSymbol.isUnimported = true;
+            AddIdentifierSymbol(scope, statement, node.children[0], 0 /* Typename */, null, refType.name);
             if (left_type.isDelegate && node.children[1]) {
               delegateBind = new ASDelegateBind();
               delegateBind.scope = scope;
@@ -30664,12 +30221,15 @@ function DetectNodeSymbols(scope, statement, node, parseContext, symbol_type = 1
             delegateBind.scope = scope;
             delegateBind.statement = statement;
             delegateBind.node_expression = node;
-            if (node.children[1].children[left_symbol.delegateObjectParam])
-              delegateBind.node_object = node.children[1].children[left_symbol.delegateObjectParam];
-            if (node.children[1].children[left_symbol.delegateFunctionParam])
-              delegateBind.node_name = node.children[1].children[left_symbol.delegateFunctionParam];
-            if (left_symbol.delegateWildcardParam != -1 && node.children[1].children[left_symbol.delegateWildcardParam]) {
-              delegateBind.node_wildcard = node.children[1].children[left_symbol.delegateWildcardParam];
+            let paramIndexOffset = 0;
+            if (left_symbol.isMixin)
+              paramIndexOffset -= 1;
+            if (node.children[1].children[left_symbol.delegateObjectParam + paramIndexOffset])
+              delegateBind.node_object = node.children[1].children[left_symbol.delegateObjectParam + paramIndexOffset];
+            if (node.children[1].children[left_symbol.delegateFunctionParam + paramIndexOffset])
+              delegateBind.node_name = node.children[1].children[left_symbol.delegateFunctionParam + paramIndexOffset];
+            if (left_symbol.delegateWildcardParam != -1 && node.children[1].children[left_symbol.delegateWildcardParam + paramIndexOffset]) {
+              delegateBind.node_wildcard = node.children[1].children[left_symbol.delegateWildcardParam + paramIndexOffset];
               delegateBind.wildcard_name = left_symbol.macroMeta.get("delegatewildcardparam");
             }
             delegateBind.delegateType = left_symbol.delegateBindType;
@@ -30858,29 +30418,6 @@ function DetectNodeSymbols(scope, statement, node, parseContext, symbol_type = 1
         }
       }
       break;
-    case node_types.ImportFunctionStatement:
-      {
-        let signature = statement.ast.children[0];
-        if (signature) {
-          if (signature.returntype && signature.returntype.value != "void")
-            AddTypenameSymbol(scope, statement, signature.returntype);
-          if (signature.name) {
-            let namespace = scope.getNamespace().getQualifiedNamespace();
-            AddIdentifierSymbol(scope, statement, signature.name, 10 /* GlobalFunction */, namespace, signature.name.value);
-          }
-          if (signature.parameters) {
-            for (let param of signature.parameters) {
-              if (param.typename)
-                AddTypenameSymbol(scope, statement, param.typename);
-              if (param.name)
-                AddIdentifierSymbol(scope, statement, param.name, 3 /* Parameter */, null, param.name.value);
-              if (param.expression)
-                DetectNodeSymbols(scope, statement, param.expression, parseContext, 1 /* Properties */);
-            }
-          }
-        }
-      }
-      break;
     case node_types.VariableDecl:
       {
         if (node.access)
@@ -31056,9 +30593,7 @@ function DetectNodeSymbols(scope, statement, node, parseContext, symbol_type = 1
         if (node.superclass) {
           let superType = LookupType(scope.getNamespace(), node.superclass.value);
           if (superType) {
-            let superSymbol = AddIdentifierSymbol(scope, statement, node.superclass, 0 /* Typename */, null, node.superclass.value);
-            if (superType.declaredModule && !ScriptSettings.automaticImports && !scope.module.isModuleImported(superType.declaredModule))
-              superSymbol.isUnimported = true;
+            AddIdentifierSymbol(scope, statement, node.superclass, 0 /* Typename */, null, node.superclass.value);
             scope.module.markDependencyType(superType);
           } else {
             let hasPotentialCompletions = false;
@@ -31176,7 +30711,7 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
           continue;
         if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
           continue;
-        let addedSym = AddIdentifierSymbol(
+        AddIdentifierSymbol(
           scope,
           statement,
           node,
@@ -31185,12 +30720,10 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
           usedSymbol.name,
           parseContext.isWriteAccess
         );
-        if (!ScriptSettings.automaticImports && usedSymbol.declaredModule && !scope.module.isModuleImported(usedSymbol.declaredModule))
-          addedSym.isUnimported = true;
         scope.module.markDependencyFunction(usedSymbol);
         return usedSymbol;
       } else if (usedSymbol instanceof DBProperty && AllowsProperties(symbol_type)) {
-        let addedSym = AddIdentifierSymbol(
+        AddIdentifierSymbol(
           scope,
           statement,
           node,
@@ -31199,8 +30732,6 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
           usedSymbol.name,
           parseContext.isWriteAccess
         );
-        if (!ScriptSettings.automaticImports && usedSymbol.declaredModule && !scope.module.isModuleImported(usedSymbol.declaredModule))
-          addedSym.isUnimported = true;
         scope.module.markDependencyProperty(usedSymbol);
         return usedSymbol;
       }
@@ -31213,7 +30744,7 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
         if (usedSymbol instanceof DBMethod && usedSymbol.isProperty && !usedSymbol.isMixin) {
           if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
             continue;
-          let addedSym = AddIdentifierSymbol(
+          AddIdentifierSymbol(
             scope,
             statement,
             node,
@@ -31222,8 +30753,6 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
             usedSymbol.name,
             parseContext.isWriteAccess
           );
-          if (!ScriptSettings.automaticImports)
-            addedSym.isUnimported = true;
           scope.module.markDependencyFunction(usedSymbol);
           return LookupType(usedSymbol.namespace, usedSymbol.returnType);
         }
@@ -31235,7 +30764,7 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
         if (usedSymbol instanceof DBMethod && usedSymbol.isProperty && usedSymbol.args.length != 0 && !usedSymbol.isMixin) {
           if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
             continue;
-          let addedSym = AddIdentifierSymbol(
+          AddIdentifierSymbol(
             scope,
             statement,
             node,
@@ -31244,8 +30773,6 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
             usedSymbol.name,
             parseContext.isWriteAccess
           );
-          if (!ScriptSettings.automaticImports && usedSymbol.declaredModule && !scope.module.isModuleImported(usedSymbol.declaredModule))
-            addedSym.isUnimported = true;
           scope.module.markDependencyFunction(usedSymbol);
           return LookupType(usedSymbol.namespace, usedSymbol.args[0].typename);
         }
@@ -31260,9 +30787,7 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
   }
   let symType = LookupType(scope.getNamespace(), node.value);
   if (symType) {
-    let addedSymbol = AddIdentifierSymbol(scope, statement, node, 0 /* Typename */, null, symType.name);
-    if (symType.declaredModule && !ScriptSettings.automaticImports && !scope.module.isModuleImported(symType.declaredModule))
-      addedSymbol.isUnimported = true;
+    AddIdentifierSymbol(scope, statement, node, 0 /* Typename */, null, symType.name);
     scope.module.markDependencyType(symType);
     return GetStaticTypeSignatureForType(scope.getNamespace(), symType);
   }
@@ -31271,7 +30796,7 @@ function DetectIdentifierSymbols(scope, statement, node, parseContext, symbol_ty
     let nsType = LookupNamespace(scope.getNamespace(), node.value);
     if (nsType) {
       let symType2 = 1 /* Namespace */;
-      let addedSymbol = AddIdentifierSymbol(scope, statement, node, symType2, null, nsType.getQualifiedNamespace());
+      AddIdentifierSymbol(scope, statement, node, symType2, null, nsType.getQualifiedNamespace());
       scope.module.markDependencyNamespace(nsType);
       return null;
     }
@@ -31492,7 +31017,7 @@ function DetectSymbolsInType(scope, statement, inSymbol, node, parseContext, sym
       symType = 5 /* MemberVariable */;
     else
       symType = 9 /* MemberFunction */;
-    let identifierSym = AddIdentifierSymbol(scope, statement, node, symType, usedSymbol.containingType, usedSymbol.name);
+    AddIdentifierSymbol(scope, statement, node, symType, usedSymbol.containingType, usedSymbol.name);
     scope.module.markDependencySymbol(usedSymbol);
     return usedSymbol;
   }
@@ -31500,14 +31025,14 @@ function DetectSymbolsInType(scope, statement, inSymbol, node, parseContext, sym
     let getAccessor = dbtype.findFirstSymbol("Get" + node.value, 2 /* Functions */);
     if (getAccessor && getAccessor instanceof DBMethod) {
       symType = 6 /* MemberAccessor */;
-      let identifierSym = AddIdentifierSymbol(scope, statement, node, symType, getAccessor.containingType, getAccessor.name);
+      AddIdentifierSymbol(scope, statement, node, symType, getAccessor.containingType, getAccessor.name);
       scope.module.markDependencyFunction(getAccessor);
       return LookupType(getAccessor.namespace, getAccessor.returnType);
     }
     let setAccessor = dbtype.findFirstSymbol("Set" + node.value, 2 /* Functions */);
     if (setAccessor && setAccessor instanceof DBMethod && setAccessor.isProperty && setAccessor.args.length != 0) {
       symType = 6 /* MemberAccessor */;
-      let identifierSym = AddIdentifierSymbol(scope, statement, node, symType, setAccessor.containingType, setAccessor.name);
+      AddIdentifierSymbol(scope, statement, node, symType, setAccessor.containingType, setAccessor.name);
       scope.module.markDependencyFunction(setAccessor);
       return LookupType(setAccessor.namespace, setAccessor.args[0].typename);
     }
@@ -31520,9 +31045,7 @@ function DetectSymbolsInType(scope, statement, inSymbol, node, parseContext, sym
           if (!symbol.isMixin)
             continue;
           if (symbol.args.length != 0 && dbtype.inheritsFrom(symbol.args[0].typename)) {
-            let addedSym = AddIdentifierSymbol(scope, statement, node, 10 /* GlobalFunction */, symbol.namespace.getQualifiedNamespace(), symbol.name);
-            if (!ScriptSettings.automaticImports && symbol.declaredModule && !scope.module.isModuleImported(symbol.declaredModule))
-              addedSym.isUnimported = true;
+            AddIdentifierSymbol(scope, statement, node, 10 /* GlobalFunction */, symbol.namespace.getQualifiedNamespace(), symbol.name);
             scope.module.markDependencyFunction(symbol);
             return symbol;
           }
@@ -31579,9 +31102,7 @@ function DetectSymbolsInNamespace(scope, statement, namespace, node, parseContex
   let usedSymbol = namespace.findFirstSymbol(node.value, symbol_type);
   if (usedSymbol) {
     if (usedSymbol instanceof DBType) {
-      let identifierSym = AddIdentifierSymbol(scope, statement, node, 0 /* Typename */, null, usedSymbol.name);
-      if (!ScriptSettings.automaticImports && usedSymbol.declaredModule && !scope.module.isModuleImported(usedSymbol.declaredModule))
-        identifierSym.isUnimported = true;
+      AddIdentifierSymbol(scope, statement, node, 0 /* Typename */, null, usedSymbol.name);
       scope.module.markDependencyType(usedSymbol);
       if (!parseContext.isResolvingFunction)
         return GetStaticTypeSignatureForType(scope.getNamespace(), usedSymbol);
@@ -31592,9 +31113,7 @@ function DetectSymbolsInNamespace(scope, statement, namespace, node, parseContex
         symType = 7 /* GlobalVariable */;
       else
         symType = 10 /* GlobalFunction */;
-      let identifierSym = AddIdentifierSymbol(scope, statement, node, symType, usedSymbol.namespace.getQualifiedNamespace(), usedSymbol.name);
-      if (!ScriptSettings.automaticImports && usedSymbol.declaredModule && !scope.module.isModuleImported(usedSymbol.declaredModule))
-        identifierSym.isUnimported = true;
+      AddIdentifierSymbol(scope, statement, node, symType, usedSymbol.namespace.getQualifiedNamespace(), usedSymbol.name);
       scope.module.markDependencySymbol(usedSymbol);
       return usedSymbol;
     }
@@ -31603,18 +31122,14 @@ function DetectSymbolsInNamespace(scope, statement, namespace, node, parseContex
     let getAccessor = namespace.findFirstSymbol("Get" + node.value, 2 /* Functions */);
     if (getAccessor && getAccessor instanceof DBMethod) {
       symType = 8 /* GlobalAccessor */;
-      let identifierSym = AddIdentifierSymbol(scope, statement, node, symType, getAccessor.namespace.getQualifiedNamespace(), getAccessor.name);
-      if (!ScriptSettings.automaticImports && getAccessor.declaredModule && !scope.module.isModuleImported(getAccessor.declaredModule))
-        identifierSym.isUnimported = true;
+      AddIdentifierSymbol(scope, statement, node, symType, getAccessor.namespace.getQualifiedNamespace(), getAccessor.name);
       scope.module.markDependencyFunction(getAccessor);
       return LookupType(getAccessor.namespace, getAccessor.returnType);
     }
     let setAccessor = namespace.findFirstSymbol("Set" + node.value, 2 /* Functions */);
     if (setAccessor && setAccessor instanceof DBMethod && setAccessor.isProperty && setAccessor.args.length != 0) {
       symType = 8 /* GlobalAccessor */;
-      let identifierSym = AddIdentifierSymbol(scope, statement, node, symType, setAccessor.namespace.getQualifiedNamespace(), setAccessor.name);
-      if (!ScriptSettings.automaticImports && getAccessor.declaredModule && !scope.module.isModuleImported(setAccessor.declaredModule))
-        identifierSym.isUnimported = true;
+      AddIdentifierSymbol(scope, statement, node, symType, setAccessor.namespace.getQualifiedNamespace(), setAccessor.name);
       scope.module.markDependencyFunction(setAccessor);
       return LookupType(setAccessor.namespace, setAccessor.args[0].typename);
     }
@@ -32215,7 +31730,8 @@ var ASPropertySubSpecifiers = {
     "UIMax": "Set the maximum value for the UI slider for the numeric value of this property",
     "Units": "Determine the unit of this property's numeric value for the UI",
     "Delta": "How large is one value step in the UI for the numeric value of this property",
-    "ShowOnlyInnerProperties": "Show this property's inner properties as if they are parent-level properties"
+    "ShowOnlyInnerProperties": "Show this property's inner properties as if they are parent-level properties",
+    "ArraySizeEnum": "Specify an enum to use for an array's element index label"
   },
   "replicationcondition": {
     "InitialOnly": "This property will only attempt to send on the initial bunch",
@@ -32234,6 +31750,7 @@ var ASPropertySubSpecifiers = {
   }
 };
 var ASClassSpecifiers = {
+  "Placeable": "Class can be placed in the level or on an actor by the editor",
   "NotPlaceable": "Class cannot be placed in the level or on an actor by the editor",
   "NotBlueprintable": "Blueprints cannot be choose this as a parent class",
   "Blueprintable": "Blueprints can be created with this as a parent class",
@@ -32461,12 +31978,11 @@ var Sort;
   Sort2.Local = "4";
   Sort2.Keyword_Expected = "8a";
   Sort2.Keyword = "8b";
-  Sort2.ImportModule = "8c";
   Sort2.MemberProp_Direct = "a";
   Sort2.MemberProp_Parent = "c";
-  Sort2.MemberProp_Direct_Expected = "6";
+  Sort2.MemberProp_Direct_Expected = "6a";
   Sort2.MemberProp_Parent_Expected = "7";
-  Sort2.Method_Direct_Expected = "8a";
+  Sort2.Method_Direct_Expected = "6b";
   Sort2.Method_Parent_Expected = "9";
   Sort2.Method_Direct = "b";
   Sort2.Method_Parent = "d";
@@ -32482,7 +31998,6 @@ var Sort;
   Sort2.Typename_CommonObject = "fd";
   Sort2.Typename = "fe";
   Sort2.Typename_Expected = "3";
-  Sort2.Unimported = "x";
   Sort2.Method_Override_Snippet = "0";
   Sort2.Namespace_Unexpected = "z";
   Sort2.Snippet = "z";
@@ -32576,8 +32091,6 @@ function Complete(asmodule, position) {
     AddCompletionsForNamingSomethingNew(context, completions);
     return completions;
   }
-  if (AddCompletionsFromImportStatement(context, completions))
-    return completions;
   if (AddCompletionsFromUnrealMacro(context, completions))
     return completions;
   if (AddCompletionsFromAccessSpecifiers(context, completions))
@@ -32699,7 +32212,8 @@ function GenerateCompletionArguments(context) {
             if (i == context.subOuterArgumentIndex && argnode.children[0])
               args.currentArgumentName = argnode.children[0].value;
           } else {
-            args.nodesForPositionalArguments.push(argnode);
+            if (!args.isAfterNamedArgument)
+              args.nodesForPositionalArguments.push(argnode);
           }
         }
       }
@@ -32924,21 +32438,57 @@ function AddCompletionsFromCallSignature(context, completions) {
         }
       }
     } else {
-      for (let arg of activeMethod.args) {
-        if (argContext.usedArgumentNames.indexOf(arg.name) != -1)
+      let argumentNames = [];
+      for (let func of context.subOuterFunctions) {
+        let argumentIndex = context.subOuterArgumentIndex;
+        let argumentOffset = 0;
+        if (func.isMixin) {
+          argumentOffset = 1;
+          argumentIndex += 1;
+        }
+        let overloadIsValid = true;
+        for (let usedName of argContext.usedArgumentNames) {
+          let foundArg = -1;
+          for (let argIndex = argumentOffset; argIndex < func.args.length; ++argIndex) {
+            if (func.args[argIndex].name == usedName) {
+              foundArg = argIndex;
+              break;
+            }
+          }
+          if (foundArg == -1) {
+            overloadIsValid = false;
+            break;
+          }
+        }
+        if (!overloadIsValid)
           continue;
-        let complStr = arg.name + " =";
-        if (CanCompleteTo(context, complStr)) {
-          completions.push({
-            label: complStr,
-            insertText: complStr + " ",
-            documentation: {
-              kind: import_node.MarkupKind.Markdown,
-              value: "```angelscript_snippet\n" + complStr + "\n\n```"
-            },
-            kind: import_node.CompletionItemKind.Snippet,
-            sortText: Sort.Snippet
-          });
+        for (let i = 0; i < func.args.length; ++i) {
+          let arg = func.args[i];
+          if (argumentIndex < argContext.nodesForPositionalArguments.length) {
+            if (i < argumentIndex)
+              continue;
+          } else {
+            if (i < argContext.nodesForPositionalArguments.length)
+              continue;
+          }
+          if (argContext.usedArgumentNames.indexOf(arg.name) != -1)
+            continue;
+          if (argumentNames.indexOf(arg.name) != -1)
+            continue;
+          let complStr = arg.name + " =";
+          if (CanCompleteTo(context, complStr)) {
+            completions.push({
+              label: complStr,
+              insertText: complStr + " ",
+              documentation: {
+                kind: import_node.MarkupKind.Markdown,
+                value: "```angelscript_snippet\n" + complStr + "\n\n```"
+              },
+              kind: import_node.CompletionItemKind.Snippet,
+              sortText: Sort.Snippet
+            });
+          }
+          argumentNames.push(arg.name);
         }
       }
     }
@@ -33000,30 +32550,6 @@ function AddCompletionsForNamingSomethingNew(context, completions) {
     });
   }
   return true;
-}
-function AddCompletionsFromImportStatement(context, completions) {
-  if (context.statement && context.statement.ast && context.statement.ast.type == node_types.ImportStatement) {
-    let complString = "";
-    if (context.completingSymbol)
-      complString = context.completingSymbol;
-    let untilDot = "";
-    let dotPos = complString.lastIndexOf(".");
-    if (dotPos != -1)
-      untilDot = complString.substr(0, dotPos + 1);
-    for (let asmodule of GetAllLoadedModules()) {
-      if (CanCompleteStringTo(complString, asmodule.modulename)) {
-        completions.push({
-          label: asmodule.modulename,
-          kind: import_node.CompletionItemKind.File,
-          filterText: asmodule.modulename.substr(untilDot.length),
-          insertText: asmodule.modulename.substr(untilDot.length),
-          sortText: Sort.ImportModule
-        });
-      }
-    }
-    return true;
-  }
-  return false;
 }
 function AddCompletionsFromUnrealMacro(context, completions) {
   if (context.isSubExpression) {
@@ -33226,6 +32752,47 @@ function AddCompletionsFromKeywords(context, completions) {
       "struct",
       "property"
     ], completions);
+    if (context.baseStatement && context.baseStatement.next && context.baseStatement.next instanceof ASStatement && context.baseStatement.next.ast) {
+      let nextNode = context.baseStatement.next.ast;
+      if (nextNode.type == node_types.ClassDefinition && !nextNode.macro) {
+        if (CanCompleteToOnlyStart(context, "UCLASS")) {
+          completions.push({
+            label: "UCLASS()",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword_Expected,
+            insertText: "UCLASS($0)",
+            insertTextFormat: import_node.InsertTextFormat.Snippet
+          });
+          completions.push({
+            label: "UCLASS(Abstract)",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword_Expected
+          });
+        }
+      }
+      if (nextNode.type == node_types.StructDefinition && !nextNode.macro) {
+        if (CanCompleteToOnlyStart(context, "USTRUCT")) {
+          completions.push({
+            label: "USTRUCT()",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword_Expected,
+            insertText: "USTRUCT($0)",
+            insertTextFormat: import_node.InsertTextFormat.Snippet
+          });
+        }
+      }
+      if (nextNode.type == node_types.EnumDefinition && !nextNode.macro) {
+        if (CanCompleteToOnlyStart(context, "UENUM")) {
+          completions.push({
+            label: "UENUM()",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword_Expected,
+            insertText: "UENUM($0)",
+            insertTextFormat: import_node.InsertTextFormat.Snippet
+          });
+        }
+      }
+    }
     if (CanCompleteTo(context, "UCLASS")) {
       completions.push({
         label: "UCLASS",
@@ -33313,6 +32880,32 @@ function AddCompletionsFromKeywords(context, completions) {
             sortText: Sort.Keyword
           });
           context.forceCaseInsensitive = true;
+          completions.push({
+            label: "UPROPERTY()",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword,
+            insertText: "UPROPERTY($0)",
+            insertTextFormat: import_node.InsertTextFormat.Snippet
+          });
+          if (context.scope && context.scope.getDatabaseType() && context.scope.getDatabaseType().inheritsFrom("AActor")) {
+            completions.push({
+              label: "UPROPERTY(DefaultComponent)",
+              kind: import_node.CompletionItemKind.Snippet,
+              sortText: Sort.Keyword
+            });
+          }
+          if (context.scope && context.scope.getDatabaseType() && context.scope.getDatabaseType().inheritsFrom("UUserWidget")) {
+            completions.push({
+              label: "UPROPERTY(BindWidget)",
+              kind: import_node.CompletionItemKind.Snippet,
+              sortText: Sort.Keyword
+            });
+          }
+          completions.push({
+            label: "UPROPERTY(EditAnywhere)",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword
+          });
         }
       }
     }
@@ -33328,6 +32921,18 @@ function AddCompletionsFromKeywords(context, completions) {
               sortText: Sort.Keyword
             });
             context.forceCaseInsensitive = true;
+            completions.push({
+              label: "UFUNCTION()",
+              kind: import_node.CompletionItemKind.Snippet,
+              sortText: Sort.Keyword,
+              insertText: "UFUNCTION($0)",
+              insertTextFormat: import_node.InsertTextFormat.Snippet
+            });
+            completions.push({
+              label: "UFUNCTION(BlueprintEvent)",
+              kind: import_node.CompletionItemKind.Snippet,
+              sortText: Sort.Keyword
+            });
           }
         }
       }
@@ -33347,6 +32952,11 @@ function AddCompletionsFromKeywords(context, completions) {
             sortText: Sort.Keyword
           });
           context.forceCaseInsensitive = true;
+          completions.push({
+            label: "UFUNCTION()",
+            kind: import_node.CompletionItemKind.Snippet,
+            sortText: Sort.Keyword
+          });
         }
       }
     }
@@ -33853,18 +33463,6 @@ function AddMixinCompletions(context, completions) {
     });
     checkNamespace = checkNamespace.parentNamespace;
   }
-}
-function CanCompleteStringTo(completing, suggestion) {
-  if (completing.length == 0)
-    return true;
-  if (completing.startsWith("Get")) {
-    if (suggestion.startsWith("Get"))
-      return suggestion.substr(3).toLowerCase().indexOf(completing.substr(3).toLowerCase()) != -1;
-  } else if (completing.startsWith("Set")) {
-    if (suggestion.startsWith("Set"))
-      return suggestion.substr(3).toLowerCase().indexOf(completing.substr(3).toLowerCase()) != -1;
-  }
-  return suggestion.toLowerCase().indexOf(completing.toLowerCase()) != -1;
 }
 function CanCompleteTo(context, suggestion) {
   if (context.completingSymbolLowerCase.length == 0)
@@ -34494,18 +34092,6 @@ function ExtractPriorExpressionAndSymbol(context, node) {
           context.completingSymbol = node.name.value;
         else
           context.completingSymbol = "";
-        return true;
-      }
-      break;
-    case node_types.ImportStatement:
-      {
-        context.priorExpression = null;
-        context.priorType = null;
-        context.isNamingSomethingNew = false;
-        if (node.children && node.children[0]) {
-          context.completingNode = node.children[0];
-          context.completingSymbol = node.children[0].value;
-        }
         return true;
       }
       break;
@@ -35350,7 +34936,7 @@ function AddMethodOverrideSnippets(context, completions, position) {
       return;
     if (method.name && CanCompleteTo(context, method.name))
       includeParamsOnly = true;
-    if (method.returnType && CanCompleteTo(context, method.returnType))
+    if (method.returnType && CanCompleteToOnlyStart(context, method.returnType))
       includeReturnType = true;
     if (method.isPrivate)
       return;
@@ -35382,6 +34968,7 @@ function AddMethodOverrideSnippets(context, completions, position) {
         superStr += "\n" + currentIndent;
     }
     if (includeParamsOnly) {
+      let filterText = method.name;
       if (!hasReturnType) {
         complEdits = complEdits.concat(
           import_node.TextEdit.replace(
@@ -35392,10 +34979,12 @@ function AddMethodOverrideSnippets(context, completions, position) {
             currentIndent + method.returnType + " "
           )
         );
+        if (includeReturnType)
+          filterText = method.returnType + " " + filterText;
       }
       completions.push({
         label: method.returnType + " " + method.name + "(...)",
-        filterText: method.name,
+        filterText,
         insertText: complStr + "{\n" + currentIndent + superStr,
         kind: import_node.CompletionItemKind.Snippet,
         data: ["decl_snippet", method.containingType.name, method.name, method.id],
@@ -35758,7 +35347,7 @@ function AddCompletionsFromAccessSpecifiers(context, completions) {
             kind: import_node.CompletionItemKind.Method,
             data: ["global_func", sym.namespace.getQualifiedNamespace(), sym.name, sym.id],
             commitCharacters: [",", ";"],
-            sortText: Sort.Unimported
+            sortText: Sort.Snippet
           };
           compl.labelDetails = {
             detail: sym.args && sym.args.length > 0 ? FunctionLabelWithParamsSuffix : FunctionLabelSuffix
@@ -35842,8 +35431,8 @@ function* FindReferences(uri, position) {
   let asmodule = GetModuleByUri(uri);
   if (!asmodule)
     return references;
-  ParseModuleAndDependencies(asmodule);
-  PostProcessModuleTypesAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
+  PostProcessModuleTypes(asmodule);
   ResolveModule(asmodule);
   let offset = asmodule.getOffset(position);
   let findSymbol = asmodule.getSymbolAtOrBefore(offset);
@@ -35883,7 +35472,7 @@ function* FindReferences(uri, position) {
   if (findSymbol.type == 11 /* AccessSpecifier */)
     considerModules = [asmodule];
   else
-    considerModules = GetModulesPotentiallyImportingSymbol(asmodule, findSymbol);
+    considerModules = GetModulesPotentiallyDependentOnSymbol(asmodule, findSymbol);
   let searchForTypes = /* @__PURE__ */ new Set();
   searchForTypes.add(findSymbol.container_type);
   if (findSymbol.type == 9 /* MemberFunction */ || findSymbol.type == 6 /* MemberAccessor */) {
@@ -35899,7 +35488,7 @@ function* FindReferences(uri, position) {
     }
     if (checkParent && checkParent.name != findSymbol.container_type) {
       if (checkParent.declaredModule)
-        considerModules = GetModulesPotentiallyImporting(checkParent.declaredModule);
+        considerModules = GetModulesPotentiallyDependentOn(checkParent.declaredModule);
       else
         considerModules = GetAllLoadedModules();
     }
@@ -35938,8 +35527,8 @@ function* FindReferences(uri, position) {
   let parseCount = 0;
   for (let checkmodule of considerModules) {
     parseCount += 1;
-    ParseModuleAndDependencies(checkmodule);
-    PostProcessModuleTypesAndDependencies(checkmodule);
+    LoadAndParseModule(checkmodule);
+    PostProcessModuleTypes(checkmodule);
     ResolveModule(checkmodule);
     if (auxSymbols) {
       for (let symbol of checkmodule.semanticSymbols) {
@@ -35982,8 +35571,8 @@ function PrepareRename(uri, position) {
   let asmodule = GetModuleByUri(uri);
   if (!asmodule)
     return null;
-  ParseModuleAndDependencies(asmodule);
-  PostProcessModuleTypesAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
+  PostProcessModuleTypes(asmodule);
   ResolveModule(asmodule);
   let offset = asmodule.getOffset(position);
   let findSymbol = asmodule.getSymbolAtOrBefore(offset);
@@ -36073,8 +35662,8 @@ function* PerformRename(uri, position, baseReplaceWith) {
   let asmodule = GetModuleByUri(uri);
   if (!asmodule)
     return edits;
-  ParseModuleAndDependencies(asmodule);
-  PostProcessModuleTypesAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
+  PostProcessModuleTypes(asmodule);
   ResolveModule(asmodule);
   let offset = asmodule.getOffset(position);
   let findSymbol = asmodule.getSymbolAtOrBefore(offset);
@@ -36217,13 +35806,13 @@ function* PerformRename(uri, position, baseReplaceWith) {
     if (findSymbol.type == 11 /* AccessSpecifier */)
       considerModules = [asmodule];
     else
-      considerModules = GetModulesPotentiallyImportingSymbol(asmodule, findSymbol);
+      considerModules = GetModulesPotentiallyDependentOnSymbol(asmodule, findSymbol);
     for (let checkmodule of considerModules) {
       if (!checkmodule.exists)
         continue;
       parseCount += 1;
-      ParseModuleAndDependencies(checkmodule);
-      PostProcessModuleTypesAndDependencies(checkmodule);
+      LoadAndParseModule(checkmodule);
+      PostProcessModuleTypes(checkmodule);
       ResolveModule(checkmodule);
       let fileEdits = null;
       for (let symbol of checkmodule.semanticSymbols) {
@@ -36272,8 +35861,8 @@ function HighlightOccurances(uri, position) {
   let asmodule = GetModuleByUri(uri);
   if (!asmodule)
     return null;
-  ParseModuleAndDependencies(asmodule);
-  PostProcessModuleTypesAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
+  PostProcessModuleTypes(asmodule);
   ResolveModule(asmodule);
   let offset = asmodule.getOffset(position);
   let findSymbol = asmodule.getSymbolAtOrBefore(offset);
@@ -36336,7 +35925,6 @@ var SemanticTypeList = [
   "typename_event",
   "typename_delegate",
   "typename_primitive",
-  "unimported_symbol",
   "access_specifier"
 ];
 for (let i = 0, Count = SemanticTypeList.length; i < Count; ++i)
@@ -36383,9 +35971,7 @@ function BuildSymbols(asmodule, builder) {
     let pos = asmodule.getPosition(symbol.start);
     let length = symbol.end - symbol.start;
     let type = -1;
-    if (symbol.isUnimported) {
-      type = SemanticTypes.unimported_symbol;
-    } else if (symbol.type == 0 /* Typename */ || symbol.type == 1 /* Namespace */) {
+    if (symbol.type == 0 /* Typename */ || symbol.type == 1 /* Namespace */) {
       let symName = symbol.symbol_name;
       let classification = 1 /* Other */;
       if (symbol.type == 0 /* Typename */) {
@@ -36486,36 +36072,7 @@ function GetDefinition(asmodule, position) {
     }
     return locations;
   }
-  let statement = asmodule.getStatementAt(offset);
-  if (statement && statement.ast && statement.ast.type == node_types.ImportStatement) {
-    if (statement.ast.children[0].value) {
-      let importedModule = GetModule(statement.ast.children[0].value);
-      if (importedModule) {
-        locations.push(importedModule.getLocation(0));
-        return locations;
-      }
-    }
-  }
   return locations;
-}
-function FindUnimportedSymbolOnLine(asmodule, position) {
-  let offset = asmodule.getOffset(position);
-  let findSymbol = asmodule.getSymbolAtOrBefore(offset);
-  if (findSymbol && findSymbol.isUnimported)
-    return findSymbol;
-  let lineStartOffset = asmodule.getOffset(
-    import_vscode_languageserver5.Position.create(position.line, 0)
-  );
-  let lineEndOffset = asmodule.getOffset(
-    import_vscode_languageserver5.Position.create(position.line, 1e4)
-  );
-  for (let sym of asmodule.semanticSymbols) {
-    if (!sym.overlapsRange(lineStartOffset, lineEndOffset))
-      continue;
-    if (sym.isUnimported)
-      return sym;
-  }
-  return null;
 }
 function GetSymbolDefinition(asmodule, findSymbol) {
   let definitions = new Array();
@@ -37482,7 +37039,6 @@ function UpdateScriptModuleDiagnostics(asmodule, initialResolve = false, alwaysS
     return;
   AddScopeDiagnostics(asmodule.rootscope, diagnostics);
   VerifyDelegateBinds(asmodule, diagnostics);
-  AddSymbolDiagnostics(asmodule, diagnostics);
   AddNamingConventionDiagnostics(asmodule, diagnostics);
   let oldDiagnostics = ParseDiagnostics.get(asmodule.uri);
   ParseDiagnostics.set(asmodule.uri, diagnostics);
@@ -37626,14 +37182,24 @@ function VerifyDelegateBinds(asmodule, diagnostics) {
       for (let i = 0; i < delegateType.delegateArgs.length; ++i) {
         let signatureArg = delegateType.delegateArgs[i].typename;
         let boundArg = foundFunc.args[i].typename;
-        if (wildcardParameterName && providedWildcardType && delegateType.delegateArgs[i].name == wildcardParameterName)
+        let isWildcard = wildcardParameterName && providedWildcardType && delegateType.delegateArgs[i].name == wildcardParameterName;
+        if (isWildcard)
           signatureArg = TransferTypeQualifiers(signatureArg, providedWildcardType.name);
         let leftTypename = CleanTypeName(signatureArg);
         let rightTypename = CleanTypeName(boundArg);
         if (leftTypename != rightTypename) {
           if (!ArePrimitiveTypesEquivalent(leftTypename, rightTypename)) {
-            signatureMatches = false;
-            break;
+            if (isWildcard) {
+              let argumentType = GetTypeByName(leftTypename);
+              let boundType = GetTypeByName(rightTypename);
+              if (!argumentType || !boundType || boundType.isValueType() || !argumentType.inheritsFrom(boundType.name)) {
+                signatureMatches = false;
+                break;
+              }
+            } else {
+              signatureMatches = false;
+              break;
+            }
           }
         }
         if (signatureArg.endsWith("&out") != boundArg.endsWith("&out")) {
@@ -37771,27 +37337,6 @@ function AreDiagnosticsEqual(oldList, newList) {
     }
   }
   return true;
-}
-function AddSymbolDiagnostics(asmodule, diagnostics) {
-  if (!asmodule.isOpened)
-    return;
-  for (let symbol of asmodule.semanticSymbols) {
-    if (!symbol.isUnimported)
-      continue;
-    let displayName = symbol.symbol_name;
-    if (displayName.startsWith("__"))
-      displayName = displayName.substr(2);
-    diagnostics.push({
-      severity: import_node2.DiagnosticSeverity.Information,
-      range: asmodule.getRange(symbol.start, symbol.end),
-      message: displayName + " must be imported.",
-      source: "angelscript",
-      data: {
-        type: "import",
-        symbol: [symbol.type, symbol.container_type, symbol.symbol_name]
-      }
-    });
-  }
 }
 function AddFunctionDiagnostics(scope, dbfunc, diagnostics) {
   if (dbfunc.containingType) {
@@ -38178,6 +37723,8 @@ function AllowCreateBlueprintForClass(dbtype) {
     return false;
   if (dbtype.macroSpecifiers && dbtype.macroSpecifiers.has("NotBlueprintable"))
     return false;
+  if (dbtype.inheritsFrom("AVolume"))
+    return false;
   return true;
 }
 function ShowCreateBlueprintForClass(dbtype) {
@@ -38290,8 +37837,6 @@ function GetCodeActions(asmodule, range, diagnostics) {
     context.first_symbol = 0;
     context.last_symbol = 0;
   }
-  if (!GetScriptSettings().automaticImports)
-    AddImportActions(context);
   AddAutoActions(context);
   AddMacroActions(context);
   AddGenerateDelegateFunctionActions(context);
@@ -38309,9 +37854,7 @@ function GetCodeActions(asmodule, range, diagnostics) {
   return context.actions;
 }
 function ResolveCodeAction(asmodule, action, data) {
-  if (data.type == "import")
-    ResolveImportAction(asmodule, action, data);
-  else if (data.type == "delegateBind")
+  if (data.type == "delegateBind")
     ResolveGenerateDelegateFunctionAction(asmodule, action, data);
   else if (data.type == "methodOverride")
     ResolveMethodOverrideSnippet(asmodule, action, data);
@@ -38334,91 +37877,6 @@ function ResolveCodeAction(asmodule, action, data) {
   else if (data.type == "createDeactivationParameters")
     ResolveCreateDeactivationParameters(asmodule, action, data);
   return action;
-}
-function AddImportActions(context) {
-  for (let symbol of context.module.semanticSymbols) {
-    if (!symbol.isUnimported)
-      continue;
-    if (!symbol.overlapsRange(context.range_start, context.range_end))
-      continue;
-    let appliedTo = new Array();
-    for (let diag of context.diagnostics) {
-      if (diag.data) {
-        let data = diag.data;
-        if (data.type && data.type == "import") {
-          if (data.symbol[0] == symbol.type && data.symbol[1] == symbol.container_type && data.symbol[2] == symbol.symbol_name) {
-            appliedTo.push(diag);
-          }
-        }
-      }
-    }
-    let symbolDisplayName = symbol.symbol_name;
-    if (symbolDisplayName.startsWith("__"))
-      symbolDisplayName = symbolDisplayName.substr(2);
-    context.actions.push({
-      kind: import_vscode_languageserver_types.CodeActionKind.QuickFix,
-      title: "Import " + symbolDisplayName,
-      source: "angelscript",
-      diagnostics: appliedTo,
-      isPreferred: true,
-      data: {
-        "uri": context.module.uri,
-        "type": "import",
-        "symbol": {
-          "type": symbol.type,
-          "container_type": symbol.container_type,
-          "symbol_name": symbol.symbol_name,
-          "start": symbol.start,
-          "end": symbol.end,
-          "isWriteAccess": symbol.isWriteAccess,
-          "isUnimported": symbol.isUnimported,
-          "isAuto": symbol.isAuto,
-          "noColor": symbol.noColor
-        }
-      }
-    });
-  }
-}
-function ResolveImportAction(asmodule, action, data) {
-  let definitions = GetSymbolDefinition(asmodule, data.symbol);
-  if (!definitions || definitions.length == 0)
-    return action;
-  let moduleName = definitions[0].module.modulename;
-  if (asmodule.isModuleImported(moduleName))
-    return action;
-  let lastImportLine = 0;
-  let lineCount = asmodule.textDocument.lineCount;
-  let hasEmptyLine = false;
-  let alreadyImported = false;
-  let importRegex = /\s*import\s+([A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*);/;
-  for (let i = 0; i < lineCount; ++i) {
-    let line = asmodule.textDocument.getText(
-      import_vscode_languageserver_types.Range.create(import_vscode_languageserver_types.Position.create(i, 0), import_vscode_languageserver_types.Position.create(i, 1e4))
-    );
-    let match = importRegex.exec(line);
-    if (match) {
-      if (match[1] == moduleName) {
-        alreadyImported = true;
-        break;
-      }
-      lastImportLine = i + 1;
-      hasEmptyLine = false;
-    } else if (line.trim().length != 0) {
-      break;
-    } else {
-      hasEmptyLine = true;
-    }
-  }
-  action.edit = {};
-  action.edit.changes = {};
-  if (alreadyImported)
-    return;
-  let insertString = "import " + moduleName + ";\n";
-  if (!hasEmptyLine)
-    insertString += "\n";
-  action.edit.changes[asmodule.displayUri] = [
-    import_vscode_languageserver_types.TextEdit.insert(import_vscode_languageserver_types.Position.create(lastImportLine, 0), insertString)
-  ];
 }
 function AddGenerateDelegateFunctionActions(context) {
   let generateFromDiagnostics = [];
@@ -39060,7 +38518,6 @@ function AddAutoActions(context) {
           "start": symbol.start,
           "end": symbol.end,
           "isWriteAccess": symbol.isWriteAccess,
-          "isUnimported": symbol.isUnimported,
           "isAuto": symbol.isAuto,
           "noColor": symbol.noColor
         }
@@ -39091,6 +38548,9 @@ function AddVariablePromotionHelper(context) {
   let innerStatement = null;
   switch (codeNode.type) {
     case node_types.Assignment:
+      innerStatement = codeNode;
+      break;
+    case node_types.FunctionCall:
       innerStatement = codeNode;
       break;
     case node_types.IfStatement:
@@ -39127,6 +38587,44 @@ function AddVariablePromotionHelper(context) {
         position: context.range_start
       }
     });
+  } else if (innerStatement && innerStatement.type == node_types.FunctionCall && innerStatement.children && innerStatement.children.length >= 2) {
+    let argList = innerStatement.children[1];
+    if (argList && argList.children) {
+      for (let paramIndex = 0; paramIndex < argList.children.length; ++paramIndex) {
+        let argNode = argList.children[paramIndex];
+        if (!argNode)
+          continue;
+        if (argNode.type != node_types.Identifier)
+          continue;
+        let valueType = ResolveTypeFromExpression(context.scope, argNode);
+        if (valueType)
+          continue;
+        let variableName = argNode.value;
+        let functions = [];
+        ResolveFunctionOverloadsFromExpression(context.scope, innerStatement.children[0], functions);
+        if (functions.length == 0)
+          continue;
+        for (let func of functions) {
+          if (!func.args)
+            continue;
+          if (paramIndex >= func.args.length)
+            continue;
+          context.actions.push({
+            kind: import_vscode_languageserver_types.CodeActionKind.RefactorRewrite,
+            title: `Promote ${variableName} to member variable`,
+            source: "angelscript",
+            data: {
+              uri: context.module.uri,
+              type: "variablePromotion",
+              variableName,
+              variableType: CleanTypeName(func.args[paramIndex].typename),
+              position: context.range_start
+            }
+          });
+          break;
+        }
+      }
+    }
   }
 }
 function AddConditionVariablePromotionHelper(context) {
@@ -39240,7 +38738,7 @@ function FindInsertPositionForGeneratedMemberVariable(asmodule, classScope, anch
   let afterPos = null;
   if (anchoredMemberVariableOffset != -1) {
     afterPos = asmodule.getPosition(anchoredMemberVariableOffset);
-  } else if (lastMemberVariableOffset != -1) {
+  } else if (lastMemberVariableOffset != -1 && (lastDefaultLineOffset == -1 || lastDefaultLineOffset < lastMemberVariableOffset)) {
     afterPos = asmodule.getPosition(lastMemberVariableOffset);
   } else if (lastDefaultLineOffset != -1) {
     afterPos = asmodule.getPosition(lastDefaultLineOffset);
@@ -41180,7 +40678,8 @@ function buildCreateBlueprint(className) {
 }
 
 // third-party/vscode-unreal-angelscript/language-server/src/server.ts
-var connection = (0, import_node4.createConnection)(new import_node4.StreamMessageReader(process.stdin), new import_node4.StreamMessageWriter(process.stdout));
+var ipcSendAvailble = typeof process.send === "function";
+var connection = ipcSendAvailble ? (0, import_node4.createConnection)(new import_node4.IPCMessageReader(process), new import_node4.IPCMessageWriter(process)) : (0, import_node4.createConnection)(process.stdin, process.stdout);
 var unreal;
 var hostname = "127.0.0.1";
 var port = -1;
@@ -41281,7 +40780,7 @@ function connect_unreal() {
       } else if (msg.type == 31 /* DebugDatabaseSettings */) {
         let version = msg.readInt();
         let scriptSettings = GetScriptSettings();
-        scriptSettings.automaticImports = msg.readBool();
+        msg.readBool();
         if (version >= 2)
           scriptSettings.floatIsFloat64 = msg.readBool();
         if (version >= 3)
@@ -41349,6 +40848,17 @@ connection.onInitialize((_params) => {
     for (let Workspace of _params.workspaceFolders) {
       Roots.push(import_vscode_uri.URI.parse(Workspace.uri).fsPath);
       RootUris.push(decodeURIComponent(Workspace.uri));
+    }
+  }
+  const initializationOptions = _params.initializationOptions;
+  const additionalFolders = initializationOptions == null ? void 0 : initializationOptions.additionalScriptRootFolders;
+  if (additionalFolders) {
+    for (let scriptRootPath of additionalFolders) {
+      let uri = decodeURIComponent(scriptRootPath.uri);
+      if (!RootUris.includes(uri)) {
+        Roots.push(import_vscode_uri.URI.parse(scriptRootPath.uri).fsPath);
+        RootUris.push(uri);
+      }
     }
   }
   connection.console.log("Workspace roots: " + Roots);
@@ -41555,9 +41065,9 @@ function GetAndParseModule(uri) {
   let asmodule = GetModuleByUri(uri);
   if (!asmodule)
     return null;
-  ParseModuleAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
   if (CanResolveModules()) {
-    PostProcessModuleTypesAndDependencies(asmodule);
+    PostProcessModuleTypes(asmodule);
     ResolveModule(asmodule);
   }
   return asmodule;
@@ -41697,8 +41207,8 @@ connection.onCodeLens(function(params) {
   let asmodule = GetModuleByUri(params.textDocument.uri);
   if (!asmodule)
     return null;
-  ParseModuleAndDependencies(asmodule);
-  PostProcessModuleTypesAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
+  PostProcessModuleTypes(asmodule);
   ResolveModule(asmodule);
   return ComputeCodeLenses(asmodule);
 });
@@ -41782,8 +41292,8 @@ function TryResolveSymbols(asmodule) {
   if (CanResolveModules()) {
     if (!asmodule)
       return null;
-    ParseModuleAndDependencies(asmodule);
-    PostProcessModuleTypesAndDependencies(asmodule);
+    LoadAndParseModule(asmodule);
+    PostProcessModuleTypes(asmodule);
     ResolveModule(asmodule);
     return HighlightSymbols(asmodule);
   } else {
@@ -41812,8 +41322,8 @@ connection.languages.semanticTokens.onDelta(function(params) {
   if (!CanResolveModules())
     return WaitForResolveSymbols(params);
   let asmodule = GetModuleByUri(params.textDocument.uri);
-  ParseModuleAndDependencies(asmodule);
-  PostProcessModuleTypesAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
+  PostProcessModuleTypes(asmodule);
   ResolveModule(asmodule);
   let delta = HighlightSymbolsDelta(asmodule, params.previousResultId);
   return delta;
@@ -41847,39 +41357,6 @@ function getModuleName(uri) {
     modulename = modulename.substr(1);
   return modulename;
 }
-connection.onRequest("angelscript/getModuleForSymbol", (...params) => {
-  let pos = params[0];
-  let asmodule = GetAndParseModule(pos.textDocument.uri);
-  if (!asmodule)
-    return null;
-  if (!asmodule.resolved)
-    return null;
-  if (GetScriptSettings().automaticImports)
-    return "-";
-  let unimportedSymbol = FindUnimportedSymbolOnLine(asmodule, pos.position);
-  if (unimportedSymbol) {
-    let symbolDefs = GetSymbolDefinition(asmodule, unimportedSymbol);
-    if (symbolDefs) {
-      for (let def of symbolDefs) {
-        if (def.module.modulename == asmodule.modulename)
-          continue;
-        return def.module.modulename;
-      }
-    }
-  }
-  let definitions = GetDefinition(asmodule, pos.position);
-  if (definitions == null) {
-    connection.console.log(`Definition not found`);
-    return "";
-  }
-  {
-    let defArray = definitions;
-    let moduleName = getModuleName(defArray[0].uri);
-    if (moduleName == asmodule.modulename)
-      return "-";
-    return moduleName;
-  }
-});
 connection.onRequest("angelscript/getAPI", (root) => {
   if (HasTypesFromUnreal())
     return GetAPIList(root);
@@ -41950,10 +41427,11 @@ function __asScriptSettingsPath() {
 }
 
 // The editor sends its script settings separately from the type database, over a binary message
-// rather than as JSON. They have to be cached too: automaticImports in particular defaults to
-// false, so replaying types without them makes every cross-module reference report
-// "must be imported". Snapshotting the resolved object avoids re-implementing the versioned
-// message parsing, and picks up fields added upstream for free.
+// rather than as JSON. They have to be cached too: floatIsFloat64 in particular decides which
+// primitive types AddPrimitiveTypes registers, so replaying a database without the settings that
+// came with it declares float as the wrong type everywhere. Snapshotting the resolved object
+// avoids re-implementing the versioned message parsing, and follows fields upstream adds or drops
+// for free - v1.9.4 dropped automaticImports without this needing a change.
 function __asSaveScriptSettings() {
   if (!__asTypeCache.path || !__asTypeCache.enabled)
     return;
@@ -41965,8 +41443,8 @@ function __asSaveScriptSettings() {
       version: 1, savedAt: Date.now(), scriptSettings: GetScriptSettings()
     }));
     fs.renameSync(file + ".tmp", file);
-    connection.console.log("[typeCache] Saved script settings (automaticImports="
-      + GetScriptSettings().automaticImports + ")");
+    connection.console.log("[typeCache] Saved script settings (floatIsFloat64="
+      + GetScriptSettings().floatIsFloat64 + ")");
   } catch (e) {
     connection.console.log("[typeCache] Failed to save script settings: " + e);
   }
@@ -41982,8 +41460,8 @@ function __asLoadScriptSettings() {
     if (!cached || cached.version != 1 || !cached.scriptSettings)
       return false;
     Object.assign(GetScriptSettings(), cached.scriptSettings);
-    connection.console.log("[typeCache] Restored script settings (automaticImports="
-      + GetScriptSettings().automaticImports + ")");
+    connection.console.log("[typeCache] Restored script settings (floatIsFloat64="
+      + GetScriptSettings().floatIsFloat64 + ")");
     return true;
   } catch (e) {
     connection.console.log("[typeCache] Failed to restore script settings: " + e);
@@ -42159,9 +41637,9 @@ connection.languages.inlineValue.on(function(params) {
 });
 function TriggerThrottledModuleParse(asmodule) {
   if (!asmodule.parseDelay) {
-    ParseModuleAndDependencies(asmodule);
+    LoadAndParseModule(asmodule);
     if (CanResolveModules() && ParseQueue.length == 0 && LoadQueue.length == 0) {
-      PostProcessModuleTypesAndDependencies(asmodule);
+      PostProcessModuleTypes(asmodule);
       ResolveModule(asmodule);
       UpdateScriptModuleDiagnostics(asmodule);
     }
@@ -42204,9 +41682,9 @@ connection.onDidOpenTextDocument(function(params) {
   let asmodule = GetOrCreateModule(modulename, getPathName(uri), uri);
   asmodule.isOpened = true;
   UpdateModuleFromContent(asmodule, params.textDocument.text);
-  ParseModuleAndDependencies(asmodule);
+  LoadAndParseModule(asmodule);
   if (CanResolveModules() && ParseQueue.length == 0 && LoadQueue.length == 0) {
-    PostProcessModuleTypesAndDependencies(asmodule);
+    PostProcessModuleTypes(asmodule);
     ResolveModule(asmodule);
     UpdateScriptModuleDiagnostics(asmodule);
   }
@@ -42267,8 +41745,8 @@ function TryResolveInlayHints(asmodule, range) {
   if (CanResolveModules()) {
     if (!asmodule)
       return null;
-    ParseModuleAndDependencies(asmodule);
-    PostProcessModuleTypesAndDependencies(asmodule);
+    LoadAndParseModule(asmodule);
+    PostProcessModuleTypes(asmodule);
     ResolveModule(asmodule);
     return GetInlayHintsForRange(asmodule, range);
   } else {

@@ -70,7 +70,7 @@ Backend support for ReSharper and Rider:
 External LSP server bundled from the vscode-unreal-angelscript extension:
 - TypeScript/JavaScript language server
 - Bundled to single JS file via esbuild
-- Modified for stdio communication
+- Patched at bundle time for Rider (see [Patching Strategy](#patching-strategy))
 
 ## Development Workflow
 
@@ -137,32 +137,35 @@ If you modify the grammar files, you must regenerate the parser and lexer:
 
 ### LSP Server Changes
 
-The bundled language server and debug adapter are built from the `third-party/vscode-unreal-angelscript` submodule (a fork of [vscode-unreal-angelscript](https://github.com/Hazelight/vscode-unreal-angelscript)). The submodule is **pinned to a specific commit** and **not updated** - all changes are made directly to our fork.
+The bundled language server and debug adapter are built from the `third-party/vscode-unreal-angelscript` submodule, an unmodified checkout of [Hazelight's repository](https://github.com/Hazelight/vscode-unreal-angelscript) pinned to a specific commit. Upstream carries no git tags, so the pin is a raw SHA of a `Publish version X` commit. Everything Rider needs is applied at bundle time instead of being committed into the checkout, which keeps bumping the pin a matter of re-running the bundler.
 
 #### Patching Strategy
 
 The build scripts (`scripts/bundle-lsp.js` and `scripts/bundle-dap.js`) automatically patch the bundled JavaScript after esbuild completes:
 
 **LSP Server Patching** (`scripts/bundle-lsp.js`):
-- **VSCode API Stubbing**: Replaces `import * as vscode` with stubs from `scripts/vscode-stub.js`
-- **Stdio Communication**: Patches IPC-based communication to use stdin/stdout instead
-- **Pattern**: `connection = server_1.createConnection(...)` → `connection = server_1.createConnection(process.stdin, process.stdout)`
+- **Drive letter normalisation**: Lowercases the drive letter of diagnostic URIs before they are sent, since Rider and the server disagree on its case
+- **Deferred Unreal connection**: Starts with an unconfigured port so the server dials the editor only once the real port arrives, instead of connecting on the default first
+- **C++ navigation handlers**: Adds `angelscript/getCppSymbol` and `angelscript/navigateToCpp`
+- **Unreal status handler**: Adds `angelscript/getUnrealStatus` and `angelscript/setTypeCacheEnabled`, which back the status bar widget
+- **Type database cache**: Persists the database the editor sends and replays it when no editor is running
+
+The transport is not patched: the server selects stdio itself when no Node IPC channel is present.
 
 **Debug Adapter Patching** (`scripts/bundle-dap.js`):
-- **VSCode API Stubbing**: Same as LSP server
+- **VSCode API Stubbing**: Replaces `import * as vscode` with stubs from `scripts/vscode-stub.js`
 - **Unreal Engine Compatibility**: Injects `unreal.setDataBreakpoints([])` during initialization to match VSCode's DAP client behavior
 - **Why needed**: Unreal Engine expects this message; LSP4IJ (Rider's DAP client) follows DAP spec strictly and only sends it when user creates data breakpoints
 
 #### Making Changes
 
-Since we maintain a fork and don't update the submodule:
-
-1. **Modify the source** directly in `third-party/vscode-unreal-angelscript/`
+1. **Edit the patch** in `scripts/bundle-lsp.js` or `scripts/bundle-dap.js` rather than the submodule checkout, which stays at its upstream revision
 2. **Rebuild the bundles**: `npm run bundle` (or `npm run bundle:lsp` / `npm run bundle:dap` individually)
-3. **Bundled outputs**:
+3. **Check every patch reports `✓`**: the patches are regexes over the bundled output, so an upstream rename turns one into a silent no-op. A `⚠` line means the patch did not apply and the bundle must not be shipped.
+4. **Bundled outputs**:
    - LSP: `src/rider/main/resources/js/angelscript-language-server.js`
    - DAP: `src/rider/main/resources/js/angelscript-debug-adapter.js`
-4. **Commit both** the source changes and the bundled outputs
+5. **Commit both** the script changes and the bundled outputs
 
 #### Best Practices
 

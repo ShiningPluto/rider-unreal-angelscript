@@ -56,30 +56,18 @@ async function bundle() {
       logLevel: 'info',
     });
 
-    // Patch the bundled file to use stdin/stdout instead of IPC
+    // No transport patch is needed: since upstream 6db414e the server picks stdio itself whenever
+    // process.send is unavailable, which is the case for every plugin launch (the process is
+    // spawned with plain pipes, not a Node IPC channel). Patching IPCMessageReader here would only
+    // rewrite the branch that is never taken.
     const bundledPath = path.join(projectRoot, 'src', 'rider', 'main', 'resources', 'js', 'angelscript-language-server.js');
     let content = fs.readFileSync(bundledPath, 'utf8');
-    
-    // Replace the createConnection call to use stdin/stdout
-    // The bundled code uses (0, node_1.createConnection) pattern
-    content = content.replace(
-      /node_1\.IPCMessageReader\(process\)/g,
-      'node_1.StreamMessageReader(process.stdin)'
-    );
-    content = content.replace(
-      /node_1\.IPCMessageWriter\(process\)/g,
-      'node_1.StreamMessageWriter(process.stdout)'
-    );
-    
-    // Also handle non-namespaced version just in case
-    content = content.replace(
-      /IPCMessageReader\(process\)/g,
-      'StreamMessageReader(process.stdin)'
-    );
-    content = content.replace(
-      /IPCMessageWriter\(process\)/g,
-      'StreamMessageWriter(process.stdout)'
-    );
+
+    // Should upstream ever go back to a hardcoded IPC transport, the server would start and then
+    // answer nothing, with no error anywhere. Fail loudly instead of shipping that.
+    if (!/typeof process\.send === "function"/.test(content)) {
+      console.warn('⚠ Warning: Server no longer selects stdio on its own - the transport needs patching again');
+    }
 
     // Patch NotifyDiagnostics to normalize drive letter before sending to client
     // This ensures diagnostics from ALL sources (UpdateCompileDiagnostics, UpdateScriptModuleDiagnostics, etc.)
@@ -302,10 +290,11 @@ function __asScriptSettingsPath() {
 }
 
 // The editor sends its script settings separately from the type database, over a binary message
-// rather than as JSON. They have to be cached too: automaticImports in particular defaults to
-// false, so replaying types without them makes every cross-module reference report
-// "must be imported". Snapshotting the resolved object avoids re-implementing the versioned
-// message parsing, and picks up fields added upstream for free.
+// rather than as JSON. They have to be cached too: floatIsFloat64 in particular decides which
+// primitive types AddPrimitiveTypes registers, so replaying a database without the settings that
+// came with it declares float as the wrong type everywhere. Snapshotting the resolved object
+// avoids re-implementing the versioned message parsing, and follows fields upstream adds or drops
+// for free - v1.9.4 dropped automaticImports without this needing a change.
 function __asSaveScriptSettings() {
   if (!__asTypeCache.path || !__asTypeCache.enabled)
     return;
@@ -317,8 +306,8 @@ function __asSaveScriptSettings() {
       version: 1, savedAt: Date.now(), scriptSettings: GetScriptSettings()
     }));
     fs.renameSync(file + ".tmp", file);
-    connection.console.log("[typeCache] Saved script settings (automaticImports="
-      + GetScriptSettings().automaticImports + ")");
+    connection.console.log("[typeCache] Saved script settings (floatIsFloat64="
+      + GetScriptSettings().floatIsFloat64 + ")");
   } catch (e) {
     connection.console.log("[typeCache] Failed to save script settings: " + e);
   }
@@ -334,8 +323,8 @@ function __asLoadScriptSettings() {
     if (!cached || cached.version != 1 || !cached.scriptSettings)
       return false;
     Object.assign(GetScriptSettings(), cached.scriptSettings);
-    connection.console.log("[typeCache] Restored script settings (automaticImports="
-      + GetScriptSettings().automaticImports + ")");
+    connection.console.log("[typeCache] Restored script settings (floatIsFloat64="
+      + GetScriptSettings().floatIsFloat64 + ")");
     return true;
   } catch (e) {
     connection.console.log("[typeCache] Failed to restore script settings: " + e);
@@ -462,7 +451,7 @@ setInterval(() => {
 
     fs.writeFileSync(bundledPath, content);
     writeVersionFile();
-    console.log('✓ Language server bundled and patched for stdio communication!');
+    console.log('✓ Language server bundled and patched!');
   } catch (error) {
     console.error('✗ Bundling failed:', error);
     process.exit(1);

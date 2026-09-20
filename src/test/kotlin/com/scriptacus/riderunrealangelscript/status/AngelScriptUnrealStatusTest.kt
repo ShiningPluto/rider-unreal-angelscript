@@ -149,8 +149,8 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
             bundle.contains("connection.onRequest(\"angelscript/setTypeCacheEnabled\"")
         )
         // The editor's script settings arrive separately from the database. Replaying types
-        // without them leaves automaticImports at its default of false, which reports every
-        // cross-module reference as needing an import.
+        // without them leaves floatIsFloat64 at its default of false, which registers the wrong
+        // primitive type for every float in the project.
         assertTrue(
             "bundle-lsp.js did not hook the editor's script settings for caching",
             bundle.contains("function __asSaveScriptSettings()") &&

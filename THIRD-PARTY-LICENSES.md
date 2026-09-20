@@ -28,8 +28,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 The language server has been modified from its original form:
 - Bundled into a single JavaScript file using esbuild
-- Communication protocol changed from IPC to stdio for compatibility with JetBrains Rider
-- No modifications to the language server's core functionality or capabilities
+- Drive letters in diagnostic URIs are lowercased, and the connection to the Unreal editor is deferred until Rider supplies the configured port
+- Extra requests added for C++ navigation and for reporting the state of the Unreal editor connection
+- The type database received from the Unreal editor is cached to disk and replayed when no editor is running
+- No modifications to the language server's own analysis of AngelScript code
 
 ---
 
