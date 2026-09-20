@@ -26,19 +26,35 @@ This means:
 
 ### The Bug in lsp4ij
 
-lsp4ij's `LSPIJUtils.doApplyEdits()` uses this comparator:
+> Re-established by measurement on 2026-09-20 against lsp4ij 0.19.1 and 0.21.0. An earlier version
+> of this document blamed an unstable comparator in `doApplyEdits()`; there is no comparator there
+> in either version, so that description would have led a reader to check the wrong thing and
+> conclude the bug was fixed. The behaviour below is what actually happens.
+
+`LSPIJUtils.applyEdits()` converts every edit to a `RangeMarker` up front, then applies them **in
+array order**:
 
 ```java
-public int compare(TextEdit a, TextEdit b) {
-    int diff = a.getRange().getStart().getLine() - b.getRange().getStart().getLine();
-    if (diff == 0) {
-        return a.getRange().getStart().getCharacter() - b.getRange().getStart().getCharacter();
-    }
-    return diff;
+for (var textEdit : ownedEdits) {
+    ...
+    var marker = document.createRangeMarker(start, end);
+    pairs.add(Pair.create(textEdit, marker));
+}
+for (var pair : pairs) {
+    applyEdit(marker.getStartOffset(), marker.getEndOffset(), edit.getNewText(), document, ...);
 }
 ```
 
-**Problem:** This returns `0` for same-position edits, making the sort unstable. Java's sort algorithm can then reorder same-position edits arbitrarily, violating the LSP spec.
+**Problem:** for two *insertions at the same offset* that reverses them in the text. A zero-length
+marker sitting exactly at the insertion point does not move when text is inserted there, so each
+later insertion lands in front of the earlier one:
+
+```
+applied in array order ["UFUNCTION()\n", "\t"]  ->  "\tUFUNCTION()\n"   (spec wants the reverse)
+applied reversed       ["\t", "UFUNCTION()\n"]  ->  "UFUNCTION()\n\t"   (what the spec asks for)
+```
+
+This is pinned by `LspSamePositionTextEditTest`, which fails if lsp4ij ever changes it.
 
 ### Real-World Impact
 
@@ -141,17 +157,19 @@ Check for upstream fix when:
 
 ### How to Check
 
-1. **Check lsp4ij source:**
-   ```bash
-   cd third-party/lsp4ij-main
-   git log --oneline --grep="text edit\|completion" src/main/java/com/redhat/devtools/lsp4ij/LSPIJUtils.java
-   ```
+1. **Run `LspSamePositionTextEditTest`.** It applies two insertions at the same position through
+   `LSPIJUtils.applyEdits` and asserts the reversal is still there. It passing means the workaround
+   is still needed; it failing means lsp4ij changed and the workaround should be revisited.
 
-2. **Look for comparator changes** in `LSPIJUtils.doApplyEdits()`:
-   - If it now uses original index as tiebreaker → FIXED
-   - If it still returns 0 for same-position → NOT FIXED
+   To check a version other than the pinned one, change the version in `build.gradle.kts`
+   (`plugin("com.redhat.devtools.lsp4ij", ...)`) and run the test again.
 
-3. **Run manual test** (see Testing section above):
+2. **Beware of the changelog.** lsp4ij 0.21.0 lists "Fixed text edits ordering to comply with LSP
+   spec (same position edits)", which sounds exactly like this bug. It is not: 0.21 added a
+   separate `sortTextEdits` helper with an index tiebreaker for other call sites, and left
+   `applyEdits` - the path completion takes - unchanged. Measured identical to 0.19.1.
+
+3. **Run the manual test** (see Testing section above):
    - If indentation is correct → FIXED
    - If indentation is wrong → NOT FIXED
 
@@ -265,6 +283,27 @@ Remove this workaround when:
 - **Status:** Active workaround required
 - **Issue:** Unstable comparator in LSPIJUtils.doApplyEdits()
 - **Implementation:** AngelScriptCompletionProposal with reflection-based fix
+
+### 2026-09-20 - Reviewed against 0.21.0, still required
+- **lsp4ij versions checked:** 0.19.1 (pinned for the build) and 0.21.0 (what Rider ships)
+- **Status:** Workaround still required, unchanged
+- **Findings:**
+  - Both versions apply edits in array order over RangeMarkers, with no comparator at all, so the
+    original description of the bug no longer matched the code. The reversal is real either way;
+    the mechanism section now describes what actually happens.
+  - 0.21's "Fixed text edits ordering" changelog entry is about a new `sortTextEdits` helper, not
+    about `applyEdits`. Measured: same result on both versions.
+  - All five private members the workaround reflects on (`getInsertText`,
+    `getResolvedCompletionItem`, `prefixStartOffset`, `completionOffset`, `editor`) still exist in
+    0.21.0, and the plugin compiles and tests green against it.
+  - The class carries two further reasons to exist beyond the ordering fix, which were not
+    documented: `calculateScopeAwarePrefix` (the server sends completion items with no `textEdit`,
+    so the client computes the replaced range, and lsp4ij's own prefix must not swallow the part
+    before `::`) and caret placement at the end of the main edit. lsp4ij 0.21 still offers no hook
+    for the prefix - `LSPCompletionFeature.addLookupItem` is documented as "Don't override this
+    method, we need to revisit the API and the prefix computation (to customize it)".
+- **Added:** `LspSamePositionTextEditTest`, so the next upgrade answers this by running rather than
+  by reading
 
 ### Future Updates
 
