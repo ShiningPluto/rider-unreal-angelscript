@@ -3,6 +3,43 @@ const path = require('path');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
 
+// Everything the injected code calls but does not define.
+//
+// A patch that applies is not a patch that works: the handlers below used to reach the symbol
+// module as `scriptsymbols.GetCppSymbol`, which was how the old CommonJS bundle exposed it. The
+// esbuild layout hoists those functions to the top level instead, so from 0.9.10 the name simply
+// did not exist and both C++ navigation requests failed at runtime with "scriptsymbols is not
+// defined" - invisibly, because the client treats a failed request as "no C++ symbol here". These
+// names are checked against the finished bundle so the next rename is caught at build time.
+const INJECTED_REFERENCES = [
+  'GetAndParseModule',
+  'GetCppSymbol',
+  'GetTypeByName',
+  'buildGoTo',
+  'unreal',
+  'port',
+  'HasTypesFromUnreal',
+  'ReResolveAllModules',
+  'TickQueues',
+  'GetScriptSettings',
+  'AddPrimitiveTypes',
+  'AddTypesFromUnreal',
+  'FinishTypesFromUnreal',
+  'NormalizeUri',
+];
+
+function verifyInjectedReferences(content) {
+  const missing = INJECTED_REFERENCES.filter(
+    (name) => !new RegExp('(?:^|\\n)\\s*(?:function|var|let|const)\\s+' + name + '\\b').test(content)
+  );
+
+  if (missing.length == 0) {
+    console.log('✓ Patched code resolves against the bundle (' + INJECTED_REFERENCES.length + ' names)');
+  } else {
+    console.warn('⚠ Warning: the patched code calls names the bundle does not define: ' + missing.join(', '));
+  }
+}
+
 // Project root is one level up from scripts/
 const projectRoot = path.join(__dirname, '..');
 const submoduleRoot = path.join(projectRoot, 'third-party', 'vscode-unreal-angelscript');
@@ -209,6 +246,21 @@ function __asOnQueuesSettled() {
     // Patch to add C++ navigation request handlers
     // These handlers allow the Rider plugin to get C++ symbol info and navigate to C++ code
     const cppNavigationHandlers = `
+// The C++ classes a member could be declared by: the type itself and everything it inherits from.
+// The client searches headers as text, where the only way to tell UMyComponent::SetTransform from some
+// other class's SetTransform is which class body the declaration sits in - and an inherited member
+// sits in a base class's. Script-declared types are skipped; they have no C++ declaration at all.
+function __asCppAncestry(typename) {
+  let names = [];
+  let type = GetTypeByName(typename);
+  while (type && names.length < 16) {
+    if (!type.declaredModule)
+      names.push(type.name);
+    type = type.getSuperType();
+  }
+  return names;
+}
+
 connection.onRequest("angelscript/getCppSymbol", (params) => {
   let uri = params.uri;
   let position = params.position;
@@ -223,7 +275,7 @@ connection.onRequest("angelscript/getCppSymbol", (params) => {
     return null;
   }
   connection.console.log(\`[getCppSymbol] Module found and resolved: \${asmodule.modulename}\`);
-  let cppSymbol = scriptsymbols.GetCppSymbol(asmodule, position);
+  let cppSymbol = GetCppSymbol(asmodule, position);
   if (!cppSymbol) {
     connection.console.log(\`[getCppSymbol] No C++ symbol found at position \${position.line}:\${position.character}\`);
     return null;
@@ -231,7 +283,8 @@ connection.onRequest("angelscript/getCppSymbol", (params) => {
   connection.console.log(\`[getCppSymbol] C++ symbol found: \${cppSymbol[0]}.\${cppSymbol[1]}\`);
   return {
     className: cppSymbol[0],
-    symbolName: cppSymbol[1]
+    symbolName: cppSymbol[1],
+    ancestry: __asCppAncestry(cppSymbol[0])
   };
 });
 connection.onRequest("angelscript/navigateToCpp", (params) => {
@@ -248,7 +301,7 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
     return false;
   }
   connection.console.log(\`[navigateToCpp] Module found and resolved: \${asmodule.modulename}\`);
-  let cppSymbol = scriptsymbols.GetCppSymbol(asmodule, position);
+  let cppSymbol = GetCppSymbol(asmodule, position);
   if (!cppSymbol) {
     connection.console.log(\`[navigateToCpp] No C++ symbol found at position \${position.line}:\${position.character}\`);
     return false;
@@ -532,6 +585,8 @@ setInterval(() => {
         + ' (support: ' + typeCacheAdded + ', capture: ' + captureAdded + ', save: ' + saveAdded
         + ', settings: ' + settingsAdded + ')');
     }
+
+    verifyInjectedReferences(content);
 
     fs.writeFileSync(bundledPath, content);
     writeVersionFile();

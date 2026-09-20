@@ -41577,6 +41577,21 @@ connection.onRequest("angelscript/setTypeCacheEnabled", (enabled) => {
   };
 });
 
+// The C++ classes a member could be declared by: the type itself and everything it inherits from.
+// The client searches headers as text, where the only way to tell UMyComponent::SetTransform from some
+// other class's SetTransform is which class body the declaration sits in - and an inherited member
+// sits in a base class's. Script-declared types are skipped; they have no C++ declaration at all.
+function __asCppAncestry(typename) {
+  let names = [];
+  let type = GetTypeByName(typename);
+  while (type && names.length < 16) {
+    if (!type.declaredModule)
+      names.push(type.name);
+    type = type.getSuperType();
+  }
+  return names;
+}
+
 connection.onRequest("angelscript/getCppSymbol", (params) => {
   let uri = params.uri;
   let position = params.position;
@@ -41591,7 +41606,7 @@ connection.onRequest("angelscript/getCppSymbol", (params) => {
     return null;
   }
   connection.console.log(`[getCppSymbol] Module found and resolved: ${asmodule.modulename}`);
-  let cppSymbol = scriptsymbols.GetCppSymbol(asmodule, position);
+  let cppSymbol = GetCppSymbol(asmodule, position);
   if (!cppSymbol) {
     connection.console.log(`[getCppSymbol] No C++ symbol found at position ${position.line}:${position.character}`);
     return null;
@@ -41599,7 +41614,8 @@ connection.onRequest("angelscript/getCppSymbol", (params) => {
   connection.console.log(`[getCppSymbol] C++ symbol found: ${cppSymbol[0]}.${cppSymbol[1]}`);
   return {
     className: cppSymbol[0],
-    symbolName: cppSymbol[1]
+    symbolName: cppSymbol[1],
+    ancestry: __asCppAncestry(cppSymbol[0])
   };
 });
 connection.onRequest("angelscript/navigateToCpp", (params) => {
@@ -41616,7 +41632,7 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
     return false;
   }
   connection.console.log(`[navigateToCpp] Module found and resolved: ${asmodule.modulename}`);
-  let cppSymbol = scriptsymbols.GetCppSymbol(asmodule, position);
+  let cppSymbol = GetCppSymbol(asmodule, position);
   if (!cppSymbol) {
     connection.console.log(`[navigateToCpp] No C++ symbol found at position ${position.line}:${position.character}`);
     return false;

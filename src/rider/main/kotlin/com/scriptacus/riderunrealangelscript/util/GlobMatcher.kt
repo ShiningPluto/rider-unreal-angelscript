@@ -1,74 +1,84 @@
 package com.scriptacus.riderunrealangelscript.util
 
-import com.intellij.openapi.diagnostic.Logger
-import java.nio.file.FileSystems
-import java.nio.file.PathMatcher
-import java.nio.file.Paths
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Utility for matching file paths against glob patterns.
- * Supports standard glob syntax:
- * - asterisk matches any characters within a path segment
- * - double asterisk matches any number of directory levels
- * - question mark matches a single character
+ * Matches file paths against the glob patterns from the script ignore settings.
  *
- * Examples:
- * - Pattern asterisk asterisk /Saved/asterisk asterisk matches any file in Saved directories at any level
- * - Pattern asterisk asterisk /.plastic/asterisk asterisk matches any file in .plastic directories
+ * Done by translating the glob to a regex rather than through `PathMatcher`, because the paths
+ * handed in come from LSP URIs - `file:///f:/Project/Script/Foo.as` has a path of
+ * `/f:/Project/Script/Foo.as`, and `Paths.get` rejects that on Windows with "Illegal char <:> at
+ * index 3". Every call threw, every throw was swallowed as "no match", and the ignore patterns
+ * therefore never ignored anything on Windows while filling the log with warnings.
+ *
+ * Supported syntax, matching what the language server's globs do:
+ * - `*` matches anything within one path segment
+ * - `**` matches across segments, and `** /` also matches no segments at all
+ * - `?` matches a single character within a segment
  */
 object GlobMatcher {
 
-    private val LOG = Logger.getInstance(GlobMatcher::class.java)
+    private val compiled = ConcurrentHashMap<String, Regex>()
 
     /**
-     * Check if a file path matches any of the provided glob patterns.
+     * Whether [filePath] matches any of [patterns].
      *
-     * @param filePath The file path to test (can be absolute or relative)
-     * @param patterns List of glob patterns to match against
-     * @return true if the path matches any pattern, false otherwise
+     * The path may be a plain file path or the path part of a `file:` URI, with either separator.
      */
     fun matchesAny(filePath: String, patterns: List<String>): Boolean {
         if (patterns.isEmpty()) return false
 
-        // Normalize path separators to forward slashes for consistent matching
-        val normalizedPath = filePath.replace('\\', '/')
-
-        LOG.debug("GlobMatcher: Testing path: $normalizedPath against patterns: $patterns")
-
-        val matched = patterns.any { pattern ->
-            val result = matchesPattern(normalizedPath, pattern)
-            if (result) {
-                LOG.info("GlobMatcher: Path '$normalizedPath' MATCHED pattern '$pattern'")
-            }
-            result
-        }
-
-        if (!matched) {
-            LOG.debug("GlobMatcher: Path '$normalizedPath' did NOT match any patterns")
-        }
-
-        return matched
+        val path = normalizePath(filePath)
+        return patterns.any { pattern -> regexFor(pattern).matches(path) }
     }
 
-    /**
-     * Check if a file path matches a single glob pattern.
-     */
-    private fun matchesPattern(filePath: String, pattern: String): Boolean {
-        // Normalize pattern separators
-        val normalizedPattern = pattern.replace('\\', '/')
+    /** `\` to `/`, and no leading slash in front of a Windows drive. */
+    private fun normalizePath(filePath: String): String {
+        val path = filePath.replace('\\', '/')
+        val looksLikeUriDrivePath = path.length > 2 && path[0] == '/' && path[2] == ':'
+        return if (looksLikeUriDrivePath) path.substring(1) else path
+    }
 
-        try {
-            // Use Java NIO PathMatcher with glob syntax
-            val matcher: PathMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:$normalizedPattern")
+    private fun regexFor(pattern: String): Regex =
+        compiled.getOrPut(pattern) { globToRegex(pattern.replace('\\', '/')) }
 
-            val path = Paths.get(filePath)
-            val matches = matcher.matches(path)
-            LOG.debug("GlobMatcher: Pattern '$normalizedPattern' vs path '$filePath' = $matches")
-            return matches
-        } catch (e: Exception) {
-            LOG.warn("GlobMatcher: Exception matching pattern '$normalizedPattern' against '$filePath': ${e.message}")
-            return false
+    private fun globToRegex(pattern: String): Regex {
+        val regex = StringBuilder()
+        var i = 0
+
+        while (i < pattern.length) {
+            val c = pattern[i]
+            when {
+                c == '*' && pattern.startsWith("**/", i) -> {
+                    // A leading '**/' must also match a path with nothing in front of the segment.
+                    regex.append("(?:.*/)?")
+                    i += 3
+                }
+
+                c == '*' && pattern.startsWith("**", i) -> {
+                    regex.append(".*")
+                    i += 2
+                }
+
+                c == '*' -> {
+                    regex.append("[^/]*")
+                    i++
+                }
+
+                c == '?' -> {
+                    regex.append("[^/]")
+                    i++
+                }
+
+                else -> {
+                    regex.append(Regex.escape(c.toString()))
+                    i++
+                }
+            }
         }
+
+        // Case-insensitive throughout: the patterns name directories like Saved and Intermediate,
+        // and the only platform this plugin runs Unreal on does not distinguish their case anyway.
+        return Regex(regex.toString(), RegexOption.IGNORE_CASE)
     }
 }
