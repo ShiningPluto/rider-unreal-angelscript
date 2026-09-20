@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Startup no longer logs spurious `LSP server not ready yet (status: null)` warnings. The readiness probe queried the server id `angelscript` while the server is registered as `angelscript-lsp`, so it could never observe the real status.
 
 ### Internal
+- The repository now keeps decision records under `docs/decisions/`, one file per choice, with the alternatives that were rejected and the evidence that rejected them. `docs/README.md` describes when to write one and how; the deep-dive guides moved to `docs/reference/`. Most of what is hard about this plugin is where the IntelliJ platform, lsp4ij and a language server built for VSCode disagree, and that is knowledge a code comment cannot hold.
 - Dropped the stdio transport patch from the LSP bundler. Upstream now falls back to stdio by itself whenever no Node IPC channel is present, which is always the case for how the plugin launches the server, so the patch only rewrote a branch that is never taken. The bundler warns if upstream ever stops making that choice.
 
 ## 0.9.10 - 2026-04-22

@@ -93,7 +93,7 @@ import java.lang.reflect.Method
  *
  * ## Maintenance Notes
  *
- * See docs/LSP_COMPLETION_WORKAROUND.md for detailed maintenance guide including:
+ * See docs/reference/lsp-completion-workaround.md for detailed maintenance guide including:
  * - How to remove this workaround if upstream fixes the bug
  * - How to update if lsp4ij changes private API
  * - Testing procedures for verifying the fix is still needed

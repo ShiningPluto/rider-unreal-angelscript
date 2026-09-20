@@ -10,7 +10,6 @@ node_modules/
 
 # Analysis artifacts (Claude Code agent system)
 .ai/
-docs/plans/
 
 # Reference
 third-party/angelscript-reference

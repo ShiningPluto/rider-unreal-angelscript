@@ -198,8 +198,7 @@ After grammar changes, always regenerate the parser:
 ## Additional Resources
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines and workflow
-- [CLAUDE.md](CLAUDE.md) - Project guidelines for AI-assisted development
-- [docs/](docs/) - Technical documentation
-  - [ERROR_RECOVERY_STRATEGY.md](docs/ERROR_RECOVERY_STRATEGY.md) - Parser error recovery
-  - [GRAMMAR_MAINTENANCE_STRATEGY.md](docs/GRAMMAR_MAINTENANCE_STRATEGY.md) - Grammar maintenance
-  - [DEBUGGING.md](docs/DEBUGGING.md) - Debugging setup
+- [docs/](docs/) - How the plugin works and why
+  - [docs/decisions/](docs/decisions/) - The choices behind the parts that are not obvious from the code
+  - [docs/reference/](docs/reference/) - Maintenance guides, including [debugging.md](docs/reference/debugging.md)
+  - [debugging.md](docs/reference/debugging.md) - Debugging setup
