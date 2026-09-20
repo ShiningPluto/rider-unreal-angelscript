@@ -262,7 +262,7 @@ dependencies {
         bundledPlugin("JavaScript") // For NodeJS interpreter discovery
 
         // External plugins
-        plugin("com.redhat.devtools.lsp4ij", "0.19.1")
+        plugin("com.redhat.devtools.lsp4ij", "0.21.0")
 
         // Test framework
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
