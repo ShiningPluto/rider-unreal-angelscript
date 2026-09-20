@@ -40875,6 +40875,9 @@ connection.onInitialize((_params) => {
       }
       GlobsRemaining -= 1;
       if (GlobsRemaining <= 0)
+        __asAllRootsScanned = true;
+      // Load what this root found now; a slower root no longer holds the project back.
+      if (!IsServicingQueues)
         TickQueues();
     });
     (0, import_glob.glob)(RootPath + "/.vscode/templates/*.as.template", null, function(err, files) {
@@ -40992,6 +40995,7 @@ function TickQueues() {
     setTimeout(TickQueues, 1);
   } else {
     IsServicingQueues = false;
+    __asOnQueuesSettled();
   }
 }
 function DirtyAllDiagnostics() {
@@ -41626,6 +41630,21 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
   connection.console.log(`[navigateToCpp] Not connected to Unreal Engine`);
   return false;
 });
+
+var __asAllRootsScanned = false;
+var __asInitialLoadReResolved = false;
+
+// Modules resolved before the project finished loading may have resolved cross-module references
+// against a database that was still missing most of it. Resolution is cached on the module and
+// only invalidated by an edit, so without this they stay wrong for the rest of the session -
+// completion recovers on its own (it reads the type database) but go-to-definition does not.
+function __asOnQueuesSettled() {
+  if (__asInitialLoadReResolved || !__asAllRootsScanned || !HasTypesFromUnreal())
+    return;
+  __asInitialLoadReResolved = true;
+  connection.console.log("[initialLoad] All roots scanned; re-resolving modules resolved before that");
+  ReResolveAllModules();
+}
 
 connection.languages.inlineValue.on(function(params) {
   let asmodule = GetAndParseModule(params.textDocument.uri);

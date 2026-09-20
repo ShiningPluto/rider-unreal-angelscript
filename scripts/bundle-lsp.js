@@ -122,6 +122,82 @@ async function bundle() {
 
     console.log('✓ Patched to defer Unreal connection until configuration received');
 
+    // Patch to start loading as soon as any workspace root has been scanned.
+    //
+    // Upstream globs every root for *.as and only calls TickQueues() once the last one finishes,
+    // which assumes the roots are the project. lsp4ij fills them from the solution's content
+    // roots, so in Rider they are the nuget cache, the .NET SDK analyzer directories and the whole
+    // engine tree. Measured on a real project: 53s to scan the engine tree (which contains no
+    // AngelScript at all) and 86s for the project directory, against 0.1s for its Script folder.
+    //
+    // Until that finishes the server knows only the files the editor happens to have opened, and a
+    // module resolved in that window resolves its cross-module references against an almost empty
+    // project - permanently, because a resolved module is never revisited. That is what made
+    // symbols from other files silently unavailable for the first minutes of every session.
+    const globStreamPattern = /GlobsRemaining -= 1;\s*if \(GlobsRemaining <= 0\)\s*TickQueues\(\);/;
+    const globStreamReplacement =
+      'GlobsRemaining -= 1;\n'
+      + '      if (GlobsRemaining <= 0)\n'
+      + '        __asAllRootsScanned = true;\n'
+      + '      // Load what this root found now; a slower root no longer holds the project back.\n'
+      + '      if (!IsServicingQueues)\n'
+      + '        TickQueues();';
+
+    if (globStreamPattern.test(content)) {
+      content = content.replace(globStreamPattern, globStreamReplacement);
+      console.log('✓ Patched to load each workspace root as soon as it has been scanned');
+    } else {
+      console.warn('⚠ Warning: Could not find the workspace root scan to patch');
+    }
+
+    // Patch to re-resolve once the whole project has been loaded.
+    //
+    // The safety net for the window above, which the patch narrows but cannot close: whatever was
+    // resolved while roots were still being scanned is re-resolved once, after the last root has
+    // been scanned and the queues have drained. Upstream only re-resolves when a type database
+    // arrives, and ReResolveAllModules() refuses to run while the queues are being serviced, so
+    // nothing else ever revisits those modules.
+    const settleHookPattern = /(\} else \{\s*)IsServicingQueues = false;(\s*\}\s*\})/;
+    const settleHookReplacement = '$1IsServicingQueues = false;\n    __asOnQueuesSettled();$2';
+
+    if (settleHookPattern.test(content)) {
+      content = content.replace(settleHookPattern, settleHookReplacement);
+      console.log('✓ Patched to re-resolve modules once the project has finished loading');
+    } else {
+      console.warn('⚠ Warning: Could not find the queue drain to patch');
+    }
+
+    const initialLoadSupport = `
+var __asAllRootsScanned = false;
+var __asInitialLoadReResolved = false;
+
+// Modules resolved before the project finished loading may have resolved cross-module references
+// against a database that was still missing most of it. Resolution is cached on the module and
+// only invalidated by an edit, so without this they stay wrong for the rest of the session -
+// completion recovers on its own (it reads the type database) but go-to-definition does not.
+function __asOnQueuesSettled() {
+  if (__asInitialLoadReResolved || !__asAllRootsScanned || !HasTypesFromUnreal())
+    return;
+  __asInitialLoadReResolved = true;
+  connection.console.log("[initialLoad] All roots scanned; re-resolving modules resolved before that");
+  ReResolveAllModules();
+}
+`;
+
+    let initialLoadAdded = false;
+    const initialLoadInsertionPoint = /connection\.onRequest\("angelscript\/getAPIDetails"[\s\S]*?return promise;\s*\}\);/;
+    content = content.replace(initialLoadInsertionPoint, (match) => {
+      if (!initialLoadAdded) {
+        initialLoadAdded = true;
+        return match + initialLoadSupport;
+      }
+      return match;
+    });
+
+    if (!initialLoadAdded) {
+      console.warn('⚠ Warning: Could not find insertion point for the initial load support');
+    }
+
     // Patch to add C++ navigation request handlers
     // These handlers allow the Rider plugin to get C++ symbol info and navigate to C++ code
     const cppNavigationHandlers = `

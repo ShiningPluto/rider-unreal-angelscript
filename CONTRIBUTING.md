@@ -146,6 +146,8 @@ The build scripts (`scripts/bundle-lsp.js` and `scripts/bundle-dap.js`) automati
 **LSP Server Patching** (`scripts/bundle-lsp.js`):
 - **Drive letter normalisation**: Lowercases the drive letter of diagnostic URIs before they are sent, since Rider and the server disagree on its case
 - **Deferred Unreal connection**: Starts with an unconfigured port so the server dials the editor only once the real port arrives, instead of connecting on the default first
+- **Streamed workspace scan**: Loads each workspace root as soon as it has been scanned, instead of waiting for the slowest one - lsp4ij passes every content root of the solution, so the slowest is minutes away and unrelated to AngelScript
+- **Re-resolve after the initial load**: Re-resolves once the last root has been scanned, since modules resolved before the project was loaded cache their failed cross-module lookups until the file is edited
 - **C++ navigation handlers**: Adds `angelscript/getCppSymbol` and `angelscript/navigateToCpp`
 - **Unreal status handler**: Adds `angelscript/getUnrealStatus` and `angelscript/setTypeCacheEnabled`, which back the status bar widget
 - **Type database cache**: Persists the database the editor sends and replays it when no editor is running

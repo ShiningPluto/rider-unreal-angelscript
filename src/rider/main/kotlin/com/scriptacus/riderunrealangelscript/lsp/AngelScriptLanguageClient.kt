@@ -11,10 +11,11 @@ import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 /**
  * Custom language client for AngelScript.
  *
- * Owns the `workspace/didChangeConfiguration` push that every server start depends on. The bundled
- * server ignores `initializationOptions` and keeps `port = -1` until a configuration push arrives,
- * so a server that starts without one never connects to the Unreal editor, never receives the C++
- * type database, and therefore produces neither semantic tokens nor diagnostics.
+ * Owns the `workspace/didChangeConfiguration` push that every server start depends on. No setting
+ * travels in `initializationOptions` - that carries only the script root folders - so the bundled
+ * server keeps `port = -1` until a configuration push arrives, and a server that starts without
+ * one never connects to the Unreal editor, never receives the C++ type database, and therefore
+ * produces neither semantic tokens nor diagnostics.
  *
  * lsp4ij creates a fresh client for every server start, so re-pushing from here covers restarts
  * (crash, `Restart` action, LSP console) and not just the initial project open.

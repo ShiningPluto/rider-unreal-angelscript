@@ -6,11 +6,13 @@ import com.google.gson.JsonObject
 /**
  * Builds the `UnrealAngelscript` configuration payload expected by the bundled language server.
  *
- * The server never reads `initializationOptions`; `workspace/didChangeConfiguration` is its only
- * source of settings. That matters for [AngelScriptLspSettings.State.unrealConnectionPort] in
- * particular: the server starts with `port = -1` and only dials the Unreal editor from inside its
- * `onDidChangeConfiguration` handler. Without a push it never receives the C++ type database, so
- * modules stay unresolved and neither semantic tokens nor diagnostics are ever produced.
+ * No setting reaches the server through `initializationOptions` - that carries only the script
+ * root folders, see [com.scriptacus.riderunrealangelscript.lsp.AngelScriptConnectionProvider] -
+ * so `workspace/didChangeConfiguration` is the only source of settings. That matters for
+ * [AngelScriptLspSettings.State.unrealConnectionPort] in particular: the server starts with
+ * `port = -1` and only dials the Unreal editor from inside its `onDidChangeConfiguration` handler.
+ * Without a push it never receives the C++ type database, so modules stay unresolved and neither
+ * semantic tokens nor diagnostics are ever produced.
  *
  * Every code path that starts or restarts the server therefore has to push this payload - see
  * [com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageClient].
