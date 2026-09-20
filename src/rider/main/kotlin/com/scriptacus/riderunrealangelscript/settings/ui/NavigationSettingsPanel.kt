@@ -19,8 +19,8 @@ class NavigationSettingsPanel(private val state: AngelScriptLspSettings.State) {
                 .comment("""
                     Controls how navigation from AngelScript to C++ symbols works:
                     <ul>
-                    <li><b>Rider</b>: Navigate directly in Rider using text-based symbol search in project.</li>
-                    <li><b>Unreal</b>: Delegate to Unreal Engine.</li>
+                    <li><b>Rider</b>: Open the declaration in Rider, found in the project's C++ sources.</li>
+                    <li><b>Unreal</b>: Let the Unreal editor open it, in the IDE configured there.</li>
                     </ul>
                 """.trimIndent())
         }

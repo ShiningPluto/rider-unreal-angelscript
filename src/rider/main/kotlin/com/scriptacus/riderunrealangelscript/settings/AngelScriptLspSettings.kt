@@ -13,7 +13,7 @@ import com.intellij.util.xmlb.XmlSerializerUtil
 class AngelScriptLspSettings : PersistentStateComponent<AngelScriptLspSettings.State> {
 
     enum class CppNavigationStrategy {
-        /** Navigate to C++ using text-based symbol search in Rider. Requires C++ sources in project. */
+        /** Open the declaration in Rider, found in the project's own C++ sources. Requires them to be there. */
         TEXT_SEARCH {
             override fun toString() = "Rider";
         },

@@ -47,10 +47,11 @@ interface AngelScriptLanguageServer : LanguageServer {
      * Returns the C++ class name and symbol name for client-side navigation in Rider.
      *
      * @param params Object containing uri and position
-     * @return CompletableFuture that resolves to a map with "className" and "symbolName", or null if no C++ symbol
+     * @return CompletableFuture resolving to a map with "className", "symbolName" and "ancestry"
+     *   (the class and its C++ base classes), or null if there is no C++ symbol at that position
      */
     @JsonRequest("angelscript/getCppSymbol")
-    fun getCppSymbol(params: Map<String, Any>): CompletableFuture<Map<String, String>?>
+    fun getCppSymbol(params: Map<String, Any>): CompletableFuture<Map<String, Any>?>
 
     /**
      * Request navigation to C++ source for a symbol at a given position via Unreal Engine.
