@@ -35,6 +35,12 @@ This plugin bundles and integrates the AngelScript language server from the exce
 
 See [docs/reference/debugging.md](docs/reference/debugging.md) for details and setup instructions.
 
+### AI Agents (MCP)
+When Rider's MCP server is enabled (**Settings** → **Tools** → **MCP Server**), agents connected to it get AngelScript tools alongside Rider's own:
+- **`angelscript_get_problems`** - Errors and warnings in script files, including the compile errors Unreal reports on hot reload
+- **`angelscript_search_api`** / **`angelscript_get_api_details`** - The C++ API bound to AngelScript, under the names and call syntax script uses
+- **`angelscript_status`** - Whether analysis is available, and why not when it is not
+
 ## Requirements
 
 - **JetBrains Rider** 2024.2 or newer

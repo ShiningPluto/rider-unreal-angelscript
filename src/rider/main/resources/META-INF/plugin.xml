@@ -11,6 +11,8 @@
     <depends>com.redhat.devtools.lsp4ij</depends>
     <depends>org.jetbrains.plugins.textmate</depends>
     <depends>JavaScript</depends><!-- For NodeJS interpreter discovery -->
+    <!-- AngelScript tools for AI agents; the plugin works without the MCP server, so it stays optional -->
+    <depends optional="true" config-file="angelscript-mcp.xml">com.intellij.mcpServer</depends>
 
     <description>
         <![CDATA[

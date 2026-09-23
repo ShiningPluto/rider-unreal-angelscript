@@ -260,6 +260,7 @@ dependencies {
         // Bundled plugins
         bundledPlugin("org.jetbrains.plugins.textmate")
         bundledPlugin("JavaScript") // For NodeJS interpreter discovery
+        bundledPlugin("com.intellij.mcpServer") // Optional at runtime: AngelScript tools for the IDE's MCP server
 
         // External plugins
         plugin("com.redhat.devtools.lsp4ij", "0.21.0")

@@ -69,7 +69,7 @@ id: 0007
 title: One sentence, in the imperative or as a statement of fact
 status: accepted          # proposed | accepted | superseded | reverted
 date: 2026-09-20          # when the decision was taken
-area: cpp-navigation      # lsp-bundle | lsp-client | cpp-navigation | build | editor | docs
+area: cpp-navigation      # lsp-bundle | lsp-client | cpp-navigation | mcp | build | editor | docs
 applies-to:               # the versions the decision was taken against; omit what is irrelevant
   plugin: 0.9.10
   lsp4ij: "0.21"

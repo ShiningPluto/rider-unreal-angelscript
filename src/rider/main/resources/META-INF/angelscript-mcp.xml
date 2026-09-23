@@ -1,0 +1,6 @@
+<idea-plugin>
+    <!-- Loaded only when the IDE's MCP server plugin is enabled; see the optional dependency in plugin.xml -->
+    <extensions defaultExtensionNs="com.intellij.mcpServer">
+        <mcpToolset implementation="com.scriptacus.riderunrealangelscript.mcp.AngelScriptMcpToolset"/>
+    </extensions>
+</idea-plugin>
