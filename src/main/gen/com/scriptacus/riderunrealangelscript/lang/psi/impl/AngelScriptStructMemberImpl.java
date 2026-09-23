@@ -29,6 +29,12 @@ public class AngelScriptStructMemberImpl extends ASTWrapperPsiElement implements
 
   @Override
   @Nullable
+  public AngelScriptAccessDecl getAccessDecl() {
+    return findChildByClass(AngelScriptAccessDecl.class);
+  }
+
+  @Override
+  @Nullable
   public AngelScriptClassMethodDecl getClassMethodDecl() {
     return findChildByClass(AngelScriptClassMethodDecl.class);
   }

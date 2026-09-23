@@ -29,8 +29,14 @@ public class AngelScriptAccessDeclImpl extends ASTWrapperPsiElement implements A
 
   @Override
   @NotNull
-  public List<AngelScriptAccessEntry> getAccessEntryList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, AngelScriptAccessEntry.class);
+  public List<AngelScriptAccessClass> getAccessClassList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, AngelScriptAccessClass.class);
+  }
+
+  @Override
+  @NotNull
+  public AngelScriptAccessLevel getAccessLevel() {
+    return findNotNullChildByClass(AngelScriptAccessLevel.class);
   }
 
 }

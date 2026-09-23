@@ -25,7 +25,7 @@
 // BNF:0 - SCRIPT (Top-Level Structure)
 // ════════════════════════════════════════════════════════════════════════════════
 // Official: SCRIPT ::= {IMPORT | ENUM | TYPEDEF | CLASS | MIXIN | LOCAL | INTERFACE | FUNCDEF | VIRTPROP | VAR | FUNC | NAMESPACE | ';'}
-// Extensions: Added Unreal-specific declarations (delegate_decl, event_decl, asset_decl, access_decl)
+// Extensions: Added Unreal-specific declarations (delegate_decl, event_decl, asset_decl)
 // Note: Preprocessor directives (#if, #elif, etc.) are treated as comments by the lexer
 
 script ::= script_item*
@@ -41,7 +41,6 @@ private script_item ::=
   | delegate_decl         // Unreal extension
   | event_decl            // Unreal extension
   | asset_decl            // Unreal extension
-  | access_decl           // Unreal extension
   | END_STATEMENT
 
 
@@ -126,7 +125,8 @@ private unfinished_struct_body ::= START_STATEMENT_BLOCK struct_member* {
 struct_body ::= unfinished_struct_body END_STATEMENT_BLOCK?
 
 struct_member ::=
-    constructor_decl             // Must come before class_method_decl to avoid ambiguity (no return type)
+    access_decl                  // Unreal extension
+  | constructor_decl             // Must come before class_method_decl to avoid ambiguity (no return type)
   | destructor_decl              // Destructor (must come before class_method_decl to avoid ambiguity)
   | class_method_decl            // Struct methods with optional access specifiers (same as class methods)
   | struct_property_decl         // UPROPERTY support in structs (includes access_specifier)
@@ -233,19 +233,21 @@ asset_decl ::= ASSET IDENTIFIER OF typename (END_STATEMENT | asset_body)?
 
 asset_body ::= START_STATEMENT_BLOCK statement* END_STATEMENT_BLOCK
 
-// Access: fine-grained access control for specific classes/methods
-// Usage: access Subclass = private Foo, protected Bar(readonly);
-access_decl ::= ACCESS IDENTIFIER ASSIGNMENT access_entry (LIST_SEPARATOR access_entry)* END_STATEMENT
+// Access: a named access specifier, declared inside the class or struct whose members use it
+// Usage: access Internal = private, UHazeCapability (inherited, readonly), * (editdefaults);
+// The base level always comes first; each following entry grants extra access to a class,
+// a global function, or '*' (every class), narrowed by optional modifiers.
+// Members opt in with the access_specifier form 'access:Internal'.
+access_decl ::= ACCESS IDENTIFIER ASSIGNMENT access_level (LIST_SEPARATOR access_class)* END_STATEMENT
 
-access_entry ::= access_level? access_class
+access_level ::= PRIVATE | PROTECTED
 
-access_level ::= PRIVATE | PROTECTED | PUBLIC
+access_class ::= (IDENTIFIER | STAR) access_modifiers?
 
-access_class ::= (IDENTIFIER | STAR | call_expression) access_modifiers?
+// Empty parentheses occur in real code ('FindOwningSimulationLoop()') and grant no modifiers
+access_modifiers ::= OPEN_PARENTHESIS (access_modifier (LIST_SEPARATOR access_modifier)*)? CLOSE_PARENTHESIS
 
-access_modifiers ::= OPEN_PARENTHESIS access_modifier (LIST_SEPARATOR access_modifier)* CLOSE_PARENTHESIS
-
-access_modifier ::= IDENTIFIER  // readonly, inherited, editdefaults, etc.
+access_modifier ::= IDENTIFIER  // inherited, readonly, editdefaults
 
 
 // ──────────────────────────────────────────────────────────────────────────────

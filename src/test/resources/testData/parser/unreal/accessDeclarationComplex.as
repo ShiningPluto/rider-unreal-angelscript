@@ -1,1 +1,9 @@
-access GameplayOnly = protected AGameMode, APlayerController (editdefaults), private *;
+class UAccessExample
+{
+    access Grants = protected, UExampleCapability (inherited, readonly), AHazePlayerCharacter, ExampleGlobalFunction(), * (editdefaults);
+
+    access:Grants
+    void Method()
+    {
+    }
+}

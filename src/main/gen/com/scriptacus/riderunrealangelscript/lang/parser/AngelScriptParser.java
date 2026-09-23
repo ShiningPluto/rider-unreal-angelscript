@@ -119,9 +119,10 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // (IDENTIFIER | STAR | call_expression) access_modifiers?
+  // (IDENTIFIER | STAR) access_modifiers?
   public static boolean access_class(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_class")) return false;
+    if (!nextTokenIs(builder_, "<access class>", IDENTIFIER, STAR)) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_, level_, _NONE_, ACCESS_CLASS, "<access class>");
     result_ = access_class_0(builder_, level_ + 1);
@@ -130,13 +131,12 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     return result_;
   }
 
-  // IDENTIFIER | STAR | call_expression
+  // IDENTIFIER | STAR
   private static boolean access_class_0(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_class_0")) return false;
     boolean result_;
     result_ = consumeToken(builder_, IDENTIFIER);
     if (!result_) result_ = consumeToken(builder_, STAR);
-    if (!result_) result_ = call_expression(builder_, level_ + 1);
     return result_;
   }
 
@@ -148,21 +148,21 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // ACCESS IDENTIFIER ASSIGNMENT access_entry (LIST_SEPARATOR access_entry)* END_STATEMENT
+  // ACCESS IDENTIFIER ASSIGNMENT access_level (LIST_SEPARATOR access_class)* END_STATEMENT
   public static boolean access_decl(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_decl")) return false;
     if (!nextTokenIs(builder_, ACCESS)) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_);
     result_ = consumeTokens(builder_, 0, ACCESS, IDENTIFIER, ASSIGNMENT);
-    result_ = result_ && access_entry(builder_, level_ + 1);
+    result_ = result_ && access_level(builder_, level_ + 1);
     result_ = result_ && access_decl_4(builder_, level_ + 1);
     result_ = result_ && consumeToken(builder_, END_STATEMENT);
     exit_section_(builder_, marker_, ACCESS_DECL, result_);
     return result_;
   }
 
-  // (LIST_SEPARATOR access_entry)*
+  // (LIST_SEPARATOR access_class)*
   private static boolean access_decl_4(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_decl_4")) return false;
     while (true) {
@@ -173,45 +173,26 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     return true;
   }
 
-  // LIST_SEPARATOR access_entry
+  // LIST_SEPARATOR access_class
   private static boolean access_decl_4_0(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_decl_4_0")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_);
     result_ = consumeToken(builder_, LIST_SEPARATOR);
-    result_ = result_ && access_entry(builder_, level_ + 1);
+    result_ = result_ && access_class(builder_, level_ + 1);
     exit_section_(builder_, marker_, null, result_);
     return result_;
   }
 
   /* ********************************************************** */
-  // access_level? access_class
-  public static boolean access_entry(PsiBuilder builder_, int level_) {
-    if (!recursion_guard_(builder_, level_, "access_entry")) return false;
-    boolean result_;
-    Marker marker_ = enter_section_(builder_, level_, _NONE_, ACCESS_ENTRY, "<access entry>");
-    result_ = access_entry_0(builder_, level_ + 1);
-    result_ = result_ && access_class(builder_, level_ + 1);
-    exit_section_(builder_, level_, marker_, result_, false, null);
-    return result_;
-  }
-
-  // access_level?
-  private static boolean access_entry_0(PsiBuilder builder_, int level_) {
-    if (!recursion_guard_(builder_, level_, "access_entry_0")) return false;
-    access_level(builder_, level_ + 1);
-    return true;
-  }
-
-  /* ********************************************************** */
-  // PRIVATE | PROTECTED | PUBLIC
+  // PRIVATE | PROTECTED
   public static boolean access_level(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_level")) return false;
+    if (!nextTokenIs(builder_, "<access level>", PRIVATE, PROTECTED)) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_, level_, _NONE_, ACCESS_LEVEL, "<access level>");
     result_ = consumeToken(builder_, PRIVATE);
     if (!result_) result_ = consumeToken(builder_, PROTECTED);
-    if (!result_) result_ = consumeToken(builder_, PUBLIC);
     exit_section_(builder_, level_, marker_, result_, false, null);
     return result_;
   }
@@ -229,34 +210,51 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // OPEN_PARENTHESIS access_modifier (LIST_SEPARATOR access_modifier)* CLOSE_PARENTHESIS
+  // OPEN_PARENTHESIS (access_modifier (LIST_SEPARATOR access_modifier)*)? CLOSE_PARENTHESIS
   public static boolean access_modifiers(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "access_modifiers")) return false;
     if (!nextTokenIs(builder_, OPEN_PARENTHESIS)) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_);
     result_ = consumeToken(builder_, OPEN_PARENTHESIS);
-    result_ = result_ && access_modifier(builder_, level_ + 1);
-    result_ = result_ && access_modifiers_2(builder_, level_ + 1);
+    result_ = result_ && access_modifiers_1(builder_, level_ + 1);
     result_ = result_ && consumeToken(builder_, CLOSE_PARENTHESIS);
     exit_section_(builder_, marker_, ACCESS_MODIFIERS, result_);
     return result_;
   }
 
+  // (access_modifier (LIST_SEPARATOR access_modifier)*)?
+  private static boolean access_modifiers_1(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "access_modifiers_1")) return false;
+    access_modifiers_1_0(builder_, level_ + 1);
+    return true;
+  }
+
+  // access_modifier (LIST_SEPARATOR access_modifier)*
+  private static boolean access_modifiers_1_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "access_modifiers_1_0")) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = access_modifier(builder_, level_ + 1);
+    result_ = result_ && access_modifiers_1_0_1(builder_, level_ + 1);
+    exit_section_(builder_, marker_, null, result_);
+    return result_;
+  }
+
   // (LIST_SEPARATOR access_modifier)*
-  private static boolean access_modifiers_2(PsiBuilder builder_, int level_) {
-    if (!recursion_guard_(builder_, level_, "access_modifiers_2")) return false;
+  private static boolean access_modifiers_1_0_1(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "access_modifiers_1_0_1")) return false;
     while (true) {
       int pos_ = current_position_(builder_);
-      if (!access_modifiers_2_0(builder_, level_ + 1)) break;
-      if (!empty_element_parsed_guard_(builder_, "access_modifiers_2", pos_)) break;
+      if (!access_modifiers_1_0_1_0(builder_, level_ + 1)) break;
+      if (!empty_element_parsed_guard_(builder_, "access_modifiers_1_0_1", pos_)) break;
     }
     return true;
   }
 
   // LIST_SEPARATOR access_modifier
-  private static boolean access_modifiers_2_0(PsiBuilder builder_, int level_) {
-    if (!recursion_guard_(builder_, level_, "access_modifiers_2_0")) return false;
+  private static boolean access_modifiers_1_0_1_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "access_modifiers_1_0_1_0")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_);
     result_ = consumeToken(builder_, LIST_SEPARATOR);
@@ -2042,7 +2040,6 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   //   | delegate_decl         // Unreal extension
   //   | event_decl            // Unreal extension
   //   | asset_decl            // Unreal extension
-  //   | access_decl           // Unreal extension
   //   | END_STATEMENT
   static boolean script_item(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "script_item")) return false;
@@ -2056,7 +2053,6 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     if (!result_) result_ = delegate_decl(builder_, level_ + 1);
     if (!result_) result_ = event_decl(builder_, level_ + 1);
     if (!result_) result_ = asset_decl(builder_, level_ + 1);
-    if (!result_) result_ = access_decl(builder_, level_ + 1);
     if (!result_) result_ = consumeToken(builder_, END_STATEMENT);
     return result_;
   }
@@ -2213,7 +2209,8 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // constructor_decl             // Must come before class_method_decl to avoid ambiguity (no return type)
+  // access_decl                  // Unreal extension
+  //   | constructor_decl             // Must come before class_method_decl to avoid ambiguity (no return type)
   //   | destructor_decl              // Destructor (must come before class_method_decl to avoid ambiguity)
   //   | class_method_decl            // Struct methods with optional access specifiers (same as class methods)
   //   | struct_property_decl
@@ -2221,7 +2218,8 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     if (!recursion_guard_(builder_, level_, "struct_member")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_, level_, _NONE_, STRUCT_MEMBER, "<struct member>");
-    result_ = constructor_decl(builder_, level_ + 1);
+    result_ = access_decl(builder_, level_ + 1);
+    if (!result_) result_ = constructor_decl(builder_, level_ + 1);
     if (!result_) result_ = destructor_decl(builder_, level_ + 1);
     if (!result_) result_ = class_method_decl(builder_, level_ + 1);
     if (!result_) result_ = struct_property_decl(builder_, level_ + 1);

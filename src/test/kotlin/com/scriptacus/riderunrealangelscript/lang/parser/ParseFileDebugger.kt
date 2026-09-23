@@ -7,7 +7,8 @@ import java.io.File
 /**
  * Reusable utility for debugging parse errors in arbitrary AngelScript files.
  *
- * Usage: ./gradlew test --tests "ParseFileDebugger.testParseFile" -Dtest.file="path/to/file.as"
+ * Usage: ./gradlew test --tests "ParseFileDebugger.testParseFile" -Dtest.file="path/to/file.as" -i
+ * (-i shows the printed report; add --rerun to repeat a run whose inputs haven't changed)
  *
  * Output shows:
  * - Total number of parse errors
