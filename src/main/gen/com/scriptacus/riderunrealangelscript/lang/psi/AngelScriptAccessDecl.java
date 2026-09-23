@@ -8,6 +8,9 @@ import com.intellij.psi.PsiElement;
 public interface AngelScriptAccessDecl extends PsiElement {
 
   @NotNull
-  List<AngelScriptAccessEntry> getAccessEntryList();
+  List<AngelScriptAccessClass> getAccessClassList();
+
+  @NotNull
+  AngelScriptAccessLevel getAccessLevel();
 
 }

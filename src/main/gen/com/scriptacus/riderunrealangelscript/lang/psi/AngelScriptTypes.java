@@ -10,7 +10,6 @@ public interface AngelScriptTypes {
 
   IElementType ACCESS_CLASS = new AngelScriptElementType("ACCESS_CLASS");
   IElementType ACCESS_DECL = new AngelScriptElementType("ACCESS_DECL");
-  IElementType ACCESS_ENTRY = new AngelScriptElementType("ACCESS_ENTRY");
   IElementType ACCESS_LEVEL = new AngelScriptElementType("ACCESS_LEVEL");
   IElementType ACCESS_MODIFIER = new AngelScriptElementType("ACCESS_MODIFIER");
   IElementType ACCESS_MODIFIERS = new AngelScriptElementType("ACCESS_MODIFIERS");
@@ -266,9 +265,6 @@ public interface AngelScriptTypes {
       }
       else if (type == ACCESS_DECL) {
         return new AngelScriptAccessDeclImpl(node);
-      }
-      else if (type == ACCESS_ENTRY) {
-        return new AngelScriptAccessEntryImpl(node);
       }
       else if (type == ACCESS_LEVEL) {
         return new AngelScriptAccessLevelImpl(node);

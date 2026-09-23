@@ -15,10 +15,6 @@ public class AngelScriptVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitAccessEntry(@NotNull AngelScriptAccessEntry o) {
-    visitPsiElement(o);
-  }
-
   public void visitAccessLevel(@NotNull AngelScriptAccessLevel o) {
     visitPsiElement(o);
   }

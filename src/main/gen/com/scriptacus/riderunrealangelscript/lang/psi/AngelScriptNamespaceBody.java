@@ -8,9 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface AngelScriptNamespaceBody extends PsiElement {
 
   @NotNull
-  List<AngelScriptAccessDecl> getAccessDeclList();
-
-  @NotNull
   List<AngelScriptAssetDecl> getAssetDeclList();
 
   @NotNull

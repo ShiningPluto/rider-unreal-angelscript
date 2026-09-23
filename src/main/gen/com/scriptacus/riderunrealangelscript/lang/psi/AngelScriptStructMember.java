@@ -8,6 +8,9 @@ import com.intellij.psi.PsiElement;
 public interface AngelScriptStructMember extends PsiElement {
 
   @Nullable
+  AngelScriptAccessDecl getAccessDecl();
+
+  @Nullable
   AngelScriptClassMethodDecl getClassMethodDecl();
 
   @Nullable

@@ -29,12 +29,6 @@ public class AngelScriptNamespaceBodyImpl extends ASTWrapperPsiElement implement
 
   @Override
   @NotNull
-  public List<AngelScriptAccessDecl> getAccessDeclList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, AngelScriptAccessDecl.class);
-  }
-
-  @Override
-  @NotNull
   public List<AngelScriptAssetDecl> getAssetDeclList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, AngelScriptAssetDecl.class);
   }

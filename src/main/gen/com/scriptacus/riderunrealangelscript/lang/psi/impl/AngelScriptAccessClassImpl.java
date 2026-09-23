@@ -33,10 +33,4 @@ public class AngelScriptAccessClassImpl extends ASTWrapperPsiElement implements 
     return findChildByClass(AngelScriptAccessModifiers.class);
   }
 
-  @Override
-  @Nullable
-  public AngelScriptCallExpression getCallExpression() {
-    return findChildByClass(AngelScriptCallExpression.class);
-  }
-
 }
