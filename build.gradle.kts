@@ -281,8 +281,10 @@ tasks.runIde {
 
 tasks.test {
     useJUnitPlatform()
-    // -D on the Gradle command line doesn't reach the forked test JVM; forward the file ParseFileDebugger reads
-    providers.systemProperty("test.file").orNull?.let { systemProperty("test.file", it) }
+    // -D on the Gradle command line doesn't reach the forked test JVM; forward what the parser utilities read
+    listOf("test.file", "corpus.report").forEach { name ->
+        providers.systemProperty(name).orNull?.let { systemProperty(name, it) }
+    }
     // Exclude formatter and folding tests - they require full Rider infrastructure
     // Functionality should be tested manually in Rider sandbox
     exclude("**/AngelScriptFormatterTest.class")

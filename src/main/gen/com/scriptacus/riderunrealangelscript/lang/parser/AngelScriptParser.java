@@ -1308,7 +1308,9 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // CONST | FINAL | OVERRIDE | PROPERTY
+  // CONST | FINAL | OVERRIDE | PROPERTY | MIXIN
+  //   | 'no_discard' | 'allow_discard' | 'deprecated'
+  //   | 'accept_temporary_this' | 'external_implicit_this' | '__generated'
   public static boolean function_qualifier(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "function_qualifier")) return false;
     boolean result_;
@@ -1317,6 +1319,13 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     if (!result_) result_ = consumeToken(builder_, FINAL);
     if (!result_) result_ = consumeToken(builder_, OVERRIDE);
     if (!result_) result_ = consumeToken(builder_, PROPERTY);
+    if (!result_) result_ = consumeToken(builder_, MIXIN);
+    if (!result_) result_ = consumeToken(builder_, "no_discard");
+    if (!result_) result_ = consumeToken(builder_, "allow_discard");
+    if (!result_) result_ = consumeToken(builder_, "deprecated");
+    if (!result_) result_ = consumeToken(builder_, "accept_temporary_this");
+    if (!result_) result_ = consumeToken(builder_, "external_implicit_this");
+    if (!result_) result_ = consumeToken(builder_, "__generated");
     exit_section_(builder_, level_, marker_, result_, false, null);
     return result_;
   }
