@@ -11,6 +11,7 @@ Why the code is the way it is. Format and rules: [../README.md](../README.md).
 | [0005](0005-find-cpp-declarations-by-reading-headers.md) | Find C++ declarations by reading headers, because Rider's C++ index is out of reach | cpp-navigation | accepted | 2026-09-20 |
 | [0006](0006-answer-goto-declaration-synchronously.md) | Answer go-to-declaration while the caret waits, and hand back a real target | cpp-navigation | accepted | 2026-09-20 |
 | [0007](0007-match-ignore-globs-as-text.md) | Match ignore globs against the path text, not through java.nio PathMatcher | lsp-client | accepted | 2026-09-20 |
+| [0008](0008-take-the-grammar-from-the-engine-parser.md) | Take the grammar from the engine's parser, and measure every change against shipped scripts | editor | accepted | 2026-09-23 |
 
 ## Reading order
 
@@ -21,6 +22,9 @@ the project. Those two carry most of the context for everything else.
 
 Working on C++ navigation: [0005](0005-find-cpp-declarations-by-reading-headers.md) then
 [0006](0006-answer-goto-declaration-synchronously.md).
+
+Changing the grammar or the lexer: [0008](0008-take-the-grammar-from-the-engine-parser.md) says
+where the rules come from and how a change is measured.
 
 Sending anything to the language server: [0002](0002-send-lowercase-drive-letters-to-the-server.md)
 is an invariant, not a suggestion.

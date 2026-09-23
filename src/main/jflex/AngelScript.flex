@@ -239,7 +239,11 @@ STRING = {DQ_STRING}|{SQ_STRING}|{TRIPLE_QUOTE_STRING}
     "}}" { return AngelScriptTypes.FSTRING_ESCAPED_RBRACE; }
     "{" { fstringBraceDepth = 1; yybegin(IN_FSTRING_EXPR); return AngelScriptTypes.FSTRING_EXPR_BEGIN; }
     "\"" { fstringBraceDepth = 0; yybegin(YYINITIAL); return AngelScriptTypes.FSTRING_END; }
-    [^{}\"]+ { return AngelScriptTypes.FSTRING_TEXT; }
+    // The engine's preprocessor copies literal text into an ordinary string literal, so a
+    // backslash escapes the next character (\" does not end the f-string), and outside an
+    // expression only "}}" means anything: a lone '}' is text (longest match keeps "}}" above)
+    ([^{}\"\\] | \\[^])+ { return AngelScriptTypes.FSTRING_TEXT; }
+    "}" { return AngelScriptTypes.FSTRING_TEXT; }
     [^] { return TokenType.BAD_CHARACTER; }
 }
 

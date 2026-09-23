@@ -25,18 +25,6 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
             val content = file.readText()
             val lines = content.lines().size
 
-            // Skip files with Hazelight-specific extensions
-            if (content.contains("access:")) {
-                return ParseResult(file, lines, false, "Contains access: syntax (Hazelight extension)")
-            }
-
-            // Skip files with Hazelight-specific named argument = syntax
-            // Pattern: function(param = value) instead of standard function(param: value)
-            val namedArgPatterns = listOf("bConsume = ", "DefaultValue = ", "ResultIfZero = ", "bDefaultValue = ")
-            if (namedArgPatterns.any { content.contains(it) }) {
-                return ParseResult(file, lines, false, "Contains named argument = syntax (Hazelight extension)")
-            }
-
             myFile = createFile(file.name, content)
             ensureParsed(myFile)
 
@@ -49,23 +37,23 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
         }
     }
 
+    // Some directories in the scripts are named like files, e.g. GoatLaserEyesCapability.as/
+    private fun scriptFiles(scriptDir: File): List<File> =
+        scriptDir.walkTopDown().filter { it.isFile && it.extension == "as" }.toList()
+
     fun testValidateLargestFiles() {
         val scriptDir = File(getTestDataPath())
         require(scriptDir.exists()) { "Script directory not found: ${scriptDir.absolutePath}" }
 
         // Find all .as files sorted by size (largest first)
-        // Note: Files with 'access:identifier' syntax are filtered during parsing
-        val files = scriptDir.walkTopDown()
-            .filter { it.extension == "as" }
+        val files = scriptFiles(scriptDir)
             .sortedByDescending { it.length() }
-            .take(30) // Take more since some will be filtered
-            .toList()
+            .take(30)
 
         println("\n=== Validating largest production files ===\n")
 
         var successCount = 0
         var failCount = 0
-        var skippedCount = 0
         val failures = mutableListOf<ParseResult>()
 
         files.forEach { file ->
@@ -74,9 +62,6 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
             if (result.success) {
                 successCount++
                 println("✓ ${file.name} (${result.lines} lines)")
-            } else if (result.errorMessage?.contains("Hazelight extension") == true) {
-                skippedCount++
-                // Don't print skipped files
             } else {
                 failCount++
                 failures.add(result)
@@ -87,7 +72,6 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
         println("\n=== Summary ===")
         println("Success: $successCount")
         println("Failed: $failCount")
-        println("Skipped (Hazelight extensions): $skippedCount")
         println("Total tested: ${successCount + failCount}")
         if (successCount + failCount > 0) {
             println("Pass rate: ${(successCount * 100.0 / (successCount + failCount)).format(1)}%")
@@ -100,7 +84,7 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
             }
         }
 
-        // Require 100% pass rate on tested files (excluding skipped access: files)
+        // Require 100% pass rate on tested files
         assertTrue("$failCount files failed to parse", failCount == 0)
     }
 
@@ -109,10 +93,7 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
         require(scriptDir.exists()) { "Script directory not found: ${scriptDir.absolutePath}" }
 
         // Get random sample of files weighted towards larger files
-        // Note: Files with 'access:identifier' syntax are filtered during parsing
-        val allFiles = scriptDir.walkTopDown()
-            .filter { it.extension == "as" }
-            .toList()
+        val allFiles = scriptFiles(scriptDir)
 
         val sampleSize = minOf(50, allFiles.size)
         val sample = allFiles
@@ -125,7 +106,6 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
 
         var successCount = 0
         var failCount = 0
-        var skippedCount = 0
         val failures = mutableListOf<ParseResult>()
 
         sample.forEach { file ->
@@ -133,8 +113,6 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
 
             if (result.success) {
                 successCount++
-            } else if (result.errorMessage?.contains("Hazelight extension") == true) {
-                skippedCount++
             } else {
                 failCount++
                 failures.add(result)
@@ -145,7 +123,6 @@ class ValidateProductionFilesTest : ParsingTestCase("parser", "as", true, AngelS
         println("\n=== Summary ===")
         println("Success: $successCount")
         println("Failed: $failCount")
-        println("Skipped (Hazelight extensions): $skippedCount")
         println("Total tested: ${successCount + failCount}")
         if (successCount + failCount > 0) {
             println("Pass rate: ${(successCount * 100.0 / (successCount + failCount)).format(1)}%")

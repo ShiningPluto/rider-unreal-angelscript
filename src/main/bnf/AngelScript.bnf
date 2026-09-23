@@ -169,7 +169,11 @@ return_type ::= VOID | typename
 
 function_qualifiers ::= function_qualifier+
 
-function_qualifier ::= CONST | FINAL | OVERRIDE | PROPERTY
+// After const, the engine takes any of the attributes asCParser::ParseMethodAttributes lists.
+// The quoted ones are matched by text: they are keywords only here, identifiers anywhere else.
+function_qualifier ::= CONST | FINAL | OVERRIDE | PROPERTY | MIXIN
+  | 'no_discard' | 'allow_discard' | 'deprecated'
+  | 'accept_temporary_this' | 'external_implicit_this' | '__generated'
 
 parameter_list ::= (parameter (LIST_SEPARATOR parameter)* LIST_SEPARATOR?)?
 
