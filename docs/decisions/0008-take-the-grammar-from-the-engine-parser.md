@@ -65,6 +65,7 @@ Measured with `CorpusParseReport`, 2026-09-23:
 | `access` declarations as the engine parses them | 205 | 0 |
 | every trailing function attribute `ParseMethodAttributes` accepts | 200 | 0 |
 | f-string literal text as the preprocessor reads it | 187 | 0 |
+| a lone `;` in a class or struct body, which `ParseClass` skips | 29 | 0 |
 
 ## Decision
 
@@ -108,9 +109,8 @@ too, or that it cannot reach a public project.
   `CorpusParseReport` cannot run. This was already true of the test before.
 - The engine source consulted is a third party's snapshot from 2025-03. Hazelight's current plugin
   may have moved on.
-- 187 files still fail. 157 have a stray `;` after a class member (`void F() {};`, `;;`), which the
-  engine tolerates. 27 have macro arguments the grammar rejects, such as a negative number or `!`
-  inside `meta = (...)`. That leaves three more.
+- 29 files still fail. 27 have macro arguments the grammar rejects, such as a negative number or
+  `!` inside `meta = (...)`. That leaves two more.
 
 ## How this breaks
 
@@ -126,3 +126,4 @@ too, or that it cannot reach a public project.
 
 - 2026-09-23 - Taken while correcting `access` declarations, `no_discard`/`allow_discard` and
   f-string literal text.
+- 2026-09-23 - Empty declarations in class and struct bodies: 187 failing files down to 29.

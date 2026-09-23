@@ -79,7 +79,8 @@ class_inheritance ::= COLON scoped_identifier
 
 // Unfinished pattern for error recovery (Solidity plugin approach)
 // Closing brace is optional to allow recovery when it's missing
-private unfinished_class_body ::= START_STATEMENT_BLOCK class_member* {
+// A lone ';' is an empty declaration the engine skips ('void F() {};'); it stays a bare token
+private unfinished_class_body ::= START_STATEMENT_BLOCK (class_member | END_STATEMENT)* {
     pin = 1
     recoverWhile = UntilBraceRecover
 }
@@ -117,7 +118,7 @@ struct_decl ::= ustruct_macro? STRUCT IDENTIFIER struct_body?
 
 // Unfinished pattern for error recovery (Solidity plugin approach)
 // Closing brace is optional to allow recovery when it's missing
-private unfinished_struct_body ::= START_STATEMENT_BLOCK struct_member* {
+private unfinished_struct_body ::= START_STATEMENT_BLOCK (struct_member | END_STATEMENT)* {
     pin = 1
     recoverWhile = UntilBraceRecover
 }

@@ -2478,7 +2478,7 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // START_STATEMENT_BLOCK class_member*
+  // START_STATEMENT_BLOCK (class_member | END_STATEMENT)*
   static boolean unfinished_class_body(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "unfinished_class_body")) return false;
     boolean result_, pinned_;
@@ -2490,15 +2490,24 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     return result_ || pinned_;
   }
 
-  // class_member*
+  // (class_member | END_STATEMENT)*
   private static boolean unfinished_class_body_1(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "unfinished_class_body_1")) return false;
     while (true) {
       int pos_ = current_position_(builder_);
-      if (!class_member(builder_, level_ + 1)) break;
+      if (!unfinished_class_body_1_0(builder_, level_ + 1)) break;
       if (!empty_element_parsed_guard_(builder_, "unfinished_class_body_1", pos_)) break;
     }
     return true;
+  }
+
+  // class_member | END_STATEMENT
+  private static boolean unfinished_class_body_1_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "unfinished_class_body_1_0")) return false;
+    boolean result_;
+    result_ = class_member(builder_, level_ + 1);
+    if (!result_) result_ = consumeToken(builder_, END_STATEMENT);
+    return result_;
   }
 
   /* ********************************************************** */
@@ -2574,7 +2583,7 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // START_STATEMENT_BLOCK struct_member*
+  // START_STATEMENT_BLOCK (struct_member | END_STATEMENT)*
   static boolean unfinished_struct_body(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "unfinished_struct_body")) return false;
     boolean result_, pinned_;
@@ -2586,15 +2595,24 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     return result_ || pinned_;
   }
 
-  // struct_member*
+  // (struct_member | END_STATEMENT)*
   private static boolean unfinished_struct_body_1(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "unfinished_struct_body_1")) return false;
     while (true) {
       int pos_ = current_position_(builder_);
-      if (!struct_member(builder_, level_ + 1)) break;
+      if (!unfinished_struct_body_1_0(builder_, level_ + 1)) break;
       if (!empty_element_parsed_guard_(builder_, "unfinished_struct_body_1", pos_)) break;
     }
     return true;
+  }
+
+  // struct_member | END_STATEMENT
+  private static boolean unfinished_struct_body_1_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "unfinished_struct_body_1_0")) return false;
+    boolean result_;
+    result_ = struct_member(builder_, level_ + 1);
+    if (!result_) result_ = consumeToken(builder_, END_STATEMENT);
+    return result_;
   }
 
   /* ********************************************************** */
