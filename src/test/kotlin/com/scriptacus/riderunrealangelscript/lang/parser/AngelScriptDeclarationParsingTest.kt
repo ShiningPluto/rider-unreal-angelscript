@@ -10,6 +10,7 @@ class AngelScriptDeclarationParsingTest : AngelScriptParsingTestBase("parser/dec
     fun testReferenceParameters() = doTest(true)
     fun testFunctionQualifiers() = doTest(true)
     fun testFunctionAttributes() = doTest(true)
+    fun testEmptyDeclarations() = doTest(true)
     fun testStructConstructor() = doTest(true)
     fun testTrailingCommaParameters() = doTest(true)
     fun testDestructor() = doTest(true)
