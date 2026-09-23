@@ -126,41 +126,64 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
             return POLL_INTERVAL_READY_MS
         }
 
+        val snapshot = query()
+        if (snapshot.serverRunning) {
+            everObservedServer = true
+        }
+        if (snapshot.status == AngelScriptUnrealStatus.SERVER_STOPPED) {
+            update(AngelScriptUnrealStatus.SERVER_STOPPED, null)
+            return POLL_INTERVAL_PENDING_MS
+        }
+
+        typesCapturedAt = snapshot.typesCapturedAt
+        update(snapshot.status, snapshot.configuredPort)
+        // Only a live connection is a settled state. Running on captured types is a degraded one
+        // that an editor starting up would improve, so keep watching for that at the fast rate.
+        return if (snapshot.status == AngelScriptUnrealStatus.READY) POLL_INTERVAL_READY_MS else POLL_INTERVAL_PENDING_MS
+    }
+
+    /** One answer to "can the server analyse anything, and if not, why not". */
+    data class Snapshot(
+        /** Whether lsp4ij reports the server as started - true even when it then failed to answer. */
+        val serverRunning: Boolean,
+        val status: AngelScriptUnrealStatus,
+        val configuredPort: Int?,
+        val typesCapturedAt: Long?,
+    )
+
+    /**
+     * Asks the server for its view of the Unreal connection, without ever starting it.
+     *
+     * Blocks for up to [REQUEST_TIMEOUT_MS] per request, and throws when the server is too wedged to
+     * answer within that, so it has to be called off the EDT.
+     */
+    fun query(): Snapshot {
         val manager = LanguageServerManager.getInstance(project)
 
         // Deliberately checked before getLanguageServer(), which starts the server as a side effect.
         // Polling must never be the reason the language server is running.
         if (manager.getServerStatus(AngelScriptLanguageServerFactory.SERVER_ID) != ServerStatus.started) {
-            update(AngelScriptUnrealStatus.SERVER_STOPPED, null)
-            return POLL_INTERVAL_PENDING_MS
+            return Snapshot(false, AngelScriptUnrealStatus.SERVER_STOPPED, null, null)
         }
-        everObservedServer = true
 
         val serverItem = manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID)
             .get(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         val server = serverItem?.server as? AngelScriptLanguageServer
-        if (server == null) {
-            update(AngelScriptUnrealStatus.SERVER_STOPPED, null)
-            return POLL_INTERVAL_PENDING_MS
-        }
+            ?: return Snapshot(true, AngelScriptUnrealStatus.SERVER_STOPPED, null, null)
 
         val raw = server.getUnrealStatus().get(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        if (raw == null) {
-            update(AngelScriptUnrealStatus.SERVER_STOPPED, null)
-            return POLL_INTERVAL_PENDING_MS
-        }
+            ?: return Snapshot(true, AngelScriptUnrealStatus.SERVER_STOPPED, null, null)
 
         val port = (raw["configuredPort"] as? Number)?.toInt()
         val socketState = raw["socketState"] as? String
         val typesLoaded = raw["typesLoaded"] as? Boolean ?: false
         val usingCachedTypes = raw["usingCachedTypes"] as? Boolean ?: false
-        typesCapturedAt = (raw["typesCapturedAt"] as? Number)?.toLong()
-
-        val newStatus = classify(port, socketState, typesLoaded, usingCachedTypes)
-        update(newStatus, port)
-        // Only a live connection is a settled state. Running on captured types is a degraded one
-        // that an editor starting up would improve, so keep watching for that at the fast rate.
-        return if (newStatus == AngelScriptUnrealStatus.READY) POLL_INTERVAL_READY_MS else POLL_INTERVAL_PENDING_MS
+        return Snapshot(
+            serverRunning = true,
+            status = classify(port, socketState, typesLoaded, usingCachedTypes),
+            configuredPort = port,
+            typesCapturedAt = (raw["typesCapturedAt"] as? Number)?.toLong(),
+        )
     }
 
     private fun update(newStatus: AngelScriptUnrealStatus, port: Int?) {

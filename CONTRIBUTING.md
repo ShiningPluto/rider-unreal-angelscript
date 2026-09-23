@@ -57,6 +57,15 @@ client features fail to load and the server never starts. When raising it, check
 plugin extends against the new version: `LSPCompletionProposal` in particular is subclassed with
 reflection into its private members, see [reference/lsp-completion-workaround.md](docs/reference/lsp-completion-workaround.md).
 
+**lsp4j exists twice.** The Rider SDK ships lsp4j 0.21 in `lib/`, lsp4ij bundles its own 1.0, and
+the plugin compiles against the first but runs against the second - lsp4ij's are the objects it is
+handed. The two agree on almost everything the plugin touches, which is what makes the exception
+dangerous: `Diagnostic.getMessage()` returns a `String` in 0.21 and an `Either<String, MarkupContent>`
+in 1.0, so a direct call compiles cleanly and fails at runtime with `NoSuchMethodError`
+(`AngelScriptDiagnosticsStore` reads it reflectively for that reason). The unit tests resolve lsp4j
+the same way as the IDE, so they catch such a call when something exercises it. When using an lsp4j
+member for the first time, compare its signature in both jars.
+
 **Key files:**
 - `AngelScriptFileType.kt` - File type registration
 - `AngelScriptLanguage.kt` - Language definition

@@ -7,6 +7,7 @@ import com.redhat.devtools.lsp4ij.ServerStatus
 import com.redhat.devtools.lsp4ij.client.LanguageClientImpl
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspConfiguration
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
+import org.eclipse.lsp4j.PublishDiagnosticsParams
 
 /**
  * Custom language client for AngelScript.
@@ -32,7 +33,18 @@ class AngelScriptLanguageClient(project: Project) : LanguageClientImpl(project) 
      */
     override fun createSettings(): Any = AngelScriptLspConfiguration.build(AngelScriptLspSettings.getInstance().state)
 
+    override fun publishDiagnostics(diagnostics: PublishDiagnosticsParams) {
+        // Kept for the MCP tools, which need them for files no editor has open.
+        if (!project.isDisposed) {
+            AngelScriptDiagnosticsStore.getInstance(project).record(diagnostics.uri, diagnostics.diagnostics.orEmpty())
+        }
+        super.publishDiagnostics(diagnostics)
+    }
+
     override fun handleServerStatusChanged(serverStatus: ServerStatus) {
+        if ((serverStatus == ServerStatus.stopping || serverStatus == ServerStatus.stopped) && !project.isDisposed) {
+            AngelScriptDiagnosticsStore.getInstance(project).clear()
+        }
         if (serverStatus != ServerStatus.started) {
             return
         }
