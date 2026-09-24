@@ -24,4 +24,7 @@ class AngelScriptUnrealParsingTest : AngelScriptParsingTestBase("parser/unreal")
     fun testMixinFunction() = doTest(true)
     fun testStructConstructorWithUproperty() = doTest(true)
     fun testStructConstructorCopy() = doTest(true)
+    fun testMacroValueForms() = doTest(true)
+    fun testMacroTypoMissingComma() = doTest(true)  // Typos the engine compiles but misreads stay errors
+    fun testMacroTypoNotEqual() = doTest(true)
 }

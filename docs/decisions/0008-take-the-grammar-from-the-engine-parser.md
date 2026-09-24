@@ -57,7 +57,7 @@ The sources, and what each is good for:
   redistributed, so it lives in the gitignored `third-party/angelscript-reference/Script`.
   `Examples/Angelscript/` in it holds Hazelight's own syntax examples.
 
-Measured with `CorpusParseReport`, 2026-09-23:
+Measured with `CorpusParseReport`, 2026-09-23 and 24:
 
 | Grammar state | Files failing | Newly failing |
 |---|---|---|
@@ -66,11 +66,20 @@ Measured with `CorpusParseReport`, 2026-09-23:
 | every trailing function attribute `ParseMethodAttributes` accepts | 200 | 0 |
 | f-string literal text as the preprocessor reads it | 187 | 0 |
 | a lone `;` in a class or struct body, which `ParseClass` skips | 29 | 0 |
+| macro values the engine keeps as text (`-48`, `!bFlag`, `A\|B`, `()`, `{Event}`); f-string `:` and `"` as the preprocessor reads them | 3 | 0 |
 
 ## Decision
 
 - **A rule's shape comes from the engine source.** When the engine accepts something, the grammar
-  must not flag it. When the language server is looser than the engine, follow the engine.
+  must not flag it, with the one exception below. When the language server is looser than the
+  engine, follow the engine.
+- **A typo the engine compiles only by misreading it stays an error.** Some text the engine never
+  rejects: it reads a macro specifier's value as free text up to the next comma, and drops an
+  f-string expression that has no closing `}`. There the grammar accepts the forms the value takes
+  in the language server grammar and the corpus, not everything the engine lets through, so a
+  missing comma, `!=` for `=` or a missing `}` is still reported, at the token that needs fixing.
+  The engine's reading silently loses what the author wrote: the specifier after the missing
+  comma, the condition, the text of the expression.
 - **Context keywords are matched by text.** The engine matches words like `no_discard` with
   `IdentifierIs`, so they are keywords in one position and identifiers everywhere else. The BNF
   quotes them (`'no_discard'`); Grammar-Kit then emits `consumeToken(builder, "no_discard")`. They
@@ -109,8 +118,17 @@ too, or that it cannot reach a public project.
   `CorpusParseReport` cannot run. This was already true of the test before.
 - The engine source consulted is a third party's snapshot from 2025-03. Hazelight's current plugin
   may have moved on.
-- 29 files still fail. 27 have macro arguments the grammar rejects, such as a negative number or
-  `!` inside `meta = (...)`. That leaves two more.
+- 3 files still fail, each on a typo the engine compiles by misreading it, and on nothing else:
+  corrected, all three parse.
+  - `LocomotionFeatureOpportunityAttack.as`: `Category = "Animation" meta = (...)`, a missing comma.
+    The category becomes `Animation" meta = (ShowOnlyInnerProperties)` and the meta is lost.
+  - `MoonMarketShapeshiftComponent.as`: `EditCondition != bUseCustomMovement`. The meta key becomes
+    `EditCondition !`, so the property is always editable.
+  - `HazeVoxLane.as`: `{LaneName"` in an f-string, a missing `}`. The lane name is left out of the
+    message.
+- A syntax error in a class member leaves the rest of the class body unparsed, because only the
+  body has a recovery rule. The corpus report cannot show this, since it lists the first error per
+  file.
 
 ## How this breaks
 
@@ -127,3 +145,5 @@ too, or that it cannot reach a public project.
 - 2026-09-23 - Taken while correcting `access` declarations, `no_discard`/`allow_discard` and
   f-string literal text.
 - 2026-09-23 - Empty declarations in class and struct bodies: 187 failing files down to 29.
+- 2026-09-24 - Macro values and f-string expressions: 29 failing files down to 3. Typos the engine
+  compiles by misreading them are kept as errors.

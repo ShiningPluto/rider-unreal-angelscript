@@ -14,6 +14,7 @@ class AngelScriptAdvancedParsingTest : AngelScriptParsingTestBase("parser/advanc
     fun testFStringWithFormat() = doTest(true)  // Test format specifiers like {val:.2f}
     fun testFStringFormatsAndTernary() = doTest(true)  // Comprehensive test of formats vs ternary operators
     fun testFStringLiteralText() = doTest(true)  // Lone '}' and backslash escapes in literal text
+    fun testFStringUnclosedExpression() = doTest(true)  // A quote ends the f-string inside an expression
     fun testNameLiteral() = doTest(true)
     fun testNameStringUserCase() = doTest(true)  // User-reported: name string literals
     fun testPreprocessorIfEditor() = doTest(true)

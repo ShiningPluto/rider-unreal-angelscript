@@ -61,6 +61,11 @@ SQ_STRING = \'([^\'\\\r\n]|\\.)*\'
 TRIPLE_QUOTE_STRING= \"\"\"([^\"]|\"[^\"]|\"\"[^\"]|\\.)*\"\"\"
 STRING = {DQ_STRING}|{SQ_STRING}|{TRIPLE_QUOTE_STRING}
 
+// What the engine's ParseFormatExpression accepts after the ':' of an f-string expression, scanning
+// back from the '}': format characters, and an alignment character with an optional fill before it
+FORMAT_SPEC_CHAR = [0-9dxXbconeEfFgG%,.+\-(# \t]
+FORMAT_SPEC = ({FORMAT_SPEC_CHAR} | [^}\":\r\n]? [<>\^=])*
+
 %%
 
 // ─────────────── Main State Rules ──────────────────────
@@ -248,9 +253,15 @@ STRING = {DQ_STRING}|{SQ_STRING}|{TRIPLE_QUOTE_STRING}
 }
 
 <IN_FSTRING_EXPR> {
-    // Format specifier begins with : or = (only at brace depth 1 AND paren depth 0)
-    // This ensures {Val:.2f} has colon as separator, but {(a?b:c)} has colon as ternary
-    ":" {
+    // The preprocessor reads an f-string as far as the next unescaped '"', even inside an
+    // expression, so a quote ends it there too; an expression cut short that way is dropped by the
+    // engine, and left without its '}' here
+    "\"" { fstringBraceDepth = 0; fstringParenDepth = 0; yybegin(YYINITIAL); return AngelScriptTypes.FSTRING_END; }
+
+    // A ':' starts the format specifier only when all that follows it is a format specifier, as the
+    // engine decides it: {Val:.2f} is formatted, {b ? 'Metal' : 'Crystal'} is a ternary. At brace
+    // depth 1 and paren depth 0 only, so that {(a?b:c)} stays a ternary too
+    ":" / {FORMAT_SPEC} "}" {
         if (fstringBraceDepth == 1 && fstringParenDepth == 0) {
             yybegin(IN_FSTRING_FORMAT);
             return AngelScriptTypes.FSTRING_FORMAT_SEP;
@@ -258,6 +269,7 @@ STRING = {DQ_STRING}|{SQ_STRING}|{TRIPLE_QUOTE_STRING}
             return AngelScriptTypes.COLON;
         }
     }
+    ":" { return AngelScriptTypes.COLON; }
 
     // Debug format specifier {val=}
     "=" {
@@ -344,10 +356,10 @@ STRING = {DQ_STRING}|{SQ_STRING}|{TRIPLE_QUOTE_STRING}
     "!" { return AngelScriptTypes.NOT; }
     "?" { return AngelScriptTypes.QUESTION; }
 
-    // Identifiers, numbers, strings
+    // Identifiers, numbers, strings; a string in quotes would end the f-string (see above)
     {IDENTIFIER} { return AngelScriptTypes.IDENTIFIER; }
     {NUMBER} { return AngelScriptTypes.NUMBER; }
-    {STRING} { return AngelScriptTypes.STRING; }
+    {SQ_STRING} { return AngelScriptTypes.STRING; }
 
     // Catch-all for any other character
     [^] { return TokenType.BAD_CHARACTER; }
@@ -356,9 +368,10 @@ STRING = {DQ_STRING}|{SQ_STRING}|{TRIPLE_QUOTE_STRING}
 // ─────────────── Format Specifier State ──────────────────────
 
 <IN_FSTRING_FORMAT> {
-    // Format specification characters (everything after : or = until })
+    // Format specification characters (everything after : or = until }); a quote ends the f-string
     "}" { fstringParenDepth = 0; yybegin(IN_FSTRING); return AngelScriptTypes.FSTRING_EXPR_END; }
-    [^}]+ { return AngelScriptTypes.FSTRING_FORMAT_SPEC; }
+    "\"" { fstringBraceDepth = 0; fstringParenDepth = 0; yybegin(YYINITIAL); return AngelScriptTypes.FSTRING_END; }
+    [^}\"]+ { return AngelScriptTypes.FSTRING_FORMAT_SPEC; }
 }
 
 // ─────────────── Name String State (FName Literals) ──────────────────────
