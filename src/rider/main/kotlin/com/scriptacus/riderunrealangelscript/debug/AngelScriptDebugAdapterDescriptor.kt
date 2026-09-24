@@ -8,15 +8,21 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileTypes.FileType
+import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.io.BaseOutputReader
+import com.redhat.devtools.lsp4ij.dap.DAPDebugProcess
+import com.redhat.devtools.lsp4ij.dap.DebugMode
+import com.redhat.devtools.lsp4ij.dap.client.DAPClient
 import com.redhat.devtools.lsp4ij.dap.definitions.DebugAdapterServerDefinition
 import com.redhat.devtools.lsp4ij.dap.descriptors.DebugAdapterDescriptor
+import com.redhat.devtools.lsp4ij.settings.ServerTrace
 import com.scriptacus.riderunrealangelscript.lang.AngelScriptFileType
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 import com.scriptacus.riderunrealangelscript.util.NodeJsExecutableFinder
 import com.scriptacus.riderunrealangelscript.util.TempFileManager
 import java.io.File
+import java.util.concurrent.CompletableFuture
 
 /**
  * Descriptor for the AngelScript Debug Adapter.
@@ -93,6 +99,26 @@ class AngelScriptDebugAdapterDescriptor(
         LOG.info("DAP parameters: port=$port, hostname=$hostname")
 
         return params
+    }
+
+    /**
+     * A client that reports when the handshake finishes. The adapter only answers `initialize` once
+     * Unreal has answered it, so until then the session exists without anything being attached.
+     */
+    override fun createClient(
+        debugProcess: DAPDebugProcess,
+        dapParameters: Map<String, Any>,
+        isDebug: Boolean,
+        debugMode: DebugMode,
+        serverTrace: ServerTrace,
+        parentClient: DAPClient?
+    ): DAPClient = object : DAPClient(debugProcess, dapParameters, isDebug, debugMode, serverTrace, parentClient) {
+        override fun connectToServer(indicator: ProgressIndicator): CompletableFuture<Void> {
+            // The original future is returned untouched: lsp4ij cancels it when the session is disposed.
+            val connected = super.connectToServer(indicator)
+            connected.thenRun { AngelScriptDebugConfigurations.markAttached(debugProcess) }
+            return connected
+        }
     }
 
     override fun getFileType(): FileType? {

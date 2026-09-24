@@ -99,6 +99,9 @@
         <!-- Surfaces why analysis is unavailable: it needs the type database from a running Unreal editor -->
         <statusBarWidgetFactory id="AngelScriptUnrealStatus"
                                 implementation="com.scriptacus.riderunrealangelscript.status.AngelScriptStatusBarWidgetFactory"/>
+        <!-- Surfaces whether script breakpoints can be hit, which the Unreal connection says nothing about -->
+        <statusBarWidgetFactory id="AngelScriptDebugStatus"
+                                implementation="com.scriptacus.riderunrealangelscript.status.AngelScriptDebugStatusBarWidgetFactory"/>
 
         <!-- Auto-switch between AngelScript Files and Solution Explorer tool windows -->
         <postStartupActivity implementation="com.scriptacus.riderunrealangelscript.toolwindow.ToolWindowSwitcher"/>
@@ -126,6 +129,25 @@
                 class="com.scriptacus.riderunrealangelscript.actions.AngelScriptParenAction"
                 text="AngelScript: Insert Parentheses"
                 description="Handles parenthesis insertion from LSP completion (currently no-op, relies on Rider's default behavior)"/>
+
+        <!-- One-step AngelScript debugging: creates the DAP configuration when missing, then starts it under Debug -->
+        <action id="AngelScript.StartDebugging"
+                class="com.scriptacus.riderunrealangelscript.debug.StartAngelScriptDebuggingAction"
+                text="Start AngelScript Debugging"
+                description="Attaches the AngelScript debugger to the Unreal editor"
+                icon="AllIcons.Actions.StartDebugger">
+            <add-to-group group-id="RunMenu" anchor="last"/>
+        </action>
+        <action id="AngelScript.EditDebugConfiguration"
+                class="com.scriptacus.riderunrealangelscript.debug.EditAngelScriptDebugConfigurationAction"
+                text="Edit AngelScript Debug Configuration…"
+                description="Edits the run configuration that attaches the AngelScript debugger"/>
+
+        <!-- Shown when the AngelScript debugger status bar widget is clicked -->
+        <group id="AngelScript.DebugStatusBarPopup">
+            <reference ref="AngelScript.StartDebugging"/>
+            <reference ref="AngelScript.EditDebugConfiguration"/>
+        </group>
     </actions>
 
 </idea-plugin>
