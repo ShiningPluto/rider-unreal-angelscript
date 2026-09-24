@@ -21,21 +21,57 @@ This guide explains how to set up and use debugging for AngelScript code in your
 
 ## Setup Debugging
 
-### Step 1: Create a Debug Configuration
+Breakpoints in `.as` files are only hit while an AngelScript debug configuration is running under
+**Debug**. You can place them without one, and debugging the Unreal editor's C++ does not attach the
+script debugger, so a missing configuration only shows up as breakpoints that never hit.
+
+### One step
+
+Set a breakpoint in a script file. The status bar then shows an **AngelScript debugger** item (it
+reads e.g. `AngelScript debugger: not set up`); click it and choose **Create and Start AngelScript
+Debugging**. The same entry is at the bottom of the **Run** menu, which works without a breakpoint.
+
+If the project has no AngelScript debug configuration, this creates one named `AngelScript` and
+starts it under Debug. If it has one, it starts that one. If a debug session is already running, the
+entry reads **Show AngelScript Debugger** and brings the session to the front. It never changes the
+selected run configuration, so Shift+F9 still starts whatever you had selected, usually the editor's
+C++ launch. The item's menu also has **Edit AngelScript Debug Configuration…** once one exists.
+
+### Checking that the debugger is attached
+
+The **AngelScript debugger** status bar item is separate from the `AngelScript: Unreal 27099` item.
+That one reports the language server's connection to the editor, which works with no debugger
+attached, so it says nothing about whether breakpoints can hit.
+
+The debugger item only appears while a script file has an enabled breakpoint or a debug session is
+running; with neither, there is nothing for it to warn about. It reads:
+
+| Text | Meaning |
+|------|---------|
+| `not set up` | No AngelScript debug configuration exists. Breakpoints never hit. |
+| `not attached` | A configuration exists but is not running under Debug. Breakpoints never hit. |
+| `connecting…` | A debug session is running, but the Unreal editor has not answered it yet. Breakpoints are not live. |
+| `attached` | The Unreal editor has answered the debugger. Breakpoints in script files are live. |
+
+A session ends by itself when no editor is listening on the port, so `connecting…` normally lasts a
+moment. If it stays, the editor is running but not responding, for example because it is stopped in
+the C++ debugger.
+
+### Manually
+
+The one-step entry produces exactly this configuration:
 
 1. Go to **Run → Edit Configurations** (or click the dropdown next to the Run button)
 2. Click the **+** button and select **Debug Adapter Protocol**
 3. Give it a name like "Debug AngelScript"
-
-### Step 2: Configure the Debug Adapter
-
-1. In the configuration dialog, locate the **Server** dropdown
-2. Select **AngelScript Debug Adapter** from the list
+4. In the **Server** dropdown, select **AngelScript Debug Adapter**
    - If you don't see this option, make sure the plugin is installed and Rider has been restarted
+5. Click **OK** to save it
 
-### Step 3: Save the Configuration
-
-Click **OK** to save your debug configuration.
+Any Debug Adapter Protocol configuration whose server is **AngelScript Debug Adapter** counts,
+including the temporary ones Rider creates from an editor's context menu. Temporary ones are thrown
+away once enough newer ones accumulate, so the one-step entry makes a temporary one permanent when
+it starts it.
 
 ## Using the Debugger
 > Note: Keys may differ based on IDE configuration.
@@ -49,10 +85,12 @@ Click **OK** to save your debug configuration.
 ### Starting a Debug Session
 
 1. Make sure **Unreal Engine is running** with your project loaded
-2. Select your debug configuration from the dropdown (top-right)
-3. Click the **Debug** button (or press **Shift+F9**)
-   >Note: Clicking the **Run** button will appear to connect the debugger, but debugging in this state will not work.
-4. The debugger will connect to Unreal Engine
+2. Use the one-step entry above, or select your debug configuration from the dropdown (top-right)
+   and click the **Debug** button (or press **Shift+F9**)
+   > Note: the **Run** button is disabled for AngelScript debug configurations. Under Run, lsp4ij
+   > connects the adapter but never sends it any breakpoints, so the session looks alive while no
+   > breakpoint can hit.
+3. The debugger will connect to Unreal Engine
 
 ### When a Breakpoint Hits
 
@@ -121,7 +159,9 @@ This allows you to:
 **Problem**: Breakpoints are set but execution doesn't stop
 
 **Solutions**:
-1. Make sure the debug session is **active** (green indicator in toolbar)
+1. Check that the **AngelScript debugger** status bar item reads `attached` (see
+   [Checking that the debugger is attached](#checking-that-the-debugger-is-attached)). A C++ debug
+   session of the Unreal editor does not attach it.
 2. Verify the code is actually being executed (add a log statement)
 3. Check that the file path matches between Rider and Unreal
 4. Set **Working Directory** to your Unreal project root
