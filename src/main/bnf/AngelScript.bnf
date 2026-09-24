@@ -747,14 +747,20 @@ macro_argument ::= macro_identifier macro_value?
 
 macro_identifier ::= IDENTIFIER | STRING
 
+// 'Meta = ()' is an empty list
 macro_value ::=
     ASSIGNMENT macro_value_expr
-  | ASSIGNMENT OPEN_PARENTHESIS macro_arguments CLOSE_PARENTHESIS
+  | ASSIGNMENT OPEN_PARENTHESIS macro_arguments? CLOSE_PARENTHESIS
 
-// Note: VSCode extension allows 'keyword' as macro value (line 1315 of angelscript.pegjs)
-// This includes boolean literals and nullptr, which are commonly used in Meta specifiers
-// Example: UPROPERTY(EditInstanceOnly, Meta = (MakeEditWidget=true))
-macro_value_expr ::= IDENTIFIER | NUMBER | STRING | TRUE | FALSE | NULLPTR | macro_pipe_list
+// The engine keeps a value as text up to the next ',' outside quotes and parentheses
+// (ParseSpecifier), so it never rejects one. These are the forms that text takes in the language
+// server grammar and in shipped scripts: EditCondition = !bFlag, UIMin = -48, Category = A|B,
+// TitleProperty = {Event}. A value that runs on into the next specifier because a comma is missing
+// is not among them: the engine folds that specifier into this value, and it is lost.
+// The pipe list comes before IDENTIFIER, which would otherwise end 'A|B' at 'A'.
+macro_value_expr ::= macro_pipe_list | NOT IDENTIFIER | MINUS NUMBER
+  | IDENTIFIER | NUMBER | STRING | TRUE | FALSE | NULLPTR
+  | START_STATEMENT_BLOCK IDENTIFIER END_STATEMENT_BLOCK
 
 macro_pipe_list ::= IDENTIFIER (BIT_OR IDENTIFIER)+
 

@@ -1561,7 +1561,7 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // ASSIGNMENT macro_value_expr
-  //   | ASSIGNMENT OPEN_PARENTHESIS macro_arguments CLOSE_PARENTHESIS
+  //   | ASSIGNMENT OPEN_PARENTHESIS macro_arguments? CLOSE_PARENTHESIS
   public static boolean macro_value(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "macro_value")) return false;
     if (!nextTokenIs(builder_, ASSIGNMENT)) return false;
@@ -1584,31 +1584,43 @@ public class AngelScriptParser implements PsiParser, LightPsiParser {
     return result_;
   }
 
-  // ASSIGNMENT OPEN_PARENTHESIS macro_arguments CLOSE_PARENTHESIS
+  // ASSIGNMENT OPEN_PARENTHESIS macro_arguments? CLOSE_PARENTHESIS
   private static boolean macro_value_1(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "macro_value_1")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_);
     result_ = consumeTokens(builder_, 0, ASSIGNMENT, OPEN_PARENTHESIS);
-    result_ = result_ && macro_arguments(builder_, level_ + 1);
+    result_ = result_ && macro_value_1_2(builder_, level_ + 1);
     result_ = result_ && consumeToken(builder_, CLOSE_PARENTHESIS);
     exit_section_(builder_, marker_, null, result_);
     return result_;
   }
 
+  // macro_arguments?
+  private static boolean macro_value_1_2(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "macro_value_1_2")) return false;
+    macro_arguments(builder_, level_ + 1);
+    return true;
+  }
+
   /* ********************************************************** */
-  // IDENTIFIER | NUMBER | STRING | TRUE | FALSE | NULLPTR | macro_pipe_list
+  // macro_pipe_list | NOT IDENTIFIER | MINUS NUMBER
+  //   | IDENTIFIER | NUMBER | STRING | TRUE | FALSE | NULLPTR
+  //   | START_STATEMENT_BLOCK IDENTIFIER END_STATEMENT_BLOCK
   public static boolean macro_value_expr(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "macro_value_expr")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_, level_, _NONE_, MACRO_VALUE_EXPR, "<macro value expr>");
-    result_ = consumeToken(builder_, IDENTIFIER);
+    result_ = macro_pipe_list(builder_, level_ + 1);
+    if (!result_) result_ = parseTokens(builder_, 0, NOT, IDENTIFIER);
+    if (!result_) result_ = parseTokens(builder_, 0, MINUS, NUMBER);
+    if (!result_) result_ = consumeToken(builder_, IDENTIFIER);
     if (!result_) result_ = consumeToken(builder_, NUMBER);
     if (!result_) result_ = consumeToken(builder_, STRING);
     if (!result_) result_ = consumeToken(builder_, TRUE);
     if (!result_) result_ = consumeToken(builder_, FALSE);
     if (!result_) result_ = consumeToken(builder_, NULLPTR);
-    if (!result_) result_ = macro_pipe_list(builder_, level_ + 1);
+    if (!result_) result_ = parseTokens(builder_, 0, START_STATEMENT_BLOCK, IDENTIFIER, END_STATEMENT_BLOCK);
     exit_section_(builder_, level_, marker_, result_, false, null);
     return result_;
   }
