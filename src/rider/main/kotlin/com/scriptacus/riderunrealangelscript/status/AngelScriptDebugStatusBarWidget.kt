@@ -99,23 +99,29 @@ class AngelScriptDebugStatusBarWidget(private val project: Project) :
      * editor's C++ debug session looks like it should - so this says which it is, and what is missing.
      */
     override fun getTooltipText(): String = when (val state = AngelScriptDebugConfigurations.state(project)) {
-        is State.Attached ->
-            "The AngelScript debugger is attached to the Unreal editor, so breakpoints in script files are live."
+        is State.Attached -> statusTooltip(
+            "Attached to the Unreal editor",
+            "Breakpoints in script files are live."
+        )
 
-        is State.Connecting ->
-            "'${state.session.sessionName}' is running, but the Unreal editor has not answered it yet, so " +
-                "breakpoints in script files are not live. The session ends by itself if no editor is " +
-                "listening; if it stays here, the editor is not responding - for example because it is " +
-                "stopped in the C++ debugger."
+        is State.Connecting -> statusTooltip(
+            "Waiting for the Unreal editor to answer",
+            "'${state.session.sessionName}' is running, but breakpoints in script files are not live yet. " +
+                "The session ends by itself if no editor is listening; if it stays here, the editor is not " +
+                "responding - for example because it is stopped in the C++ debugger."
+        )
 
-        is State.NotAttached ->
-            "Script files have breakpoints, but the AngelScript debugger is not attached. They are only " +
-                "hit while '${state.configuration.name}' is running under Debug - click to start it."
+        is State.NotAttached -> statusTooltip(
+            "The AngelScript debugger is not attached",
+            "Script files have breakpoints, but they are only hit while '${state.configuration.name}' is " +
+                "running under Debug. Click to start it."
+        )
 
-        State.NoConfiguration ->
-            "Script files have breakpoints, but no AngelScript debug configuration exists, so they are " +
-                "never hit. Debugging the editor's C++ does not attach the script debugger - click to " +
-                "create the configuration and start it."
+        State.NoConfiguration -> statusTooltip(
+            "No AngelScript debug configuration",
+            "Script files have breakpoints, but they are never hit without one. Debugging the editor's C++ " +
+                "does not attach the script debugger. Click to create the configuration and start it."
+        )
     }
 
     override fun getClickConsumer(): Consumer<MouseEvent> = Consumer { event ->

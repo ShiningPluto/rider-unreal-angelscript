@@ -61,36 +61,46 @@ class AngelScriptStatusBarWidget(private val project: Project) :
         val service = AngelScriptUnrealStatusService.getInstance(project)
         val port = service.configuredPort
         return when (service.status) {
-            AngelScriptUnrealStatus.READY ->
-                "Connected to the Unreal editor on port $port, with a live C++ type database. " +
-                    "Semantic highlighting and diagnostics are up to date."
+            AngelScriptUnrealStatus.READY -> statusTooltip(
+                "Connected to the Unreal editor on port $port",
+                "The C++ type database is live, so semantic highlighting and diagnostics are up to date."
+            )
 
-            AngelScriptUnrealStatus.EDITOR_CLOSED ->
-                "The Unreal editor on port $port has disconnected. Highlighting and diagnostics " +
-                    "keep working on the type database it sent ${describeCacheAge(service)}, but " +
-                    "nothing is keeping it up to date. Start the editor again to reconnect."
+            AngelScriptUnrealStatus.EDITOR_CLOSED -> statusTooltip(
+                "The Unreal editor on port $port has disconnected",
+                "Highlighting and diagnostics keep working on the type database it sent " +
+                    "${describeCacheAge(service)}, but nothing is keeping it up to date. " +
+                    "Start the editor again to reconnect."
+            )
 
-            AngelScriptUnrealStatus.CACHED_TYPES ->
-                "No editor has been reachable this session, so the type database saved " +
-                    "${describeCacheAge(service)} is being used. Highlighting and diagnostics work, " +
-                    "but will not reflect engine C++ changed since then. Start the Unreal editor " +
-                    "on port $port to replace it with a live database."
+            AngelScriptUnrealStatus.CACHED_TYPES -> statusTooltip(
+                "Using the type database saved ${describeCacheAge(service)}",
+                "No editor has been reachable this session. Highlighting and diagnostics work, but will " +
+                    "not reflect engine C++ changed since then. Start the Unreal editor on port $port " +
+                    "to replace it with a live database."
+            )
 
-            AngelScriptUnrealStatus.LOADING_TYPES ->
-                "Connected on port $port, receiving the C++ type database. " +
-                    "Highlighting and diagnostics appear once it finishes loading."
+            AngelScriptUnrealStatus.LOADING_TYPES -> statusTooltip(
+                "Receiving the C++ type database",
+                "Connected on port $port. Highlighting and diagnostics appear once it finishes loading."
+            )
 
-            AngelScriptUnrealStatus.SERVER_STOPPED ->
-                "The AngelScript language server is not running. Only lexical highlighting is available."
+            AngelScriptUnrealStatus.SERVER_STOPPED -> statusTooltip(
+                "The AngelScript language server is not running",
+                "Only lexical highlighting is available."
+            )
 
-            AngelScriptUnrealStatus.NOT_CONFIGURED ->
-                "The language server has not received its configuration, so it is not connecting to " +
-                    "any port. Change a setting under Languages & Frameworks | AngelScript to resend it."
+            AngelScriptUnrealStatus.NOT_CONFIGURED -> statusTooltip(
+                "The language server has not received its configuration",
+                "It is not connecting to any port. Change a setting under Languages & Frameworks | " +
+                    "AngelScript to resend it."
+            )
 
-            AngelScriptUnrealStatus.DISCONNECTED ->
-                "No Unreal editor listening on port $port. Semantic highlighting and diagnostics " +
-                    "need the C++ type database, which only a running editor can provide. " +
-                    "No cached database is available for this project yet."
+            AngelScriptUnrealStatus.DISCONNECTED -> statusTooltip(
+                "No Unreal editor listening on port $port",
+                "Semantic highlighting and diagnostics need the C++ type database, which only a running " +
+                    "editor can provide. No cached database is available for this project yet."
+            )
         }
     }
 
