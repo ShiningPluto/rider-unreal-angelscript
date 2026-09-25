@@ -46,8 +46,13 @@ A hook on the usage feature, asked once per reference while the usage is being c
   `UsageType.WRITE` (a read-write counts as a write, as the platform does), and every other usage as
   before.
 
-A server that does not override the hook gets exactly today's behaviour. A draft with tests was
-written on 2026-09-25 against lsp4ij `main` at `e88c1f5` and has not been submitted.
+A server that does not override the hook gets exactly today's behaviour. A draft with tests,
+against lsp4ij `main` at `e88c1f5`, is on the branch `usage-read-write-access` of
+[ShiningPluto/lsp4ij](https://github.com/ShiningPluto/lsp4ij); no pull request has been opened.
+
+Rider keeps the read and write access filters (`RiderUsageFilteringRuleCustomizer` only stops their
+state being saved), so in Rider the change shows as the icons and the filters. It does not group
+anything there: Rider groups no lsp4ij usage by usage type.
 
 ### In the plugin, once lsp4ij has released it
 
@@ -73,9 +78,12 @@ written on 2026-09-25 against lsp4ij `main` at `e88c1f5` and has not been submit
   [decisions/0009](../decisions/0009-classify-reference-access-from-the-parse-tree.md).
 - lsp4ij supports IDEs from 2024.2. `ReadWriteAccessUsageInfo2UsageAdapter(UsageInfo, Access)` and
   `UsageType.READ`/`WRITE` are present there.
-- lsp4ij contributions need a DCO `Signed-off-by` line on every commit.
+- lsp4ij's `CONTRIBUTING.md` asks for a DCO `Signed-off-by` line on every commit; no check enforces
+  it. CI does check that the pull request title follows Conventional Commits (`feat: ...`).
 
 ## History
 
 - 2026-09-25 - Written together with decision 0009, which delivered the grouping; the lsp4ij change
   was drafted the same day.
+- 2026-09-25 - The draft pushed to a fork; its docs no longer say a known access groups the reference,
+  which is not so in Rider.
