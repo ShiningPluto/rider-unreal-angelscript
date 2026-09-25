@@ -12,6 +12,7 @@ Why the code is the way it is. Format and rules: [../README.md](../README.md).
 | [0006](0006-answer-goto-declaration-synchronously.md) | Answer go-to-declaration while the caret waits, and hand back a real target | cpp-navigation | accepted | 2026-09-20 |
 | [0007](0007-match-ignore-globs-as-text.md) | Match ignore globs against the path text, not through java.nio PathMatcher | lsp-client | accepted | 2026-09-20 |
 | [0008](0008-take-the-grammar-from-the-engine-parser.md) | Take the grammar from the engine's parser, and measure every change against shipped scripts | editor | accepted | 2026-09-23 |
+| [0009](0009-classify-reference-access-from-the-parse-tree.md) | Tell reads from writes in Find Usages with the plugin's parse tree, through a usage type provider and a grouping rule | lsp-client | accepted | 2026-09-25 |
 
 ## Reading order
 

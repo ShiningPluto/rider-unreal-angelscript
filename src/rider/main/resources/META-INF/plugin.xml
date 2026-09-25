@@ -60,6 +60,13 @@
         <gotoDeclarationHandler
                 implementation="com.scriptacus.riderunrealangelscript.navigation.AngelScriptCppNavigationHandler"/>
 
+        <!-- Splits Find Usages references into reads and writes; must run before lsp4ij's provider, which calls them all "References" -->
+        <usageTypeProvider order="first"
+                           implementation="com.scriptacus.riderunrealangelscript.usages.AngelScriptUsageTypeProvider"/>
+        <!-- Groups AngelScript usages by those types; Rider removes the platform rule that would -->
+        <usageGroupingRuleProvider
+                implementation="com.scriptacus.riderunrealangelscript.usages.AngelScriptUsageTypeGroupingRuleProvider"/>
+
         <!-- Settings/Preferences UI for AngelScript plugin -->
         <applicationConfigurable
             parentId="language"
