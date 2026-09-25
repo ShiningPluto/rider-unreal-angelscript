@@ -26,11 +26,16 @@ const INJECTED_REFERENCES = [
   'AddTypesFromUnreal',
   'FinishTypesFromUnreal',
   'NormalizeUri',
+  'GetAllLoadedModules',
+  'IsServicingQueues',
 ];
 
 function verifyInjectedReferences(content) {
+  // Only a declaration at the start of a line counts: esbuild puts module-level names there, and
+  // an indented one is local to some function - 'let GlobsRemaining' inside onInitialize passed a
+  // looser check while being undefined everywhere the injected code runs.
   const missing = INJECTED_REFERENCES.filter(
-    (name) => !new RegExp('(?:^|\\n)\\s*(?:function|var|let|const)\\s+' + name + '\\b').test(content)
+    (name) => !new RegExp('(?:^|\\n)(?:function|var|let|const)\\s+' + name + '\\b').test(content)
   );
 
   if (missing.length == 0) {
@@ -334,6 +339,93 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
       console.log('✓ Patched to add C++ navigation request handlers');
     } else {
       console.warn('⚠ Warning: Could not find insertion point for C++ navigation handlers');
+    }
+
+    // Patch to report which script classes override which C++ blueprint events.
+    //
+    // Rider's check for a BlueprintImplementableEvent that nothing implements reads only .uasset
+    // files, so an event implemented in script is reported as unimplemented. The client shows the
+    // script implementations on the C++ declaration and hides that warning where they exist; this
+    // is the half only the server can answer, because it takes the script classes and the C++ type
+    // database together to say which class declares the event a BlueprintOverride overrides.
+    const scriptOverridesHandler = `
+// The C++ class declaring the blueprint event that script type's method [name] overrides, or null
+// when the event is declared in script. The type database lists members on the class that declares
+// them, so the first C++ ancestor with the event among its own members is the one whose header
+// declares it.
+function __asCppEventDeclarer(scriptType, name) {
+  let check = scriptType.getSuperType();
+  for (let depth = 0; check && depth < 64; ++depth) {
+    let own = check.symbols.get(name);
+    let methods = own instanceof Array ? own : (own ? [own] : []);
+    if (methods.some((method) => method.isBlueprintEvent)) {
+      if (!check.declaredModule)
+        return check.name;
+      // A script parent's override leads to the same C++ event; its own BlueprintEvent does not.
+      if (!methods.some((method) => method.isBlueprintOverride))
+        return null;
+    }
+    check = check.getSuperType();
+  }
+  return null;
+}
+
+// Every BlueprintOverride in the loaded scripts whose event is declared in C++, under the script
+// name of the event. The client maps that back to the C++ name: the database only carries the C++
+// name for events whose script name differs, and the parse drops it for events altogether.
+//
+// 'settled' is false while loaded files are still being parsed and resolved, or before there are
+// C++ types to resolve against - the list is then incomplete, and the client asks again. A root
+// still being scanned does not count: that count is local to the initialize handler. With only the
+// script folders as roots they scan in well under a second, long before the types arrive.
+connection.onRequest("angelscript/getScriptOverrides", () => {
+  let overrides = [];
+  for (let asmodule of GetAllLoadedModules()) {
+    if (!asmodule.parsed)
+      continue;
+    for (let dbtype of asmodule.types) {
+      if (dbtype.isStruct || dbtype.isEnum || dbtype.isDelegate || !dbtype.supertype)
+        continue;
+      for (let [name, syms] of dbtype.symbols) {
+        let method = (syms instanceof Array ? syms : [syms]).find((sym) => sym.isBlueprintOverride);
+        if (!method)
+          continue;
+        let cppClass = __asCppEventDeclarer(dbtype, name);
+        if (!cppClass)
+          continue;
+        let position = asmodule.getPosition(method.moduleOffset);
+        overrides.push({
+          cppClass: cppClass,
+          name: name,
+          scriptClass: dbtype.name,
+          uri: asmodule.displayUri,
+          line: position.line,
+          character: position.character
+        });
+      }
+    }
+  }
+  return {
+    settled: HasTypesFromUnreal() && !IsServicingQueues,
+    overrides: overrides
+  };
+});
+`;
+
+    let overridesAdded = false;
+    const overridesInsertionPoint = /connection\.onRequest\("angelscript\/getAPIDetails"[\s\S]*?return promise;\s*\}\);/;
+    content = content.replace(overridesInsertionPoint, (match) => {
+      if (!overridesAdded) {
+        overridesAdded = true;
+        return match + scriptOverridesHandler;
+      }
+      return match;
+    });
+
+    if (overridesAdded) {
+      console.log('✓ Patched to report script overrides of C++ blueprint events');
+    } else {
+      console.warn('⚠ Warning: Could not find insertion point for the script overrides handler');
     }
 
     // Patch to expose the Unreal editor connection state.

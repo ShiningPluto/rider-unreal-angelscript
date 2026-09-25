@@ -134,20 +134,27 @@ class CppSource(private val text: String) {
      * that merely has the same name: `SetTransform` inside `FF1ComponentNetTransform` is not
      * `FTransformFragment::SetTransform`, and nothing about the line itself says so.
      */
-    fun enclosingTypeAt(offset: Int): String? {
+    fun enclosingTypeAt(offset: Int): String? = enclosingTypesAt(listOf(offset)).single()
+
+    /** [enclosingTypeAt] for several [ascending] offsets, in one pass over the text. */
+    private fun enclosingTypesAt(ascending: List<Int>): List<String?> {
+        val types = ArrayList<String?>(ascending.size)
         val scopes = ArrayList<String?>()
         var i = 0
 
-        while (i < offset && i < text.length) {
-            if (isCode[i]) {
-                when (text[i]) {
-                    '{' -> scopes.add(typeNameBefore(i))
-                    '}' -> scopes.removeLastOrNull()
+        for (offset in ascending) {
+            while (i < offset && i < text.length) {
+                if (isCode[i]) {
+                    when (text[i]) {
+                        '{' -> scopes.add(typeNameBefore(i))
+                        '}' -> scopes.removeLastOrNull()
+                    }
                 }
+                i++
             }
-            i++
+            types.add(scopes.lastOrNull { it != null })
         }
-        return scopes.lastOrNull { it != null }
+        return types
     }
 
     /** The type a `{` opens the body of, or null when it opens a function body, an `if`, a list. */
@@ -157,7 +164,11 @@ class CppSource(private val text: String) {
             if (isCode[start] && (text[start] == ';' || text[start] == '{' || text[start] == '}')) break
             start--
         }
-        return TYPE_HEAD.find(text.substring(start + 1, brace))?.groupValues?.get(1)
+        // Comments and strings blanked out: the doc comment above a UCLASS, or its DisplayName,
+        // saying "class" would otherwise be read as the declaration.
+        val head = StringBuilder(brace - start)
+        for (i in start + 1 until brace) head.append(if (isCode[i]) text[i] else ' ')
+        return TYPE_HEAD.find(head)?.groupValues?.get(1)
     }
 
     /**
@@ -188,6 +199,83 @@ class CppSource(private val text: String) {
             return nameStart
         }
         return -1
+    }
+
+    /**
+     * Every function declared here as a `BlueprintImplementableEvent` or a `BlueprintNativeEvent`,
+     * in order - the two kinds of `UFUNCTION` a script class can override.
+     *
+     * The specifier has to be in code inside the macro's own parentheses, so one in a comment, in
+     * a `Category` string or in a neighbouring `UFUNCTION` does not count.
+     */
+    fun findBlueprintEvents(): List<CppBlueprintEvent> {
+        val events = ArrayList<CppBlueprintEvent>()
+        for (macro in FUNCTION_MACROS.findAll(text)) {
+            if (!isCode[macro.range.first]) continue
+            val open = macro.range.last
+            val close = closingParenthesis(open) ?: continue
+
+            val implementable = hasSpecifier(IMPLEMENTABLE_EVENT, open, close)
+            if (!implementable && !hasSpecifier(NATIVE_EVENT, open, close)) continue
+
+            val name = functionNameAfter(close + 1) ?: continue
+            events.add(
+                CppBlueprintEvent(
+                    owner = null,
+                    name = text.substring(name),
+                    nameOffset = name.first,
+                    implementable = implementable,
+                    scriptNameMeta = scriptNameMeta(text.substring(open + 1, close)),
+                )
+            )
+        }
+        // One pass for all of them: engine headers declare dozens, and this runs on the EDT when a
+        // highlighter arrives before code vision has read the file.
+        val owners = enclosingTypesAt(events.map { it.nameOffset })
+        return events.mapIndexed { index, event -> event.copy(owner = owners[index]) }
+    }
+
+    private fun hasSpecifier(specifier: Regex, open: Int, close: Int): Boolean =
+        specifier.findAll(text.substring(open + 1, close)).any { isCode[open + 1 + it.range.first] }
+
+    /** The `)` closing the `(` at [open], or null when the file ends first. */
+    private fun closingParenthesis(open: Int): Int? {
+        var depth = 0
+        for (i in open until text.length) {
+            if (!isCode[i]) continue
+            when (text[i]) {
+                '(' -> depth++
+                ')' -> if (--depth == 0) return i
+            }
+        }
+        return null
+    }
+
+    /**
+     * The name of the function declared from [from] on: the identifier before its parameter list.
+     * A macro in front of the declaration - `UE_DEPRECATED(5.1, "...")` - has parentheses too, so
+     * an all-caps name is stepped over rather than taken for the function.
+     */
+    private fun functionNameAfter(from: Int): IntRange? {
+        var i = from
+        while (i < text.length) {
+            if (isCode[i]) {
+                when (text[i]) {
+                    ';', '{', '}' -> return null
+                    '(' -> {
+                        var end = i
+                        while (end > from && text[end - 1].isWhitespace()) end--
+                        var start = end
+                        while (start > from && (text[start - 1].isLetterOrDigit() || text[start - 1] == '_')) start--
+                        if (start == end) return null
+                        if (!MACRO_NAME.matches(text.substring(start, end))) return start until end
+                        i = closingParenthesis(i) ?: return null
+                    }
+                }
+            }
+            i++
+        }
+        return null
     }
 
     private fun hasBindCallBefore(at: Int): Boolean {
@@ -300,6 +388,26 @@ class CppSource(private val text: String) {
         /** `FAngelscriptBinds::BindGlobalFunction(`, `Binds.Method(`, and everything like them. */
         private val BIND_CALL = Regex("\\bBind\\w*\\s*\\(")
 
+        // Unreal Header Tool reads specifiers without regard to case, and so does this.
+        private val IMPLEMENTABLE_EVENT = Regex("\\bBlueprintImplementableEvent\\b", RegexOption.IGNORE_CASE)
+        private val NATIVE_EVENT = Regex("\\bBlueprintNativeEvent\\b", RegexOption.IGNORE_CASE)
+
+        /** `ScriptName = "Name"` or `ScriptName = Name`; `ScriptMethod` is the same with a lower priority. */
+        private val SCRIPT_NAME_META = Regex("\\bScriptName\\s*=\\s*(?:\"([^\"]*)\"|(\\w+))", RegexOption.IGNORE_CASE)
+        private val SCRIPT_METHOD_META = Regex("\\bScriptMethod\\s*=\\s*(?:\"([^\"]*)\"|(\\w+))", RegexOption.IGNORE_CASE)
+
+        private val MACRO_NAME = Regex("[A-Z][A-Z0-9_]*")
+
+        /**
+         * The name a `ScriptName` or `ScriptMethod` meta gives the function in script, or null. Only
+         * the first of several `;`-separated names counts, as it does for the AngelScript plugin.
+         */
+        private fun scriptNameMeta(specifiers: String): String? {
+            val match = SCRIPT_NAME_META.find(specifiers) ?: SCRIPT_METHOD_META.find(specifiers) ?: return null
+            val value = match.groups[1]?.value ?: match.groups[2]?.value ?: return null
+            return value.substringBefore(';').trim().takeIf { it.isNotEmpty() }
+        }
+
         /** The declaration head a `{` can belong to, with the declared name captured. */
         private val TYPE_HEAD = Regex(
             "\\b(?:class|struct|union|namespace|enum\\s+class|enum)" +
@@ -359,6 +467,48 @@ class CppSource(private val text: String) {
             }
             return mask
         }
+    }
+}
+
+/**
+ * A `UFUNCTION(BlueprintImplementableEvent)` or `UFUNCTION(BlueprintNativeEvent)` as a header
+ * declares it.
+ */
+data class CppBlueprintEvent(
+    /** The class whose body declares it, or null when it is not inside one. */
+    val owner: String?,
+    val name: String,
+    val nameOffset: Int,
+    /** True for `BlueprintImplementableEvent`, which has no C++ implementation to fall back on. */
+    val implementable: Boolean,
+    /** What a `ScriptName` or `ScriptMethod` meta renames it to in script. */
+    val scriptNameMeta: String?,
+) {
+    /**
+     * The names a script override of this event can have, most likely first.
+     *
+     * Script does not always use the C++ name: `AActor::ReceiveBeginPlay` is overridden as
+     * `BeginPlay`. This follows `FAngelscriptFunctionSignature::GetScriptNameForFunction` in the
+     * AngelScript plugin - a `ScriptName` or `ScriptMethod` meta wins, otherwise `K2_`, `BP_` and
+     * `AS_` are dropped, and for events `Received_` and then `Receive`, all without regard to case.
+     * The plugin keeps the C++ name when the shortened one belongs to another function of the class,
+     * which a header cannot always show - the function may be inherited - so the C++ name is always
+     * a candidate too. An override spelled that way cannot mean any other event of the class.
+     */
+    fun scriptNames(): List<String> {
+        val scriptName = scriptNameMeta ?: run {
+            var shortened = name
+            for (prefix in SCRIPT_NAME_PREFIXES) {
+                if (shortened.startsWith(prefix, ignoreCase = true)) shortened = shortened.substring(prefix.length)
+            }
+            shortened
+        }
+        return listOf(scriptName, name).filter { it.isNotEmpty() }.distinct()
+    }
+
+    private companion object {
+        /** In the order the AngelScript plugin removes them; each is removed at most once. */
+        val SCRIPT_NAME_PREFIXES = listOf("K2_", "BP_", "AS_", "Received_", "Receive")
     }
 }
 

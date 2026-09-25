@@ -67,6 +67,13 @@
         <usageGroupingRuleProvider
                 implementation="com.scriptacus.riderunrealangelscript.usages.AngelScriptUsageTypeGroupingRuleProvider"/>
 
+        <!-- C++ blueprint events implemented in script: shown on the declaration, and Rider's
+             "not implemented in any blueprint" warning hidden for them -->
+        <codeInsight.codeVisionProvider
+                implementation="com.scriptacus.riderunrealangelscript.overrides.ScriptOverridesCodeVisionProvider"/>
+        <rdclient.highlighterSuppressionHandler
+                implementation="com.scriptacus.riderunrealangelscript.overrides.NotImplementedWarningSuppressor"/>
+
         <!-- Settings/Preferences UI for AngelScript plugin -->
         <applicationConfigurable
             parentId="language"
