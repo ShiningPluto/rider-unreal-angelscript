@@ -5,6 +5,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.redhat.devtools.lsp4ij.ServerStatus
 import com.redhat.devtools.lsp4ij.client.LanguageClientImpl
+import com.scriptacus.riderunrealangelscript.overrides.ScriptOverrideService
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspConfiguration
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 import org.eclipse.lsp4j.PublishDiagnosticsParams
@@ -61,6 +62,8 @@ class AngelScriptLanguageClient(project: Project) : LanguageClientImpl(project) 
                 // Can legitimately happen when the server dies again before the push lands.
                 LOG.warn("Failed to send configuration to AngelScript LSP server on start", e)
             }
+            // Keeps asking until the server has loaded the scripts and has C++ types to resolve against.
+            ScriptOverrideService.getInstance(project).requestRefresh()
         }
     }
 }

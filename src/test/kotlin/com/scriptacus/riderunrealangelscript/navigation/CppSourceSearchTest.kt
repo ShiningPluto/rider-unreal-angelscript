@@ -264,6 +264,22 @@ class CppSourceSearchTest : UsefulTestCase() {
         assertEquals("FTransformFragment", CppSource(text).enclosingTypeAt(text.indexOf("SetTransform")))
     }
 
+    /** The words before a class body are read for its name, and a doc comment is full of words. */
+    fun testCommentsAndStringsBeforeABodyDoNotNameTheType() {
+        val text = """
+            /**
+             * Base class for every door logic.
+             */
+            UCLASS(meta = (DisplayName = "class Placeholder"))
+            class GAME_API UDoorLogicBase : public UObject
+            {
+                void TickDoor(float DeltaTime);
+            };
+        """.trimIndent()
+
+        assertEquals("UDoorLogicBase", CppSource(text).enclosingTypeAt(text.indexOf("TickDoor")))
+    }
+
     fun testMentionsSeesCodeOnly() {
         assertTrue(CppSource("void Take(const FTransform& T);\n").mentions("FTransform"))
         assertFalse(CppSource("// takes an FTransform one day\n").mentions("FTransform"))

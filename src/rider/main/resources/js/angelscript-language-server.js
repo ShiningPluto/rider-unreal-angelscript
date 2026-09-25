@@ -41577,6 +41577,68 @@ connection.onRequest("angelscript/setTypeCacheEnabled", (enabled) => {
   };
 });
 
+// The C++ class declaring the blueprint event that script type's method [name] overrides, or null
+// when the event is declared in script. The type database lists members on the class that declares
+// them, so the first C++ ancestor with the event among its own members is the one whose header
+// declares it.
+function __asCppEventDeclarer(scriptType, name) {
+  let check = scriptType.getSuperType();
+  for (let depth = 0; check && depth < 64; ++depth) {
+    let own = check.symbols.get(name);
+    let methods = own instanceof Array ? own : (own ? [own] : []);
+    if (methods.some((method) => method.isBlueprintEvent)) {
+      if (!check.declaredModule)
+        return check.name;
+      // A script parent's override leads to the same C++ event; its own BlueprintEvent does not.
+      if (!methods.some((method) => method.isBlueprintOverride))
+        return null;
+    }
+    check = check.getSuperType();
+  }
+  return null;
+}
+
+// Every BlueprintOverride in the loaded scripts whose event is declared in C++, under the script
+// name of the event. The client maps that back to the C++ name: the database only carries the C++
+// name for events whose script name differs, and the parse drops it for events altogether.
+//
+// 'settled' is false while loaded files are still being parsed and resolved, or before there are
+// C++ types to resolve against - the list is then incomplete, and the client asks again. A root
+// still being scanned does not count: that count is local to the initialize handler. With only the
+// script folders as roots they scan in well under a second, long before the types arrive.
+connection.onRequest("angelscript/getScriptOverrides", () => {
+  let overrides = [];
+  for (let asmodule of GetAllLoadedModules()) {
+    if (!asmodule.parsed)
+      continue;
+    for (let dbtype of asmodule.types) {
+      if (dbtype.isStruct || dbtype.isEnum || dbtype.isDelegate || !dbtype.supertype)
+        continue;
+      for (let [name, syms] of dbtype.symbols) {
+        let method = (syms instanceof Array ? syms : [syms]).find((sym) => sym.isBlueprintOverride);
+        if (!method)
+          continue;
+        let cppClass = __asCppEventDeclarer(dbtype, name);
+        if (!cppClass)
+          continue;
+        let position = asmodule.getPosition(method.moduleOffset);
+        overrides.push({
+          cppClass: cppClass,
+          name: name,
+          scriptClass: dbtype.name,
+          uri: asmodule.displayUri,
+          line: position.line,
+          character: position.character
+        });
+      }
+    }
+  }
+  return {
+    settled: HasTypesFromUnreal() && !IsServicingQueues,
+    overrides: overrides
+  };
+});
+
 // The C++ classes a member could be declared by: the type itself and everything it inherits from.
 // The client searches headers as text, where the only way to tell UMyComponent::SetTransform from some
 // other class's SetTransform is which class body the declaration sits in - and an inherited member

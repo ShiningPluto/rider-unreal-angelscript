@@ -89,4 +89,16 @@ interface AngelScriptLanguageServer : LanguageServer {
      */
     @JsonRequest("angelscript/setTypeCacheEnabled")
     fun setTypeCacheEnabled(enabled: Boolean): CompletableFuture<Map<String, Any>?>
+
+    /**
+     * Every script override of a blueprint event declared in C++.
+     * Custom LSP request: angelscript/getScriptOverrides
+     *
+     * Returns `settled` (false while scripts are still loading or there are no C++ types yet, when
+     * the list is incomplete) and `overrides`: one entry per override, with `cppClass` (the C++
+     * class declaring the event), `name` (the event's script name), `scriptClass`, and the `uri`,
+     * `line` and `character` of the overriding method's name.
+     */
+    @JsonRequest("angelscript/getScriptOverrides")
+    fun getScriptOverrides(): CompletableFuture<Map<String, Any>?>
 }

@@ -27,6 +27,7 @@ This plugin bundles and integrates the AngelScript language server from the exce
 - **API Browser Tool Window** - Browse and search Unreal/AngelScript API documentation
 - **AngelScript File Window** - Browse .as files for your projects and plugins
 - **Unreal-Specific Features** - Support for UPROPERTY, UFUNCTION, delegates, and more
+- **Script Implementations in C++** - Blueprint events in C++ headers show the AngelScript classes that implement them, and Rider's "not implemented in any blueprint" warning is hidden for those
 - **Auto-Discovery** - Automatically finds Node.js runtime (if available)
 
 ### Debugging
