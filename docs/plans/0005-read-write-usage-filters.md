@@ -46,9 +46,10 @@ A hook on the usage feature, asked once per reference while the usage is being c
   `UsageType.WRITE` (a read-write counts as a write, as the platform does), and every other usage as
   before.
 
-A server that does not override the hook gets exactly today's behaviour. A draft with tests,
+A server that does not override the hook gets exactly today's behaviour. The change, with tests,
 against lsp4ij `main` at `e88c1f5`, is on the branch `usage-read-write-access` of
-[ShiningPluto/lsp4ij](https://github.com/ShiningPluto/lsp4ij); no pull request has been opened.
+[ShiningPluto/lsp4ij](https://github.com/ShiningPluto/lsp4ij), submitted as
+[redhat-developer/lsp4ij#1682](https://github.com/redhat-developer/lsp4ij/pull/1682).
 
 Rider keeps the read and write access filters (`RiderUsageFilteringRuleCustomizer` only stops their
 state being saved), so in Rider the change shows as the icons and the filters. It does not group
@@ -60,6 +61,13 @@ anything there: Rider groups no lsp4ij usage by usage type.
   `AngelScriptAccess.at(reference.containingFile, reference.textRange)` for AngelScript files.
 - Delete `AngelScriptUsageTypeProvider` and its `plugin.xml` entry: lsp4ij's provider then gives
   the types. Keep `AngelScriptUsageTypeGroupingRuleProvider`, which is what shows them in Rider.
+- Group a reference that both reads and writes (`X += 1`, `X++`) on its own, as Rider's
+  "Read write access" group does for C++. The IntelliJ Platform has no usage type for it:
+  `UsageType` has only `READ` and `WRITE`, and its `UsageTypeGroupingRule` files any usage that
+  writes under `WRITE`, so lsp4ij types it "Value write" and the change to lsp4ij keeps that. The
+  C++ group comes from Rider's backend. `AngelScriptUsageTypeGroupingRule` can tell from the usage
+  itself - a `ReadWriteAccessUsage` accessed both for reading and for writing - and name the group
+  as Rider does. The icon and the filters already treat it as read-write.
 - Raise the minimum lsp4ij version, and say so in the changelog.
 
 ## Constraints
@@ -87,3 +95,8 @@ anything there: Rider groups no lsp4ij usage by usage type.
   was drafted the same day.
 - 2026-09-25 - The draft pushed to a fork; its docs no longer say a known access groups the reference,
   which is not so in Rider.
+- 2026-10-02 - Tried end to end in Rider 2026.2.3 (`runLocalRider` with `-PlocalLsp4ij`, and the
+  plugin side above applied locally): access icons, the read and write filters, and grouping by
+  "Occurrence Type" all work. A read-write reference (`+=`, `++`) gets the read-write icon and
+  stays visible unless both filters are off; only its group is "Value write". Submitted as lsp4ij#1682 after the maintainer asked for a PR in
+  discussion #1676.
