@@ -50,6 +50,20 @@ Launch a sandboxed Rider instance with the plugin installed:
 
 This is useful for testing changes during development.
 
+The sandbox runs the Rider version the plugin is built against (`productVersion`). Three optional
+properties adapt it to a real Unreal project:
+
+| Property | Effect |
+|---|---|
+| `-PrunIdeMaxHeap=4g` | Heap of the sandbox Rider. The default, 1500m, is too small for a large Unreal project. |
+| `-PlocalRider=<folder of an installed Rider>` | Adds a `runLocalRider` task that runs the plugin in that Rider instead, for a project whose toolchain (MSBuild, C#) is newer than `productVersion` knows. The plugin is still built against `productVersion`. |
+| `-PlocalLsp4ij=<path to an lsp4ij plugin zip>` | Builds and runs against a local lsp4ij build instead of the released version, to try an lsp4ij change before it ships. |
+
+For example, with Rider installed by the Toolbox App:
+```bash
+./gradlew runLocalRider -PlocalRider="$LOCALAPPDATA/Programs/Rider" -PrunIdeMaxHeap=4g
+```
+
 ### Building Components Individually
 
 **Compile the third-party language server:**
