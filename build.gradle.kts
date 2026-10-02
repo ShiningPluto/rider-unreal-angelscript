@@ -6,6 +6,7 @@ import org.gradle.kotlin.dsl.register
 import org.jetbrains.grammarkit.tasks.GenerateLexerTask
 import org.jetbrains.grammarkit.tasks.GenerateParserTask
 import org.jetbrains.intellij.platform.gradle.Constants
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.gradle.process.ExecOperations
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
@@ -263,7 +264,13 @@ dependencies {
         bundledPlugin("com.intellij.mcpServer") // Optional at runtime: AngelScript tools for the IDE's MCP server
 
         // External plugins
-        plugin("com.redhat.devtools.lsp4ij", "0.21.0")
+        // -PlocalLsp4ij=<path to an lsp4ij plugin zip> builds and runs against a local lsp4ij build instead
+        val localLsp4ij = providers.gradleProperty("localLsp4ij").orNull
+        if (localLsp4ij != null) {
+            localPlugin(file(localLsp4ij))
+        } else {
+            plugin("com.redhat.devtools.lsp4ij", "0.21.0")
+        }
 
         // Test framework
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
@@ -274,9 +281,12 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+// Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb). An Unreal project
+// runs out of that; raise it with -PrunIdeMaxHeap=4g, as much as the Rider you use every day has
+val runIdeMaxHeap = providers.gradleProperty("runIdeMaxHeap").getOrElse("1500m")
+
 tasks.runIde {
-    // Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb)
-    maxHeapSize = "1500m"
+    maxHeapSize = runIdeMaxHeap
 }
 
 tasks.test {
@@ -379,27 +389,45 @@ fun findNpmInPath(): String? {
         ?.absolutePath
 }
 
-tasks.prepareSandbox {
+// Every sandbox the plugin runs in needs the backend assemblies next to the frontend jar
+fun PrepareSandboxTask.includeDotNetBackend() {
     dependsOn(compileDotNet)
     dependsOn(buildLsp)
 
-    val outputFolder = "${rootDir}/src/dotnet/${dotnetPluginId}/bin/${dotnetPluginId}.Rider/${buildConfiguration}"
+    val outputFolder = "${project.rootDir}/src/dotnet/${dotnetPluginId}/bin/${dotnetPluginId}.Rider/${buildConfiguration}"
     val dllFiles = listOf(
             "$outputFolder/${dotnetPluginId}.dll",
             "$outputFolder/${dotnetPluginId}.pdb",
 
             // TODO: add additional assemblies
-    )
+    ).map { project.file(it) }
 
-    dllFiles.forEach { f ->
-        val file = file(f)
-        from(file) { into("${rootProject.name}/dotnet") }
+    dllFiles.forEach { file ->
+        from(file) { into("${project.rootProject.name}/dotnet") }
     }
 
     doLast {
-        dllFiles.forEach { f ->
-            val file = file(f)
+        dllFiles.forEach { file ->
             if (!file.exists()) throw RuntimeException("File $file does not exist")
+        }
+    }
+}
+
+tasks.prepareSandbox {
+    includeDotNetBackend()
+}
+
+// -PlocalRider=<folder of an installed Rider> adds runLocalRider, which runs the plugin in that Rider
+// instead of productVersion. A project whose toolchain is newer than productVersion knows (MSBuild,
+// C#) does not load in the sandbox runIde starts, but does in a Rider recent enough.
+providers.gradleProperty("localRider").orNull?.let { localRider ->
+    intellijPlatformTesting.runIde.register("runLocalRider") {
+        localPath = file(localRider)
+        task {
+            maxHeapSize = runIdeMaxHeap
+        }
+        prepareSandboxTask {
+            includeDotNetBackend()
         }
     }
 }
