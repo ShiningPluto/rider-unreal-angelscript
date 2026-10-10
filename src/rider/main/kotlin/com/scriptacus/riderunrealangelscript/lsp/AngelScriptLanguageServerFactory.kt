@@ -4,6 +4,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.redhat.devtools.lsp4ij.LanguageServerFactory
 import com.redhat.devtools.lsp4ij.client.LanguageClientImpl
+import com.redhat.devtools.lsp4ij.client.features.LSPClientFeatures
 import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider
 import org.eclipse.lsp4j.services.LanguageServer
 
@@ -33,9 +34,17 @@ class AngelScriptLanguageServerFactory : LanguageServerFactory {
         return AngelScriptLanguageServer::class.java
     }
 
-    override fun createClientFeatures(): com.redhat.devtools.lsp4ij.client.features.LSPClientFeatures {
+    override fun createClientFeatures(): LSPClientFeatures {
         LOG.info("Creating client features with AngelScriptCompletionFeature")
-        return com.redhat.devtools.lsp4ij.client.features.LSPClientFeatures()
+        return object : LSPClientFeatures() {
+            /**
+             * The server is started when the project opens, before any script is, and features
+             * such as the C++ override markers rely on it staying up. Without this lsp4ij stops it
+             * a few seconds after any editor tab closes: it checks for open documents on every
+             * close, not only when the closed file is one it serves.
+             */
+            override fun keepServerAlive(): Boolean = true
+        }
             .setFileUriSupport(AngelScriptFileUriSupport())
             .setWorkspaceFolderFeature(AngelScriptWorkspaceFolderFeature())
             .setCompletionFeature(AngelScriptCompletionFeature())
