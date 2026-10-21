@@ -1,7 +1,7 @@
 ---
 id: plan-0006
 title: Script folders become content roots the first time a project is opened
-status: open
+status: done
 date: 2026-10-02
 area: editor
 depends-on: []
@@ -64,3 +64,12 @@ Detection has to run again once the solution has loaded, not only at the first s
 
 - 2026-10-02 - Written after Find Usages in the "Solution" scope found no AngelScript references in a
   fresh sandbox while the daily Rider did; traced to the detection log above.
+- 2026-10-21 - Done, for 1.0.0, by the first option: `AngelScriptContentRootProvider` detects again on
+  every `ModuleRootListener.rootsChanged` and every exit from dumb mode, coalesced per project, and
+  adds only the folders no content root covers yet. A "solution loaded" signal was not needed, and
+  finding `.uplugin` files on disk would still have missed engine plugins, which only the index
+  reaches. Checked in a sandbox with an empty system directory on ProjectF1 (Rider 2026.2.3):
+  `Detected 0 Script folders` at the first smart mode (12:01:33), `Detected 13` nine seconds later
+  when the project roots changed, all 13 added at once, and no further detections changed anything
+  through "solution is fully loaded" at 12:05:15. Find Usages in the "Solution" scope then found
+  AngelScript references in that same first session.

@@ -1,19 +1,29 @@
 package com.scriptacus.riderunrealangelscript.project
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ModuleRootEvent
+import com.intellij.openapi.roots.ModuleRootListener
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.startup.ProjectActivity
+import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.UserDataHolderEx
 import com.intellij.openapi.vfs.*
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.util.concurrency.AppExecutorUtil
 import java.util.concurrent.ConcurrentHashMap
+
+private val ADDED_CONTENT_ROOTS = Key.create<MutableSet<String>>("angelscript.addedContentRoots")
+private val DETECTED_COUNT = Key.create<Int>("angelscript.detectedScriptFolderCount")
 
 /**
  * Automatically detects and registers AngelScript Script folders as module content roots.
@@ -34,41 +44,60 @@ import java.util.concurrent.ConcurrentHashMap
  * - Project plugin AngelScript code
  * - Engine-level plugin AngelScript code
  *
- * Performance: Defers Script folder detection until indexing completes to avoid
- * querying FilenameIndex before it's ready.
+ * Detection runs again whenever the project's roots change or indexing finishes, not only once:
+ * Rider fills the project model in stages for minutes after the first smart mode, and on a project
+ * it has never indexed the .uproject/.uplugin files are not in the project scope until then. See
+ * docs/plans/0006-register-script-folders-on-first-open.md.
  */
 class AngelScriptContentRootProvider : ProjectActivity {
     private val LOG = Logger.getInstance(AngelScriptContentRootProvider::class.java)
 
-    // Track content roots we've added to avoid redundant operations
-    private val addedContentRoots = ConcurrentHashMap.newKeySet<String>()
-
     override suspend fun execute(project: Project) {
         LOG.info("AngelScriptContentRootProvider initializing for project: ${project.name}")
 
-        // Run Script folder detection in background to avoid EDT violations
-        com.intellij.openapi.application.ReadAction.nonBlocking<Unit> {
-            detectAndRegisterScriptFolders(project)
+        // Adding a content root changes the roots too, which schedules one more detection; by then
+        // every folder is registered and nothing changes, so this does not loop.
+        project.messageBus.connect().apply {
+            subscribe(ModuleRootListener.TOPIC, object : ModuleRootListener {
+                override fun rootsChanged(event: ModuleRootEvent) = scheduleDetection(project)
+            })
+            subscribe(DumbService.DUMB_MODE, object : DumbService.DumbModeListener {
+                override fun exitDumbMode() = scheduleDetection(project)
+            })
         }
-            .inSmartMode(project)
-            .finishOnUiThread(com.intellij.openapi.application.ModalityState.defaultModalityState()) {
-                setupVfsListener(project)
-                LOG.info("AngelScriptContentRootProvider initialization complete")
-            }
-            .submit(com.intellij.util.concurrency.AppExecutorUtil.getAppExecutorService())
+        setupVfsListener(project)
+        scheduleDetection(project)
     }
 
-    private fun detectAndRegisterScriptFolders(project: Project) {
-        val startTime = System.currentTimeMillis()
-        val scriptFolders = detectScriptFolders(project)
-        val duration = System.currentTimeMillis() - startTime
+    /** Detects in smart mode off the EDT; requests arriving before one has run are merged into it. */
+    private fun scheduleDetection(project: Project) {
+        ReadAction.nonBlocking<List<VirtualFile>> { ScriptFolderDetector.detectScriptFolders(project) }
+            .inSmartMode(project)
+            .expireWhen { project.isDisposed }
+            .coalesceBy(this, project)
+            .finishOnUiThread(ModalityState.defaultModalityState()) { folders ->
+                // Detection runs many times a session; logging only changes keeps the progression
+                // as the project model fills ("0", then the real count) without repeating it.
+                if (project.getUserData(DETECTED_COUNT) != folders.size) {
+                    project.putUserData(DETECTED_COUNT, folders.size)
+                    LOG.info("Detected ${folders.size} Script folders")
+                }
+                registerScriptFolders(project, folders)
+            }
+            .submit(AppExecutorUtil.getAppExecutorService())
+    }
 
-        LOG.info("Detected ${scriptFolders.size} Script folders in ${duration}ms")
+    private fun findMainModule(project: Project) = ModuleManager.getInstance(project)
+        .modules
+        .firstOrNull { !it.name.contains("ReSharper") }
 
-        if (scriptFolders.isEmpty()) {
-            LOG.info("No AngelScript Script folders found")
-            return
-        }
+    /**
+     * Adds the folders not yet covered by a content root. Runs on the EDT, and checks the module's
+     * roots as they are now rather than any record of earlier additions, so it is safe to call as
+     * often as detection runs.
+     */
+    private fun registerScriptFolders(project: Project, folders: Collection<VirtualFile>) {
+        if (project.isDisposed || folders.isEmpty()) return
 
         val mainModule = findMainModule(project)
         if (mainModule == null) {
@@ -76,55 +105,29 @@ class AngelScriptContentRootProvider : ProjectActivity {
             return
         }
 
-        scriptFolders.forEach { folder ->
-            LOG.info("  - ${folder.path}")
-            addContentRootIfNotExists(mainModule, folder)
+        val existingRoots = ModuleRootManager.getInstance(mainModule).contentRoots
+        val missing = folders.filter { folder ->
+            folder.isValid && existingRoots.none { VfsUtilCore.isAncestor(it, folder, false) }
         }
-    }
+        if (missing.isEmpty()) return
 
-    private fun detectScriptFolders(project: Project): List<VirtualFile> {
-        return ScriptFolderDetector.detectScriptFolders(project)
-    }
-
-    private fun findMainModule(project: Project) = ModuleManager.getInstance(project)
-        .modules
-        .firstOrNull { !it.name.contains("ReSharper") }
-
-    private fun addContentRootIfNotExists(module: com.intellij.openapi.module.Module, folder: VirtualFile) {
-        // Check if already in our tracking set
-        if (folder.path in addedContentRoots) {
-            LOG.debug("Content root already tracked: ${folder.path}")
-            return
-        }
-
-        // Check if already exists in module
-        val existingRoots = ModuleRootManager.getInstance(module).contentRoots
-        if (existingRoots.any { it.path == folder.path }) {
-            LOG.info("Content root already exists in module: ${folder.path}")
-            addedContentRoots.add(folder.path)
-            return
-        }
-
-        // Check if parent content root covers it
-        if (existingRoots.any { folder.path.startsWith(it.path) }) {
-            LOG.info("Content root already covered by parent: ${folder.path}")
-            return
-        }
-
-        // Add as content root - must run on EDT
-        LOG.info("Adding content root: ${folder.path}")
-        ApplicationManager.getApplication().invokeLater {
-            ModuleRootModificationUtil.updateModel(module) { model ->
-                val contentEntry = model.addContentEntry(folder)
-                // Mark as source root
-                contentEntry.addSourceFolder(folder, false)
+        LOG.info("Adding ${missing.size} of ${folders.size} detected Script folders as content roots")
+        ModuleRootModificationUtil.updateModel(mainModule) { model ->
+            missing.forEach { folder ->
+                LOG.info("  - ${folder.path}")
+                model.addContentEntry(folder).addSourceFolder(folder, false)
             }
-            addedContentRoots.add(folder.path)
-            LOG.info("Content root added successfully: ${folder.path}")
         }
+        addedContentRoots(project).addAll(missing.map { it.path })
     }
+
+    /** The content roots this session added, which are the ones it may remove again. */
+    private fun addedContentRoots(project: Project): MutableSet<String> =
+        project.getUserData(ADDED_CONTENT_ROOTS)
+            ?: (project as UserDataHolderEx).putUserDataIfAbsent(ADDED_CONTENT_ROOTS, ConcurrentHashMap.newKeySet())
 
     private fun removeContentRootIfExists(project: Project, folder: VirtualFile) {
+        val addedContentRoots = addedContentRoots(project)
         if (folder.path !in addedContentRoots) {
             return
         }
@@ -143,6 +146,11 @@ class AngelScriptContentRootProvider : ProjectActivity {
             addedContentRoots.remove(folder.path)
             LOG.info("Content root removed successfully: ${folder.path}")
         }
+    }
+
+    /** VFS listeners run inside the write action that changed the files, so roots change afterwards. */
+    private fun registerLater(project: Project, folder: VirtualFile) {
+        ApplicationManager.getApplication().invokeLater { registerScriptFolders(project, listOf(folder)) }
     }
 
     private fun setupVfsListener(project: Project) {
@@ -174,10 +182,7 @@ class AngelScriptContentRootProvider : ProjectActivity {
                                             it.extension == "uproject" || it.extension == "uplugin"
                                         }
                                         if (hasProjectFile) {
-                                            val mainModule = findMainModule(project)
-                                            if (mainModule != null) {
-                                                addContentRootIfNotExists(mainModule, file)
-                                            }
+                                            registerLater(project, file)
                                         }
                                     }
                                 }
@@ -185,10 +190,7 @@ class AngelScriptContentRootProvider : ProjectActivity {
                                 else if (file.extension == "uproject" || file.extension == "uplugin") {
                                     val scriptFolder = file.parent?.findChild("Script")
                                     if (scriptFolder?.isDirectory == true) {
-                                        val mainModule = findMainModule(project)
-                                        if (mainModule != null) {
-                                            addContentRootIfNotExists(mainModule, scriptFolder)
-                                        }
+                                        registerLater(project, scriptFolder)
                                     }
                                 }
                             }

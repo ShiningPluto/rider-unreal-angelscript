@@ -14,7 +14,7 @@ the session that found it and the session that acts on it.
 | [0003](0003-cpp-navigation-precision.md) | Tell overloads and inherited members apart in C++ navigation | cpp-navigation | open | 2026-09-20 |
 | [0004](0004-more-mcp-tools.md) | Give agents C++ declarations, semantic queries and asset lookups for AngelScript | mcp | open | 2026-09-23 |
 | [0005](0005-read-write-usage-filters.md) | Make the read and write access filters and icons of Find Usages work for AngelScript | lsp-client | open | 2026-09-25 |
-| [0006](0006-register-script-folders-on-first-open.md) | Script folders become content roots the first time a project is opened | editor | open | 2026-10-02 |
+| [0006](0006-register-script-folders-on-first-open.md) | Script folders become content roots the first time a project is opened | editor | done | 2026-10-02 |
 
 ## Format
 
