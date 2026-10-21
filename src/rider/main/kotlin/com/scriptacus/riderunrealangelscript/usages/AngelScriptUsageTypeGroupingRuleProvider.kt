@@ -1,5 +1,6 @@
 package com.scriptacus.riderunrealangelscript.usages
 
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -15,11 +16,12 @@ import com.intellij.usages.impl.rules.UsageTypeProviderEx
 import com.intellij.usages.rules.PsiElementUsage
 import com.intellij.usages.rules.SingleParentUsageGroupingRule
 import com.intellij.usages.rules.UsageGroupingRule
-import com.intellij.usages.rules.UsageGroupingRuleEx
 import com.intellij.usages.rules.UsageGroupingRuleProvider
-import com.intellij.usages.rules.UsageGroupingRuleProviderEx
+import com.jetbrains.rd.ide.model.findUsagesHost
+import com.jetbrains.rider.projectView.solution
 import com.redhat.devtools.lsp4ij.usages.LSPUsagePsiElement
 import com.scriptacus.riderunrealangelscript.lang.psi.AngelScriptFile
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Groups AngelScript usages in the Find tool window by their usage type, which Rider does not do.
@@ -33,36 +35,49 @@ import com.scriptacus.riderunrealangelscript.lang.psi.AngelScriptFile
  * It is on when Rider groups its own results by usage type, which is the "Occurrence Type" item
  * under Group By; toggling that item makes every usage view ask again.
  */
-class AngelScriptUsageTypeGroupingRuleProvider : UsageGroupingRuleProvider {
+open class AngelScriptUsageTypeGroupingRuleProvider : UsageGroupingRuleProvider {
 
     override fun getActiveRules(
         project: Project,
         usageViewSettings: UsageViewSettings,
         presentation: UsageViewPresentation?,
     ): Array<UsageGroupingRule> =
-        if (groupsByUsageType(project, usageViewSettings, presentation)) arrayOf(AngelScriptUsageTypeGroupingRule())
+        if (groupsByUsageType(project, usageViewSettings)) arrayOf(AngelScriptUsageTypeGroupingRule())
         else UsageGroupingRule.EMPTY_ARRAY
 
-    private fun groupsByUsageType(project: Project, settings: UsageViewSettings, presentation: UsageViewPresentation?): Boolean {
-        val others = GROUPING_RULE_PROVIDERS.extensionList.filter { it !is AngelScriptUsageTypeGroupingRuleProvider }
-        if (others.any { provider -> provider.getActiveRules(project, settings, presentation).any(::isRidersUsageTypeRule) }) {
-            return true
-        }
+    private fun groupsByUsageType(project: Project, settings: UsageViewSettings): Boolean {
+        // Rider never groups by occurrence type in the Show Usages popup. Its settings class is
+        // internal API, so it is recognised by name.
+        if (settings.javaClass.name == SHOW_USAGES_SETTINGS_CLASS) return false
         // A Rider without the rule: fall back to the platform's setting rather than never grouping
-        val riderHasTheRule = others.any { provider ->
-            provider is UsageGroupingRuleProviderEx && provider.getAllRules(project, null).any(::isRidersUsageTypeRule)
+        return ridersUsageTypeGrouping(project) ?: settings.isGroupByUsageType
+    }
+
+    /**
+     * Whether Rider's own "Occurrence Type" grouping is on, or null when Rider has no such rule.
+     *
+     * Read from the rule Rider's backend describes, as Rider does for a rule with no frontend
+     * toggle action of its own. Asking Rider's grouping rule provider for its active rules would be
+     * simpler, but getActiveRules is override-only API, which the Marketplace verifier reports.
+     */
+    protected open fun ridersUsageTypeGrouping(project: Project): Boolean? {
+        val rule = project.solution.findUsagesHost.groupingRules.valueOrNull?.items
+            ?.firstOrNull { it.id == RIDER_USAGE_TYPE_RULE_ID }
+            ?: return null
+        if (loggedRule.compareAndSet(false, true)) {
+            LOG.info("Rider's $RIDER_USAGE_TYPE_RULE_ID grouping rule: groupingActionId=${rule.groupingActionId}, enabled=${rule.enabled.valueOrNull}")
         }
-        return !riderHasTheRule && settings.isGroupByUsageType
+        return rule.enabled.valueOrNull == true
     }
 
     private companion object {
-        // UsageGroupingRuleProvider.EP_NAME is internal API
-        val GROUPING_RULE_PROVIDERS = ExtensionPointName.create<UsageGroupingRuleProvider>("com.intellij.usageGroupingRuleProvider")
+        val LOG = Logger.getInstance(AngelScriptUsageTypeGroupingRuleProvider::class.java)
+        val loggedRule = AtomicBoolean(false)
 
-        // RiderUsageGroupingRule.occurrenceType; not API
+        // The id of Rider's RiderUsageGroupingRule for occurrence types; not API
         const val RIDER_USAGE_TYPE_RULE_ID = "OccurrenceType"
 
-        fun isRidersUsageTypeRule(rule: UsageGroupingRule) = (rule as? UsageGroupingRuleEx)?.id == RIDER_USAGE_TYPE_RULE_ID
+        const val SHOW_USAGES_SETTINGS_CLASS = "com.intellij.usages.ShowUsageViewSettings"
     }
 }
 

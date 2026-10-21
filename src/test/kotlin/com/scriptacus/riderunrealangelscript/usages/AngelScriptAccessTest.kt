@@ -7,15 +7,9 @@ import com.intellij.psi.PsiFile
 import com.intellij.testFramework.ParsingTestCase
 import com.intellij.usages.ShowUsageViewSettings
 import com.intellij.usages.UsageTarget
-import com.intellij.usages.UsageView
-import com.intellij.usages.UsageViewPresentation
 import com.intellij.usages.UsageViewSettings
 import com.intellij.usages.impl.rules.UsageType
 import com.intellij.usages.impl.rules.UsageTypeProvider
-import com.intellij.usages.rules.UsageGroupingRule
-import com.intellij.usages.rules.UsageGroupingRuleEx
-import com.intellij.usages.rules.UsageGroupingRuleProvider
-import com.intellij.usages.rules.UsageGroupingRuleProviderEx
 import com.redhat.devtools.lsp4ij.usages.LSPUsagePsiElement
 import com.scriptacus.riderunrealangelscript.lang.AngelScriptParserDefinition
 
@@ -141,38 +135,25 @@ class AngelScriptAccessTest : ParsingTestCase("", "as", AngelScriptParserDefinit
     }
 
     fun testGroupingFollowsRidersUsageTypeGrouping() {
-        registerExtensionPoint(UsageGroupingRuleProvider.EP_NAME, UsageGroupingRuleProvider::class.java)
-        val rider = FakeRiderGrouping()
-        registerExtension(UsageGroupingRuleProvider.EP_NAME, rider)
-        val provider = AngelScriptUsageTypeGroupingRuleProvider()
-        // Registered too, so asking itself would recurse
-        registerExtension(UsageGroupingRuleProvider.EP_NAME, provider)
-
-        rider.groupsByUsageType = true
+        val provider = WithRidersRule(true)
         assertSize(1, provider.getActiveRules(project, UsageViewSettings(), null))
-        rider.groupsByUsageType = false
+        provider.enabled = false
         assertEmpty(provider.getActiveRules(project, UsageViewSettings(), null))
+        // Rider never groups by occurrence type in the Show Usages popup
+        provider.enabled = true
+        assertEmpty(provider.getActiveRules(project, ShowUsageViewSettings(), null))
     }
 
     fun testWithoutRidersRuleGroupingFollowsThePlatformSetting() {
-        registerExtensionPoint(UsageGroupingRuleProvider.EP_NAME, UsageGroupingRuleProvider::class.java)
-        val provider = AngelScriptUsageTypeGroupingRuleProvider()
+        val provider = WithRidersRule(null)
         assertSize(1, provider.getActiveRules(project, UsageViewSettings(), null))
         // The Show Usages popup
         assertEmpty(provider.getActiveRules(project, ShowUsageViewSettings(), null))
     }
 
-    /** Rider's provider, reduced to its rule for grouping by usage type and whether it is on. */
-    private class FakeRiderGrouping : UsageGroupingRuleProviderEx {
-        var groupsByUsageType = false
-        private val usageTypeRule = object : UsageGroupingRuleEx {
-            override fun getId() = "OccurrenceType"
-        }
-
-        override fun getActiveRules(project: Project, settings: UsageViewSettings, presentation: UsageViewPresentation?) =
-            if (groupsByUsageType) arrayOf<UsageGroupingRule>(usageTypeRule) else UsageGroupingRule.EMPTY_ARRAY
-
-        override fun getAllRules(project: Project, usageView: UsageView?) = arrayOf<UsageGroupingRule>(usageTypeRule)
+    /** The provider, with the state of Rider's "Occurrence Type" rule given rather than read from Rider. */
+    private class WithRidersRule(var enabled: Boolean?) : AngelScriptUsageTypeGroupingRuleProvider() {
+        override fun ridersUsageTypeGrouping(project: Project): Boolean? = enabled
     }
 
     private fun usage(statement: String, kind: LSPUsagePsiElement.UsageKind = LSPUsagePsiElement.UsageKind.references) =
