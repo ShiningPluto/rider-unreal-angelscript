@@ -74,6 +74,12 @@
         <codeInsight.lineMarkerProvider language="angelscript"
                                         implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptMethodSeparatorProvider"/>
         <lang.foldingBuilder language="angelscript" implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptFoldingBuilder"/>
+        <!-- Formats what a completion inserted; runs before lsp4ij's contributor so it can wrap the elements lsp4ij adds -->
+        <completion.contributor
+                id="AngelScriptCompletionContributor"
+                language="angelscript"
+                order="first, before LSPCompletionContributor"
+                implementationClass="com.scriptacus.riderunrealangelscript.lsp.AngelScriptCompletionContributor"/>
 
         <!-- Navigation handler: filters excluded files and provides C++ navigation -->
         <gotoDeclarationHandler

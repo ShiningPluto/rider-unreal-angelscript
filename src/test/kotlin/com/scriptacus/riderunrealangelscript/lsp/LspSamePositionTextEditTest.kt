@@ -11,8 +11,9 @@ import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextEdit
 
 /**
- * Pins the lsp4ij behaviour that [AngelScriptCompletionProposal] exists to work around, so that a
- * lsp4ij upgrade says whether the workaround is still needed instead of leaving it to be guessed.
+ * Pins the lsp4ij behaviour that [AngelScriptCompletionEdits.mergeSamePositionEdits] exists to work
+ * around, so that a lsp4ij upgrade says whether the workaround is still needed instead of leaving it
+ * to be guessed.
  *
  * The LSP specification (3.17, 3.16.6.4) requires that multiple edits at the same position end up
  * in the document in the order they appear in the array. `LSPIJUtils.applyEdits` converts every
@@ -28,8 +29,8 @@ import org.eclipse.lsp4j.TextEdit
  *
  * Measured identical on lsp4ij 0.19.1 (what this build compiles against) and 0.21.0 (what Rider
  * ships today). **If this test fails, lsp4ij has changed how it orders same-position edits**: check
- * whether the stable sort in [AngelScriptCompletionProposal] can be dropped in favour of plain
- * `LSPIJUtils.applyEdits`, and update docs/reference/lsp-completion-workaround.md either way.
+ * whether the merging can be dropped, and update docs/reference/lsp-completion-workaround.md either
+ * way.
  */
 class LspSamePositionTextEditTest : UsefulTestCase() {
 
@@ -39,9 +40,11 @@ class LspSamePositionTextEditTest : UsefulTestCase() {
         TestApplicationManager.getInstance()
     }
 
-    private fun applyInOrder(vararg newTexts: String): String {
-        val document = DocumentImpl("class UMyThing\n{\n}\n")
-        val edits = newTexts.map { TextEdit(Range(Position(2, 0), Position(2, 0)), it) }
+    private fun applyInOrder(vararg newTexts: String): String =
+        apply("class UMyThing\n{\n}\n", newTexts.map { TextEdit(Range(Position(2, 0), Position(2, 0)), it) })
+
+    private fun apply(text: String, edits: List<TextEdit>): String {
+        val document = DocumentImpl(text)
         CommandProcessor.getInstance().executeCommand(null, {
             ApplicationManager.getApplication().runWriteAction {
                 LSPIJUtils.applyEdits(null, document, edits)
@@ -58,11 +61,34 @@ class LspSamePositionTextEditTest : UsefulTestCase() {
         )
     }
 
-    /** The order AngelScriptCompletionProposal's comparator produces, and what it is worth. */
-    fun testReversingTheArrayRestoresTheOrderTheSpecAsksFor() {
+    /** What merging the edits first is worth: lsp4ij then applies them in the order the spec asks for. */
+    fun testMergedSamePositionEditsComeOutInArrayOrder() {
+        val insertions = listOf("UFUNCTION()\n", "\t").map { TextEdit(Range(Position(2, 0), Position(2, 0)), it) }
         assertEquals(
             "class UMyThing\n{\nUFUNCTION()\n\t}\n",
-            applyInOrder("\t", "UFUNCTION()\n")
+            apply("class UMyThing\n{\n}\n", AngelScriptCompletionEdits.mergeSamePositionEdits(insertions)!!)
+        )
+    }
+
+    /**
+     * The edits the server sends for an override of a Blueprint event typed at column 0, where the
+     * edit that adds the return type is an insertion too: without merging, the return type lands in
+     * front of the macro.
+     */
+    fun testBlueprintOverrideAtColumnZeroKeepsTheMacroFirst() {
+        val edits = listOf(
+            TextEdit(Range(Position(3, 0), Position(3, 0)), "}\n"),
+            TextEdit(Range(Position(2, 0), Position(2, 0)), "UFUNCTION(BlueprintOverride)\n"),
+            TextEdit(Range(Position(2, 0), Position(2, 0)), "void "),
+        )
+        val text = "class AMyActor\n{\nBeginPlay()\n}\n"
+        assertEquals(
+            "class AMyActor\n{\nvoid UFUNCTION(BlueprintOverride)\nBeginPlay()\n}\n}\n",
+            apply(text, edits)
+        )
+        assertEquals(
+            "class AMyActor\n{\nUFUNCTION(BlueprintOverride)\nvoid BeginPlay()\n}\n}\n",
+            apply(text, AngelScriptCompletionEdits.mergeSamePositionEdits(edits)!!)
         )
     }
 }
