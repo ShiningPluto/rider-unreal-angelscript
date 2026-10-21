@@ -5,6 +5,7 @@ import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.bindIntText
+import com.intellij.ui.dsl.builder.LabelPosition
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.layout.ComponentPredicate
@@ -15,7 +16,7 @@ import javax.swing.JPanel
 class GeneralSettingsPanel {
     private var portField = JBTextField()
     private val useCachedTypesBox = JBCheckBox("Save the type database and reuse it in later sessions")
-    private var ignorePatterns = mutableListOf<String>()
+    private val ignorePatternsEditor = StringListEditor("Ignore pattern")
 
     fun createPanel(): JPanel = panel {
         row("Unreal Connection Port:") {
@@ -55,31 +56,33 @@ class GeneralSettingsPanel {
                     "applied on top."
             )
         }
-//        row {
-//            label("Script Ignore Patterns:")
-//                .comment("Glob patterns for scripts to ignore (e.g., **/Saved/**, **/.plastic/**)")
-//        }
-        // TODO: Add list editor for ignore patterns
-        // This would use ToolbarDecorator with a JBList to allow adding/removing patterns
+        row {
+            cell(ignorePatternsEditor.component)
+                .label("Script ignore patterns:", LabelPosition.TOP)
+                .comment(
+                    "Glob patterns for script files the plugin leaves alone: they are not handed to " +
+                        "the language server when opened, and navigation does not lead into them " +
+                        "(e.g., **/Saved/**, **/.plastic/**)."
+                )
+        }
     }
 
     fun reset(state: AngelScriptLspSettings.State) {
         portField.text = state.unrealConnectionPort.toString()
         useCachedTypesBox.isSelected = state.useCachedTypeDatabase
-        ignorePatterns.clear()
-        ignorePatterns.addAll(state.scriptIgnorePatterns)
+        ignorePatternsEditor.items = state.scriptIgnorePatterns
     }
 
     fun apply(state: AngelScriptLspSettings.State) {
         state.unrealConnectionPort = portField.text.toIntOrNull() ?: 27099
         state.useCachedTypeDatabase = useCachedTypesBox.isSelected
         state.scriptIgnorePatterns.clear()
-        state.scriptIgnorePatterns.addAll(ignorePatterns)
+        state.scriptIgnorePatterns.addAll(ignorePatternsEditor.items)
     }
 
     fun isModified(state: AngelScriptLspSettings.State): Boolean {
         return state.unrealConnectionPort != (portField.text.toIntOrNull() ?: 27099) ||
                 state.useCachedTypeDatabase != useCachedTypesBox.isSelected ||
-                state.scriptIgnorePatterns != ignorePatterns
+                state.scriptIgnorePatterns != ignorePatternsEditor.items
     }
 }
