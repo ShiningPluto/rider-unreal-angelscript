@@ -7,11 +7,11 @@ import com.intellij.openapi.util.IconLoader
  */
 object AngelScriptIcons {
     /**
-     * AngelScript Unreal icons.
-     * Same icons as used by the VSCode extension.
+     * The API browser tool window. This path is the classic UI's 13x13 icon; the New UI's outlined
+     * 16x16 and 20x20 versions under icons/expui are swapped in by AngelScriptIconMappings.json.
      */
     @JvmField
-    val ToolWindow = IconLoader.getIcon("/icons/angelscript_unreal.png", AngelScriptIcons::class.java)
+    val ToolWindow = IconLoader.getIcon("/icons/toolWindowApi.svg", AngelScriptIcons::class.java)
 
     @JvmField
     val ProjectWindow = IconLoader.getIcon("/icons/project-icon-dark-theme.svg", AngelScriptIcons::class.java)
