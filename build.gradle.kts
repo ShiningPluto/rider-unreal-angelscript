@@ -274,11 +274,27 @@ dependencies {
 
         // Test framework
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
+
+        // For verifyPlugin; see -PverifyIde below
+        pluginVerifier()
     }
 
     // Add junit-vintage for JUnit 4 tests
     testImplementation("org.junit.vintage:junit-vintage-engine:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// -PverifyIde=<folder of an installed IDE> lets verifyPlugin check the plugin against that IDE with
+// the Plugin Verifier the JetBrains Marketplace runs on every upload, so internal and override-only
+// API usages show up before a release instead of in the Marketplace's review.
+providers.gradleProperty("verifyIde").orNull?.let { verifyIde ->
+    intellijPlatform {
+        pluginVerification {
+            ides {
+                local(file(verifyIde))
+            }
+        }
+    }
 }
 
 // Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb). An Unreal project

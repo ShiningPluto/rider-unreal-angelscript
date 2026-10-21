@@ -64,6 +64,14 @@ For example, with Rider installed by the Toolbox App:
 ./gradlew runLocalRider -PlocalRider="$LOCALAPPDATA/Programs/Rider" -PrunIdeMaxHeap=4g
 ```
 
+### Checking Compatibility Before a Release
+
+The JetBrains Marketplace runs the Plugin Verifier on every upload and reports internal,
+override-only, deprecated and experimental API usages. Run it locally against an installed IDE first:
+```bash
+./gradlew verifyPlugin -PverifyIde="$LOCALAPPDATA/Programs/Rider"
+```
+
 ### Building Components Individually
 
 **Compile the third-party language server:**

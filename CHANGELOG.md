@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Completion corrects each item before lsp4ij builds its completion entry, instead of replacing that entry with a subclass of lsp4ij's internal `LSPCompletionProposal` that reached its private members by reflection. Edits at the same position are merged so lsp4ij cannot apply them in reverse, an item completed right after `::` is given the range it replaces, and a decorator formats what was inserted. lsp4ij 0.21 already places the caret after the inserted text. See `docs/reference/lsp-completion-workaround.md`.
 - The Find Usages grouping reads whether Rider's "Occurrence Type" grouping is on from the rule Rider's backend describes, instead of asking Rider's grouping provider for its active rules, which is override-only API.
 - Navigation into C++ and to the AngelScript implementations of a blueprint event opens the editor through `FileEditorManager` instead of calling `Navigatable.navigate`, which is override-only API, and the Script Files tool window listens for file status changes through `FileStatusManager` instead of the internal `FileStatusListener.TOPIC`.
+- `-PverifyIde=<folder of an installed IDE>` lets `verifyPlugin` run the Plugin Verifier the Marketplace runs, against that IDE.
 
 ## 1.0.0 - 2026-10-21
 
