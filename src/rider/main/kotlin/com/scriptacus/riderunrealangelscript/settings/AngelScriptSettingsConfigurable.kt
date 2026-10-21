@@ -47,11 +47,11 @@ class AngelScriptSettingsConfigurable : SearchableConfigurable {
                     cell(diagnosticsPanel.createPanel())
                 }
             }
-//            group("Code Lenses") {
-//                row {
-//                    cell(codeLensPanel.createPanel())
-//                }
-//            }
+            group("Code Lenses") {
+                row {
+                    cell(codeLensPanel.createPanel())
+                }
+            }
             group("Navigation") {
                 row {
                     cell(navigationPanel.createPanel())
