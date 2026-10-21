@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 1.0.1
+
+### Changed
+- The plugin no longer uses API that the IntelliJ Platform or lsp4ij keep for themselves, which the JetBrains Marketplace's compatibility check reported for 1.0.0. Nothing is meant to behave differently.
+
+### Internal
+- Completion corrects each item before lsp4ij builds its completion entry, instead of replacing that entry with a subclass of lsp4ij's internal `LSPCompletionProposal` that reached its private members by reflection. Edits at the same position are merged so lsp4ij cannot apply them in reverse, an item completed right after `::` is given the range it replaces, and a decorator formats what was inserted. lsp4ij 0.21 already places the caret after the inserted text. See `docs/reference/lsp-completion-workaround.md`.
+
 ## 1.0.0 - 2026-10-21
 
 First release of this fork, published as AngelScript UE under its own plugin id. It continues from upstream 0.9.10; the entries below 1.0.0 are upstream's releases.
