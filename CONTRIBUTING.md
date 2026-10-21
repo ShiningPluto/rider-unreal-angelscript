@@ -1,4 +1,4 @@
-# Contributing to Rider Unreal Angelscript
+# Contributing to AngelScript UE
 
 Thank you for your interest in contributing! This document provides guidelines and instructions for developing and contributing to this plugin.
 
@@ -11,13 +11,13 @@ Before you begin, ensure you have the following installed:
 - **Java 21** - [Download from Adoptium](https://adoptium.net/)
 - **Node.js** - [Download from nodejs.org](https://nodejs.org/)
 - **.NET SDK** - [Download from Microsoft](https://dotnet.microsoft.com/download)
-- **JetBrains Rider** (2024.2 or newer) - For testing the plugin
+- **JetBrains Rider** (2025.2.5 or newer) - For testing the plugin
 
 ### Initial Setup
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/scriptacus/rider-unreal-angelscript.git
+   git clone https://github.com/ShiningPluto/rider-unreal-angelscript.git
    cd rider-unreal-angelscript
    ```
 
@@ -298,8 +298,7 @@ When reporting bugs or requesting features, please include:
 
 ## Questions?
 
-- **Issues**: [GitHub Issues](https://github.com/scriptacus/rider-unreal-angelscript/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/scriptacus/rider-unreal-angelscript/discussions)
+- **Issues**: [GitHub Issues](https://github.com/ShiningPluto/rider-unreal-angelscript/issues)
 
 ## License
 

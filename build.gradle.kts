@@ -306,20 +306,29 @@ tasks.processTestResources {
 }
 
 tasks.patchPluginXml {
-    // Identity comes from gradle.properties, which is not tracked by git. That lets a fork publish
-    // under its own plugin id without touching plugin.xml: the IDE matches marketplace updates by
-    // plugin id, so a distinct id makes the marketplace build and a local build two unrelated
-    // plugins that can never overwrite each other. Absent properties leave plugin.xml untouched.
+    // Identity comes from gradle.properties rather than plugin.xml, so the plugin.xml identity lines
+    // stay as upstream has them and merging upstream does not conflict with this fork's identity.
+    // The IDE matches marketplace updates by plugin id, so this fork's id keeps upstream builds and
+    // this fork's builds from ever overwriting each other. Absent properties leave plugin.xml untouched.
     pluginId.set(providers.gradleProperty("riderPluginId"))
     pluginName.set(providers.gradleProperty("riderPluginName"))
+    vendorName.set(providers.gradleProperty("riderPluginVendorName"))
+    vendorUrl.set(providers.gradleProperty("riderPluginVendorUrl"))
 
     // TODO: See also org.jetbrains.changelog: https://github.com/JetBrains/gradle-changelog-plugin
+    // "What's new" is the first list in the newest release's section, which is its Highlights: the
+    // full entries are too long for the IDE and the Marketplace. The section is found by its "## "
+    // heading first, because a heading's "- <date>" would otherwise be taken for the list.
     val changelogText = file("${rootDir}/CHANGELOG.md").readText()
-    val changelogMatches = Regex("(?s)(-.+?)(?=##|$)").findAll(changelogText)
+    val latestSection = Regex("(?ms)^## .*?(?=^## |\\z)").find(changelogText)?.value.orEmpty()
+    val firstList = Regex("(?m)(?:^- .*(?:\\r?\\n|\\z))+").find(latestSection)?.value.orEmpty()
 
-    changeNotes.set(changelogMatches.map {
-        it.groups[1]!!.value.replace("(?s)\r?\n".toRegex(), "<br />\n")
-    }.take(1).joinToString())
+    changeNotes.set(firstList.lines().filter { it.startsWith("- ") }.joinToString("", "<ul>", "</ul>") {
+        val text = it.removePrefix("- ").trim()
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace(Regex("`([^`]+)`"), "<code>$1</code>")
+        "<li>$text</li>"
+    })
 }
 
 // Install npm dependencies in the third-party VSCode extension
@@ -436,23 +445,8 @@ tasks.publishPlugin {
     dependsOn(testDotNet)
     dependsOn(tasks.buildPlugin)
     token.set(publishToken)
-
-    // Capture project properties at configuration time
-    val pluginId = dotnetPluginId
-    val projectVersion = version
-    val token = publishToken
-    val rootPath = rootDir
-
-    // Get injected ExecOperations at configuration time
-    val execOps = project.objects.newInstance<InjectedExecOps>().execOps
-
-    doLast {
-        execOps.exec {
-            executable("dotnet")
-            args("nuget","push","output/${pluginId}.${projectVersion}.nupkg","--api-key", token,"--source","https://plugins.jetbrains.com")
-            workingDir(rootPath)
-        }
-    }
+    // Only the Rider plugin is published. The ReSharper .nupkg that buildPlugin also packs is not
+    // pushed: the plugin needs Rider's frontend, so a ReSharper listing would install nothing usable.
 }
 
 val riderModel: Configuration by configurations.creating {

@@ -213,4 +213,4 @@ If you encounter issues:
 
 1. Check the **Event Log** in Rider (View → Tool Windows → Event Log)
 2. Enable verbose logging for the debug adapter (edit configuration → trace: true)
-3. Report issues at: https://github.com/scriptacus/rider-unreal-angelscript/issues
+3. Report issues at: https://github.com/ShiningPluto/rider-unreal-angelscript/issues

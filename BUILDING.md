@@ -12,7 +12,7 @@ This guide covers building the Rider Unreal AngelScript plugin from source.
 
 1. Clone the repository with submodules:
    ```bash
-   git clone --recurse-submodules https://github.com/scriptacus/rider-unreal-angelscript.git
+   git clone --recurse-submodules https://github.com/ShiningPluto/rider-unreal-angelscript.git
    cd rider-unreal-angelscript
    ```
 

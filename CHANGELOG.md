@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.0.0 - 2026-10-21
+
+First release of this fork, published as AngelScript UE under its own plugin id. It continues from upstream 0.9.10; the entries below 1.0.0 are upstream's releases.
+
+### Highlights
+- C++ blueprint events list the AngelScript classes that implement them.
+- Find Usages groups AngelScript references into reads and writes.
+- AngelScript debugging starts in one step, with a status bar item that says whether the debugger is attached.
+- Analysis keeps working from a cached type database while no Unreal editor is running, and the status bar says why analysis is unavailable when it is.
+- AngelScript tools for AI agents through Rider's MCP server.
+- Script folders are registered the first time a project is opened, so Find Usages finds script references from the first session.
+- C++ navigation confirms the declaration it opens, and many constructs the engine accepts are no longer syntax errors.
+- Bundled language server updated to unreal-angelscript v1.9.4; requires lsp4ij 0.21 or later.
 
 ### Added
 - C++ blueprint events show their AngelScript implementations, and Rider no longer warns that a `BlueprintImplementableEvent` implemented in script "is not implemented in any blueprint". Rider's check reads only `.uasset` files and offers no way to add other implementations, so every event implemented in script was flagged. Each `BlueprintImplementableEvent` and `BlueprintNativeEvent` with script overrides now has an "N AngelScript implementations" entry; clicking it opens the override, or a list when there are several. Events script knows by another name are matched, e.g. `AActor::ReceiveBeginPlay` overridden as `BeginPlay`. The overrides come from the language server, which already has the script classes and Unreal's type database. The warning is hidden as Rider adds it, so one already on screen when an override is added or removed stays as it is until the header is reopened or the declaration edited. The code vision entries update on their own.
@@ -15,6 +27,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The Unreal type database is now cached and reused when no editor is running, so highlighting and diagnostics keep working offline. The database only exists inside a running Unreal editor, which previously made analysis unavailable whenever the editor was closed. The cache is saved per project under the IDE system directory; a live editor always overrides it. A saved database cannot reflect engine C++ changed since it was written, so the status bar reports when one is in use, and saving can be turned off under Languages & Frameworks | AngelScript. The setting applies to a running server, except when switching it off while a saved database is loaded: those types have to be discarded, which needs a restart, because the server has no reset for its database and Unreal-provided symbols share the namespace tree with script-declared ones. Types an editor has already sent are unaffected and stay loaded after it closes, as they always have.
 - Status bar widget reporting why AngelScript analysis is unavailable. Semantic highlighting and diagnostics both require the C++ type database, which only a running Unreal editor can provide; until now the language server produced nothing and reported nothing in that situation. The widget distinguishes a stopped server, an unconfigured connection port, an editor that is not running, and a type database still loading. Clicking it opens the AngelScript settings.
 - Script ignore patterns and the classes that get a "Create Blueprint" code lens can be edited under Languages & Frameworks | AngelScript. Both settings were already sent to the language server, but the page had no editor for either, so they kept their defaults - `**/Saved/**` and `**/.plastic/**`, `AActor` and `UUserWidget` - and the Code Lenses section was hidden altogether.
+- A plugin icon, shown in the Plugins list and on the JetBrains Marketplace.
 
 ### Changed
 - Navigating from AngelScript into C++ now confirms the declaration instead of guessing at a file name. The lookup used to ask the file name index for a header named after the type - `AActor` meant `Actor.h` - and then match the member name anywhere inside it, which meant a type whose header is named after something else was never found, and a member declared by a different class in the same header was opened instead of the right one. Candidates now come from the content index as well, nothing is opened until the declaration has been located in it, and a member is searched for inside its own type's body. What Unreal actually writes is understood along the way: namespace-wrapped enums, `struct alignas(...)`, the UE5 math aliases where `FVector` is a macro-generated name for `TVector` that appears nowhere in `Vector.h`, and the global functions the AngelScript plugin binds by passing their script signature to C++ as a string. Comments, string literals, forward declarations, calls and assignments are no longer mistaken for declarations.
