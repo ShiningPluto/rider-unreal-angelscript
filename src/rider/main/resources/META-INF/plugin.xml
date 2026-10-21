@@ -96,6 +96,8 @@
             canCloseContents="false"
             doNotActivateOnStart="true"
             icon="com.scriptacus.riderunrealangelscript.AngelScriptIcons.ToolWindow"/>
+        <!-- New UI versions of the plugin's icons, under icons/expui -->
+        <iconMapper mappingFile="AngelScriptIconMappings.json"/>
 
         <!-- AngelScript Script Files tree window -->
         <toolWindow
