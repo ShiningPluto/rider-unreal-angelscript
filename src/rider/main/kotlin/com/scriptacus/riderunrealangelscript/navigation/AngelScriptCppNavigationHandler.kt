@@ -1,11 +1,12 @@
 package com.scriptacus.riderunrealangelscript.navigation
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
-import com.intellij.ide.util.PsiNavigationSupport
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
@@ -367,9 +368,7 @@ class AngelScriptCppNavigationHandler : GotoDeclarationHandler {
 
         LOG.info("Navigating to ${cppSymbol.describe()} in ${target.file.path}")
         ApplicationManager.getApplication().invokeLater {
-            PsiNavigationSupport.getInstance()
-                .createNavigatable(project, target.file, target.offset)
-                .navigate(true)
+            openAt(project, target.file, target.offset, true)
         }
     }
 
@@ -535,11 +534,7 @@ class AngelScriptCppNavigationHandler : GotoDeclarationHandler {
         override fun canNavigate(): Boolean = file.isValid
         override fun canNavigateToSource(): Boolean = canNavigate()
 
-        override fun navigate(requestFocus: Boolean) {
-            PsiNavigationSupport.getInstance()
-                .createNavigatable(project, file, offset)
-                .navigate(requestFocus)
-        }
+        override fun navigate(requestFocus: Boolean) = openAt(project, file, offset, requestFocus)
     }
 
     /**
@@ -687,4 +682,12 @@ class AngelScriptCppNavigationHandler : GotoDeclarationHandler {
 
     private fun CppSymbolInfo.describe(): String =
         if (symbolName.isEmpty()) className else "$className::$symbolName"
+}
+
+/**
+ * Opens [file] with the caret at [offset]. Navigatable.navigate is override-only API, which the
+ * Marketplace verifier reports when a plugin calls it; opening the editor directly does the same.
+ */
+private fun openAt(project: Project, file: VirtualFile, offset: Int, focus: Boolean) {
+    FileEditorManager.getInstance(project).openTextEditor(OpenFileDescriptor(project, file, offset), focus)
 }

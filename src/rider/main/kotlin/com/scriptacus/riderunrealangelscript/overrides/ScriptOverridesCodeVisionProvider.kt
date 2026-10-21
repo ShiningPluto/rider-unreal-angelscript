@@ -10,6 +10,7 @@ import com.intellij.codeInsight.codeVision.ui.model.ClickableTextCodeVisionEntry
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -154,6 +155,8 @@ class ScriptOverridesCodeVisionProvider : CodeVisionProvider<Unit> {
 
     private fun navigate(project: Project, implementation: ScriptOverride) {
         val file = LocalFileSystem.getInstance().findFileByPath(implementation.path) ?: return
-        OpenFileDescriptor(project, file, implementation.line, implementation.character).navigate(true)
+        // Navigatable.navigate is override-only API; opening the editor directly does the same
+        val descriptor = OpenFileDescriptor(project, file, implementation.line, implementation.character)
+        FileEditorManager.getInstance(project).openTextEditor(descriptor, true)
     }
 }
