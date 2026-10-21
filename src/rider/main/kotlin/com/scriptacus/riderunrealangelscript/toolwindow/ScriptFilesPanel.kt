@@ -2,6 +2,7 @@ package com.scriptacus.riderunrealangelscript.toolwindow
 
 import com.intellij.ide.DataManager
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.ApplicationManager
@@ -11,6 +12,7 @@ import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vcs.FileStatusListener
+import com.intellij.openapi.vcs.FileStatusManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.VirtualFileVisitor
@@ -55,7 +57,11 @@ data class GroupNode(val name: String) {
  * Panel that displays AngelScript Script folders in a tree view.
  * Shows all Script folders found via .uproject and .uplugin files.
  */
-class ScriptFilesPanel(private val project: Project) : JPanel(BorderLayout()) {
+class ScriptFilesPanel(
+    private val project: Project,
+    /** Lives as long as the tool window; the file status listener is removed with it. */
+    private val parentDisposable: Disposable,
+) : JPanel(BorderLayout()) {
     private val tree: Tree
     private val rootNode = DefaultMutableTreeNode("Script Folders")
     private val treeModel = DefaultTreeModel(rootNode)
@@ -268,9 +274,8 @@ class ScriptFilesPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun setupFileStatusListener() {
-        val connection = project.messageBus.connect()
-
-        connection.subscribe(FileStatusListener.TOPIC, object : FileStatusListener {
+        // FileStatusListener.TOPIC is internal API; the manager is the public way to listen
+        FileStatusManager.getInstance(project).addFileStatusListener(object : FileStatusListener {
             override fun fileStatusesChanged() {
                 // All file statuses changed - clear cache and repaint
                 renderer.clearCache()
@@ -282,7 +287,7 @@ class ScriptFilesPanel(private val project: Project) : JPanel(BorderLayout()) {
                 renderer.invalidateStatus(file)
                 tree.repaint()
             }
-        })
+        }, parentDisposable)
     }
 
     fun isAutoscrollFromSource(): Boolean {

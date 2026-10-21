@@ -16,7 +16,7 @@ import com.intellij.ui.content.ContentFactory
  */
 class ScriptFilesToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val panel = ScriptFilesPanel(project)
+        val panel = ScriptFilesPanel(project, toolWindow.disposable)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         toolWindow.contentManager.addContent(content)
 
