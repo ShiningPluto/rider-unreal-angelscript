@@ -16,7 +16,26 @@
 
     <description>
         <![CDATA[
-        Provides language support for AngelScript in Unreal Engine projects.
+        AngelScript language support for Unreal Engine projects that use
+        <a href="https://github.com/Hazelight/UnrealEngine-Angelscript">UnrealEngine-Angelscript</a>.
+        Script files get the analysis of the AngelScript language server, which reads the script API
+        from the running Unreal editor.
+        <ul>
+            <li>Syntax and semantic highlighting, completion, signature help, hover documentation and inlay hints</li>
+            <li>Go to definition, Find Usages with reads and writes told apart, rename and code actions</li>
+            <li>Diagnostics, including the compile errors Unreal reports on hot reload</li>
+            <li>C++ blueprint events list the AngelScript classes that implement them</li>
+            <li>API browser and script file tool windows</li>
+            <li>Debugging AngelScript and the editor's C++ at the same time</li>
+            <li>Analysis keeps working from a cached type database while no editor is running</li>
+            <li>AngelScript tools for AI agents through Rider's MCP server</li>
+        </ul>
+        <p>The language server needs Node.js, which is found in Rider's settings or on PATH.</p>
+        <p>This plugin is a fork of
+        <a href="https://github.com/scriptacus/rider-unreal-angelscript">scriptacus/rider-unreal-angelscript</a>
+        and bundles the language server from Hazelight's
+        <a href="https://github.com/Hazelight/vscode-unreal-angelscript">vscode-unreal-angelscript</a>.
+        Report problems on the <a href="https://github.com/ShiningPluto/rider-unreal-angelscript/issues">issue tracker</a>.</p>
         ]]>
     </description>
 

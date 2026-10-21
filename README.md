@@ -1,4 +1,4 @@
-# Rider Unreal Angelscript
+# AngelScript UE
 
 [![JetBrains Plugins](https://img.shields.io/badge/JetBrains-Plugin-blue)](https://plugins.jetbrains.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -6,6 +6,8 @@
 A JetBrains Rider plugin providing comprehensive AngelScript language support for Unreal Engine projects using the [UnrealEngine-Angelscript](https://github.com/Hazelight/UnrealEngine-Angelscript) plugin.
 
 This plugin bundles and integrates the AngelScript language server from the excellent [vscode-unreal-angelscript](https://github.com/Hazelight/vscode-unreal-angelscript) VSCode extension by [Hazelight Studios](https://www.hazelight.se/).
+
+This is a fork of [scriptacus/rider-unreal-angelscript](https://github.com/scriptacus/rider-unreal-angelscript), maintained and released separately under its own plugin id, so the two never update or replace each other. Enable only one of them at a time: both register the same file type and language. The 0.9.x entries in [CHANGELOG.md](CHANGELOG.md) are upstream releases; this fork's releases have version numbers of their own.
 
 ## Features
 
@@ -44,14 +46,19 @@ When Rider's MCP server is enabled (**Settings** → **Tools** → **MCP Server*
 
 ## Requirements
 
-- **JetBrains Rider** 2024.2 or newer
+- **JetBrains Rider** 2025.2.5 or newer
 - **Node.js** - Required for the language server (auto-discovered from PATH or Rider settings)
 - **Unreal Engine** with [UnrealEngine-Angelscript](https://github.com/Hazelight/UnrealEngine-Angelscript) plugin
 
 ## Installation
 
+### From JetBrains Marketplace
+1. In Rider, go to **Settings** → **Plugins** → **Marketplace**
+2. Search for **AngelScript UE** and click **Install**
+3. Restart Rider
+
 ### From Disk
-1. Download the latest `.zip` release from [Releases](https://github.com/scriptacus/rider-unreal-angelscript/releases)
+1. Download the latest `.zip` release from [Releases](https://github.com/ShiningPluto/rider-unreal-angelscript/releases)
 2. In Rider, go to **Settings** → **Plugins**
 3. Click ⚙️ → **Install Plugin from Disk...**
 4. Select the downloaded `.zip` file
@@ -104,5 +111,4 @@ All code has been reviewed and tested by human maintainers.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/scriptacus/rider-unreal-angelscript/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/scriptacus/rider-unreal-angelscript/discussions)
+- **Issues**: [GitHub Issues](https://github.com/ShiningPluto/rider-unreal-angelscript/issues)
