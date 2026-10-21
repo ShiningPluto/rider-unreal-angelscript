@@ -71,8 +71,13 @@ Rider tells reads from writes in C++ Find Usages; for AngelScript every referenc
   does, and gives every other usage no group, so C# and other results keep Rider's grouping. It is
   on while Rider groups its own results by usage type - its rule with the id `OccurrenceType`,
   "Occurrence Type" under Group By, which is never on in the Show Usages popup - and falls back to
-  `UsageViewSettings.isGroupByUsageType` in a Rider without that rule. It ranks first, so the groups
-  are the outermost level, as in the platform, and is `DumbAware`, since it reads no index.
+  `UsageViewSettings.isGroupByUsageType` in a Rider without that rule. Whether the rule is on is read
+  from the description Rider's backend gives of it (`project.solution.findUsagesHost.groupingRules`,
+  its `enabled`), as Rider itself does for a rule with no frontend toggle action; asking Rider's
+  grouping rule provider for its active rules would be simpler, but `getActiveRules` is override-only
+  API, which the Marketplace reports. The popup is recognised by its settings class name, since
+  `ShowUsageViewSettings` is internal API. It ranks first, so the groups are the outermost level, as
+  in the platform, and is `DumbAware`, since it reads no index.
 
 ## Alternatives
 
@@ -117,7 +122,10 @@ for AngelScript and searching ourselves is not possible either: `LSPUsageSearche
   directly, so it catches the first two, not the third.
 - No usage type groups at all in the Find tool window, with "Occurrence Type" checked: the grouping
   rule is not asked, or Rider's rule is no longer found by its id. `AngelScriptAccessTest` stands in
-  for Rider's provider, so it catches neither; only Rider shows it.
+  for Rider's rule, so it catches neither; only Rider shows it.
+- AngelScript usages grouped by usage type or not regardless of "Occurrence Type": Rider gave the
+  rule a frontend toggle action, whose state its backend's `enabled` no longer follows. The log
+  records the rule's `groupingActionId` the first time it is read.
 - Usage type groups whether "Occurrence Type" is checked or not: Rider renamed the rule, and the
   grouping has fallen back to `isGroupByUsageType`, which is on in every Find tool window.
 - AngelScript usages grouped by usage type twice, nested: Rider stopped unregistering the
@@ -133,3 +141,6 @@ for AngelScript and searching ourselves is not possible either: `LSPUsageSearche
   been checked against the platform's grouping rule, which Rider does not run.
 - 2026-09-25 - The grouping follows "Occurrence Type" rather than `isGroupByUsageType`: the groups
   appeared with that item unchecked, so the item is not that setting.
+- 2026-10-21 - Whether "Occurrence Type" is on is read from Rider's backend model rather than from
+  Rider's grouping provider, whose `getActiveRules` is override-only API that the Marketplace
+  reported for 1.0.0.
