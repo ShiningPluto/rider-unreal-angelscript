@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+- The API tool window's icon no longer disappears into the blue button of the active tool window in the New UI. The platform recolours an active tool window's icon by rewriting the colours on each SVG element, and the icon set its colour once on the root element, which is never rewritten, so it stayed grey on blue.
+
 ## 1.0.1 - 2026-10-21
 
 ### Changed
