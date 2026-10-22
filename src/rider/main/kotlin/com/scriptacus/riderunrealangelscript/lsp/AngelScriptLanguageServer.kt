@@ -80,7 +80,8 @@ interface AngelScriptLanguageServer : LanguageServer {
     fun getUnrealStatus(): CompletableFuture<Map<String, Any>?>
 
     /**
-     * Turn the type database cache on or off without restarting the server.
+     * Turn loading of the saved type database on or off without restarting the server. Saving is
+     * not affected: every database an editor sends is saved, because the API browser reads it.
      * Custom LSP request: angelscript/setTypeCacheEnabled
      *
      * Returns `cacheEnabled` and `usingCachedTypes`. The latter matters when disabling: a cached
@@ -101,4 +102,18 @@ interface AngelScriptLanguageServer : LanguageServer {
      */
     @JsonRequest("angelscript/getScriptOverrides")
     fun getScriptOverrides(): CompletableFuture<Map<String, Any>?>
+
+    /**
+     * Every function and variable script declares in a namespace, mixins included, with its
+     * signature: what the API browser lists beside Unreal's API.
+     * Custom LSP request: angelscript/getScriptDeclarations
+     *
+     * Returns `functions` and `properties`. Each has `name`, `namespace` (empty outside any),
+     * `module` and `file`, the URI of the file declaring it, and `doc`. A function has `returnType`,
+     * `args` (`type`, `name`, `default`), `isConst` and `isMixin`; a mixin's first argument is the
+     * object it is called on. A property has `type`. Constructors are left out. Unlike upstream's
+     * API requests it does not wait for the Unreal type database.
+     */
+    @JsonRequest("angelscript/getScriptDeclarations")
+    fun getScriptDeclarations(): CompletableFuture<Map<String, Any>?>
 }

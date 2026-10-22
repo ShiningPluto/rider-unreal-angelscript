@@ -164,4 +164,38 @@ class AngelScriptUnrealStatusTest : UsefulTestCase() {
             )
         }
     }
+
+    /**
+     * The API browser reads the saved database instead of asking the server, so the file has to
+     * follow every database an editor sends. The setting only decides whether a saved one is loaded;
+     * when saving depended on it too, turning it off left the browser showing a stale file or none.
+     */
+    fun testTheDatabaseIsSavedWhateverTheSettingSays() {
+        val bundle = javaClass.getResourceAsStream("/js/angelscript-language-server.js")?.use {
+            it.readBytes().toString(Charsets.UTF_8)
+        }
+        assertNotNull("Bundled language server must be on the test classpath", bundle)
+
+        fun function(name: String): String {
+            val start = bundle!!.indexOf("function $name()")
+            assertTrue("$name is gone from the bundle", start >= 0)
+            return bundle.substring(start, bundle.indexOf("\n}\n", start))
+        }
+
+        assertTrue(
+            "Database chunks must be recorded whenever there is somewhere to save them",
+            bundle!!.contains("if (__asTypeCache.path) __asTypeCache.chunks.push(dbStr)")
+        )
+        for (name in listOf("__asSaveTypeCache", "__asSaveScriptSettings")) {
+            assertFalse("$name must not depend on the setting", function(name).contains("loadEnabled"))
+        }
+        assertTrue(
+            "Loading a saved database is what the setting controls",
+            function("__asLoadTypeCache").contains("!__asTypeCache.loadEnabled")
+        )
+
+        val toggle = bundle.substring(bundle.indexOf("connection.onRequest(\"angelscript/setTypeCacheEnabled\""))
+            .substringBefore("\n});")
+        assertFalse("Turning the setting off must not drop a database still being received", toggle.contains("chunks"))
+    }
 }

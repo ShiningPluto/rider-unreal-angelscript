@@ -28,6 +28,11 @@ const INJECTED_REFERENCES = [
   'NormalizeUri',
   'GetAllLoadedModules',
   'IsServicingQueues',
+  'GetRootNamespace',
+  'GetAllNamespaces',
+  'DBMethod',
+  'DBProperty',
+  'ModuleDatabase',
 ];
 
 function verifyInjectedReferences(content) {
@@ -428,6 +433,69 @@ connection.onRequest("angelscript/getScriptOverrides", () => {
       console.warn('⚠ Warning: Could not find insertion point for the script overrides handler');
     }
 
+    // Patch to list every function and variable script declares in a namespace, mixins included.
+    //
+    // The API browser reads Unreal's API from the saved type database and asks the server only for
+    // what script declares (decision 0011). Upstream's getAPI cannot answer for all of it: at the
+    // root it lists namespaces and returns, it skips mixins everywhere, and its items carry a name
+    // and a method id but no signature. getAPIDetails finds a function by that id, which the next
+    // parse of its file replaces, and then answers for the last overload instead. So each symbol a
+    // script module declares is returned whole, for the browser to list and describe itself.
+    // Constructors are left out: they are listed as globals named after their struct, and the
+    // browser does not list script types. A mixin's arguments include the object it is called on.
+    const scriptDeclarationsHandler = `
+connection.onRequest("angelscript/getScriptDeclarations", () => {
+  let functions = [];
+  let properties = [];
+  // A set, because the root namespace may or may not be among all the others.
+  for (let namespace of new Set([GetRootNamespace(), ...GetAllNamespaces().values()])) {
+    let qualifiedNamespace = namespace.isRootNamespace() ? "" : namespace.getQualifiedNamespace();
+    namespace.forEachSymbol((symbol) => {
+      if (!symbol.declaredModule)
+        return;
+      let module = ModuleDatabase.get(symbol.declaredModule.toLowerCase());
+      let declaration = {
+        name: symbol.name,
+        namespace: qualifiedNamespace,
+        module: symbol.declaredModule,
+        file: module ? module.displayUri : null,
+      };
+      if (symbol instanceof DBMethod) {
+        if (symbol.isConstructor)
+          return;
+        declaration.returnType = symbol.returnType;
+        declaration.args = (symbol.args || []).map((arg) => ({ type: arg.typename, name: arg.name, default: arg.defaultvalue }));
+        declaration.isConst = symbol.isConst;
+        declaration.isMixin = symbol.isMixin;
+        declaration.doc = symbol.findAvailableDocumentation();
+        functions.push(declaration);
+      } else if (symbol instanceof DBProperty) {
+        declaration.type = symbol.typename;
+        declaration.doc = symbol.documentation;
+        properties.push(declaration);
+      }
+    });
+  }
+  return { functions: functions, properties: properties };
+});
+`;
+
+    let scriptDeclarationsAdded = false;
+    const scriptDeclarationsInsertionPoint = /connection\.onRequest\("angelscript\/getAPIDetails"[\s\S]*?return promise;\s*\}\);/;
+    content = content.replace(scriptDeclarationsInsertionPoint, (match) => {
+      if (!scriptDeclarationsAdded) {
+        scriptDeclarationsAdded = true;
+        return match + scriptDeclarationsHandler;
+      }
+      return match;
+    });
+
+    if (scriptDeclarationsAdded) {
+      console.log('✓ Patched to list what script declares in namespaces');
+    } else {
+      console.warn('⚠ Warning: Could not find insertion point for the script declarations handler');
+    }
+
     // Patch to expose the Unreal editor connection state.
     //
     // Highlighting and diagnostics both require the C++ type database, which only exists inside a
@@ -442,7 +510,7 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
     // "open", so check connecting first to tell "dialling" apart from "connected".
     socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
     typesLoaded: HasTypesFromUnreal(),
-    cacheEnabled: __asTypeCache.enabled,
+    cacheEnabled: __asTypeCache.loadEnabled,
     usingCachedTypes: __asTypeCache.loaded,
     // When the database in use was captured, live or cached. HasTypesFromUnreal() never goes back
     // to false, so this is what tells a current database apart from one an editor left behind.
@@ -450,17 +518,14 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
   };
 });
 
-// Lets the setting be applied without restarting. The reply reports whether a cached database is
-// currently in use, because that is the one case the client cannot fix here: loaded types cannot
-// be unloaded, so the client restarts the server instead.
+// Lets the setting be applied without restarting. It only decides whether a saved database is
+// loaded; saving goes on either way. The reply reports whether a cached database is currently in
+// use, because that is the one case the client cannot fix here: loaded types cannot be unloaded,
+// so the client restarts the server instead.
 connection.onRequest("angelscript/setTypeCacheEnabled", (enabled) => {
-  __asTypeCache.enabled = !!enabled;
-  if (!__asTypeCache.enabled) {
-    // Drop anything buffered but not yet written, so disabling cannot be followed by a save.
-    __asTypeCache.chunks = [];
-  }
+  __asTypeCache.loadEnabled = !!enabled;
   return {
-    cacheEnabled: __asTypeCache.enabled,
+    cacheEnabled: __asTypeCache.loadEnabled,
     usingCachedTypes: __asTypeCache.loaded
   };
 });
@@ -489,6 +554,11 @@ connection.onRequest("angelscript/setTypeCacheEnabled", (enabled) => {
     // as plain JSON, which makes it cheap to keep: chunks are stored verbatim and spliced into an
     // array literal, so saving costs no re-serialisation of the parsed graph.
     //
+    // Every database an editor sends is saved; the setting only decides whether a saved one is
+    // loaded when no editor has sent any. The API browser reads the saved file instead of asking
+    // the server, which is how it lists a class's inherited members without another request here,
+    // so the file has to describe whatever the server has loaded.
+    //
     // Replaying a cache is not a new risk: AddUnrealTypeToDatabase already drops a same-named type
     // before adding, so a live database received later overrides cached entries exactly as it does
     // when the editor restarts and re-sends. Types deleted since the cache was written do linger,
@@ -499,7 +569,8 @@ var __asTypeCache = {
     const arg = process.argv.find((a) => a.startsWith("--type-cache="));
     return arg ? arg.substring("--type-cache=".length) : null;
   })(),
-  enabled: !process.argv.includes("--no-type-cache"),
+  // Whether a saved database may be loaded. Saving does not depend on it.
+  loadEnabled: !process.argv.includes("--no-type-cache-load"),
   chunks: [],
   loaded: false,
   capturedAt: null,
@@ -525,7 +596,7 @@ function __asScriptSettingsPath() {
 // avoids re-implementing the versioned message parsing, and follows fields upstream adds or drops
 // for free - v1.9.4 dropped automaticImports without this needing a change.
 function __asSaveScriptSettings() {
-  if (!__asTypeCache.path || !__asTypeCache.enabled)
+  if (!__asTypeCache.path)
     return;
   try {
     const fs = require("fs");
@@ -562,7 +633,7 @@ function __asLoadScriptSettings() {
 }
 
 function __asSaveTypeCache() {
-  if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.chunks.length == 0)
+  if (!__asTypeCache.path || __asTypeCache.chunks.length == 0)
     return;
   try {
     const fs = require("fs");
@@ -584,7 +655,7 @@ function __asSaveTypeCache() {
 }
 
 function __asLoadTypeCache() {
-  if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.loaded)
+  if (!__asTypeCache.path || !__asTypeCache.loadEnabled || __asTypeCache.loaded)
     return false;
   try {
     const fs = require("fs");
@@ -618,7 +689,7 @@ function __asLoadTypeCache() {
 // Fall back to the cache only once it is clear no editor is answering. connect_unreal() retries
 // every 5s, so a socket that is still not open by then means nothing is listening.
 setInterval(() => {
-  if (!__asTypeCache.enabled || __asTypeCache.loaded || HasTypesFromUnreal())
+  if (!__asTypeCache.loadEnabled || __asTypeCache.loaded || HasTypesFromUnreal())
     return;
   if (port < 0) {
     // Not configured yet: the server has not been told where to look, so nothing has failed.
@@ -649,7 +720,7 @@ setInterval(() => {
     // Record every database chunk as it arrives, and persist once the editor says it is done.
     const chunkCapture = content.replace(
       /(let dbStr = msg\.readString\(\);\s*let dbObj = JSON\.parse\(dbStr\);)/,
-      '$1\n        if (__asTypeCache.enabled) __asTypeCache.chunks.push(dbStr);'
+      '$1\n        if (__asTypeCache.path) __asTypeCache.chunks.push(dbStr);'
     );
     const captureAdded = chunkCapture !== content;
     content = chunkCapture;

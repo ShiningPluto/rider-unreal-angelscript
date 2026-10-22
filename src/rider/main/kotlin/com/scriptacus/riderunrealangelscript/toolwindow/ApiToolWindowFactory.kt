@@ -10,7 +10,7 @@ import com.intellij.ui.content.ContentFactory
  */
 class ApiToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val apiPanel = AngelScriptApiPanel(project)
+        val apiPanel = AngelScriptApiPanel(project, toolWindow.disposable)
 
         val contentFactory = ContentFactory.getInstance()
         val content = contentFactory.createContent(apiPanel, "", false)

@@ -14,6 +14,7 @@ Why the code is the way it is. Format and rules: [../README.md](../README.md).
 | [0008](0008-take-the-grammar-from-the-engine-parser.md) | Take the grammar from the engine's parser, and measure every change against shipped scripts | editor | accepted | 2026-09-23 |
 | [0009](0009-classify-reference-access-from-the-parse-tree.md) | Tell reads from writes in Find Usages with the plugin's parse tree, through a usage type provider and a grouping rule | lsp-client | accepted | 2026-09-25 |
 | [0010](0010-show-script-implementations-of-cpp-blueprint-events.md) | Show script implementations of C++ blueprint events from the frontend, and hide Rider's warning for them there | editor | accepted | 2026-09-25 |
+| [0011](0011-browse-the-api-from-the-saved-type-database.md) | Browse the Unreal API from the type database the server saves, and save it whatever the cache setting says | lsp-client | accepted | 2026-10-22 |
 
 ## Reading order
 

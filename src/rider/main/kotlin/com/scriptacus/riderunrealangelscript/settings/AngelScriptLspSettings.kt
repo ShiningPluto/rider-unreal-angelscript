@@ -29,9 +29,10 @@ class AngelScriptLspSettings : PersistentStateComponent<AngelScriptLspSettings.S
         var scriptIgnorePatterns: MutableList<String> = mutableListOf("**/Saved/**", "**/.plastic/**"),
 
         /**
-         * Reuse the last type database received from Unreal when no editor is running, so analysis
-         * works offline. The cached API can be out of date after engine C++ changes, which the
-         * status bar reports; turn this off to get no analysis rather than possibly stale analysis.
+         * Load the last type database received from Unreal when no editor has sent one, so analysis
+         * works offline. The database is saved either way; this only decides whether it is used.
+         * The cached API can be out of date after engine C++ changes, which the status bar reports;
+         * turn this off to get no analysis rather than possibly stale analysis.
          */
         var useCachedTypeDatabase: Boolean = true,
 

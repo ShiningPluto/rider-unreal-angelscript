@@ -40747,7 +40747,7 @@ function connect_unreal() {
       } else if (msg.type == 2 /* DebugDatabase */) {
         let dbStr = msg.readString();
         let dbObj = JSON.parse(dbStr);
-        if (__asTypeCache.enabled) __asTypeCache.chunks.push(dbStr);
+        if (__asTypeCache.path) __asTypeCache.chunks.push(dbStr);
         AddTypesFromUnreal(dbObj);
         UnrealTypesTimedOut = false;
         if (ReceivingTypesTimeout)
@@ -41411,7 +41411,8 @@ var __asTypeCache = {
     const arg = process.argv.find((a) => a.startsWith("--type-cache="));
     return arg ? arg.substring("--type-cache=".length) : null;
   })(),
-  enabled: !process.argv.includes("--no-type-cache"),
+  // Whether a saved database may be loaded. Saving does not depend on it.
+  loadEnabled: !process.argv.includes("--no-type-cache-load"),
   chunks: [],
   loaded: false,
   capturedAt: null,
@@ -41437,7 +41438,7 @@ function __asScriptSettingsPath() {
 // avoids re-implementing the versioned message parsing, and follows fields upstream adds or drops
 // for free - v1.9.4 dropped automaticImports without this needing a change.
 function __asSaveScriptSettings() {
-  if (!__asTypeCache.path || !__asTypeCache.enabled)
+  if (!__asTypeCache.path)
     return;
   try {
     const fs = require("fs");
@@ -41474,7 +41475,7 @@ function __asLoadScriptSettings() {
 }
 
 function __asSaveTypeCache() {
-  if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.chunks.length == 0)
+  if (!__asTypeCache.path || __asTypeCache.chunks.length == 0)
     return;
   try {
     const fs = require("fs");
@@ -41496,7 +41497,7 @@ function __asSaveTypeCache() {
 }
 
 function __asLoadTypeCache() {
-  if (!__asTypeCache.path || !__asTypeCache.enabled || __asTypeCache.loaded)
+  if (!__asTypeCache.path || !__asTypeCache.loadEnabled || __asTypeCache.loaded)
     return false;
   try {
     const fs = require("fs");
@@ -41530,7 +41531,7 @@ function __asLoadTypeCache() {
 // Fall back to the cache only once it is clear no editor is answering. connect_unreal() retries
 // every 5s, so a socket that is still not open by then means nothing is listening.
 setInterval(() => {
-  if (!__asTypeCache.enabled || __asTypeCache.loaded || HasTypesFromUnreal())
+  if (!__asTypeCache.loadEnabled || __asTypeCache.loaded || HasTypesFromUnreal())
     return;
   if (port < 0) {
     // Not configured yet: the server has not been told where to look, so nothing has failed.
@@ -41554,7 +41555,7 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
     // "open", so check connecting first to tell "dialling" apart from "connected".
     socketState: unreal ? (unreal.connecting ? "connecting" : unreal.readyState) : "disconnected",
     typesLoaded: HasTypesFromUnreal(),
-    cacheEnabled: __asTypeCache.enabled,
+    cacheEnabled: __asTypeCache.loadEnabled,
     usingCachedTypes: __asTypeCache.loaded,
     // When the database in use was captured, live or cached. HasTypesFromUnreal() never goes back
     // to false, so this is what tells a current database apart from one an editor left behind.
@@ -41562,19 +41563,51 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
   };
 });
 
-// Lets the setting be applied without restarting. The reply reports whether a cached database is
-// currently in use, because that is the one case the client cannot fix here: loaded types cannot
-// be unloaded, so the client restarts the server instead.
+// Lets the setting be applied without restarting. It only decides whether a saved database is
+// loaded; saving goes on either way. The reply reports whether a cached database is currently in
+// use, because that is the one case the client cannot fix here: loaded types cannot be unloaded,
+// so the client restarts the server instead.
 connection.onRequest("angelscript/setTypeCacheEnabled", (enabled) => {
-  __asTypeCache.enabled = !!enabled;
-  if (!__asTypeCache.enabled) {
-    // Drop anything buffered but not yet written, so disabling cannot be followed by a save.
-    __asTypeCache.chunks = [];
-  }
+  __asTypeCache.loadEnabled = !!enabled;
   return {
-    cacheEnabled: __asTypeCache.enabled,
+    cacheEnabled: __asTypeCache.loadEnabled,
     usingCachedTypes: __asTypeCache.loaded
   };
+});
+
+connection.onRequest("angelscript/getScriptDeclarations", () => {
+  let functions = [];
+  let properties = [];
+  // A set, because the root namespace may or may not be among all the others.
+  for (let namespace of new Set([GetRootNamespace(), ...GetAllNamespaces().values()])) {
+    let qualifiedNamespace = namespace.isRootNamespace() ? "" : namespace.getQualifiedNamespace();
+    namespace.forEachSymbol((symbol) => {
+      if (!symbol.declaredModule)
+        return;
+      let module = ModuleDatabase.get(symbol.declaredModule.toLowerCase());
+      let declaration = {
+        name: symbol.name,
+        namespace: qualifiedNamespace,
+        module: symbol.declaredModule,
+        file: module ? module.displayUri : null,
+      };
+      if (symbol instanceof DBMethod) {
+        if (symbol.isConstructor)
+          return;
+        declaration.returnType = symbol.returnType;
+        declaration.args = (symbol.args || []).map((arg) => ({ type: arg.typename, name: arg.name, default: arg.defaultvalue }));
+        declaration.isConst = symbol.isConst;
+        declaration.isMixin = symbol.isMixin;
+        declaration.doc = symbol.findAvailableDocumentation();
+        functions.push(declaration);
+      } else if (symbol instanceof DBProperty) {
+        declaration.type = symbol.typename;
+        declaration.doc = symbol.documentation;
+        properties.push(declaration);
+      }
+    });
+  }
+  return { functions: functions, properties: properties };
 });
 
 // The C++ class declaring the blueprint event that script type's method [name] overrides, or null

@@ -15,7 +15,7 @@ import javax.swing.JPanel
 
 class GeneralSettingsPanel {
     private var portField = JBTextField()
-    private val useCachedTypesBox = JBCheckBox("Save the type database and reuse it in later sessions")
+    private val useCachedTypesBox = JBCheckBox("Use the saved type database until an Unreal editor connects")
     private val ignorePatternsEditor = StringListEditor("Ignore pattern")
 
     fun createPanel(): JPanel = panel {
@@ -35,8 +35,9 @@ class GeneralSettingsPanel {
             cell(useCachedTypesBox)
                 .comment(
                     "Highlighting and diagnostics need the C++ type database, which only a running " +
-                        "Unreal editor provides. When enabled, the database is written to disk and " +
-                        "reloaded on later starts, so analysis works before an editor is running. " +
+                        "Unreal editor provides. Every database an editor sends is saved to disk. " +
+                        "When enabled, a session that has not received one yet loads the saved one, " +
+                        "so analysis and the API browser work before an editor is running. " +
                         "A saved database can be out of date after engine C++ changes; the status " +
                         "bar says when one is in use.<br/>" +
                         "This does not affect a database an editor has already sent: those types " +

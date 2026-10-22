@@ -6,16 +6,15 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.redhat.devtools.lsp4ij.LanguageServerManager
+import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
 import java.util.concurrent.CompletableFuture
 
 /**
- * Project-level service for communicating with the AngelScript LSP server's custom API requests.
+ * Project-level service for the language server requests the API browser makes.
  *
- * Provides methods for:
- * - Getting API tree data (angelscript/getAPI)
- * - Getting API details/documentation (angelscript/getAPIDetails)
- * - Searching the API (angelscript/getAPISearch)
+ * The browser reads Unreal's API from the saved type database, and only asks the server what script
+ * declares (angelscript/getScriptDeclarations, added by the bundle).
  */
 @Service(Service.Level.PROJECT)
 class AngelScriptApiService(private val project: Project) {
@@ -25,32 +24,15 @@ class AngelScriptApiService(private val project: Project) {
     }
 
     private val gson = Gson()
+
     /**
-     * Get API tree data from the language server.
+     * Get every function and variable script declares in a namespace, mixins included.
      *
-     * @param root Root identifier for the API tree ("" for root, or a namespace/class ID)
-     * @param callback Callback invoked with the list of API items
+     * @param callback Callback invoked with the `functions` and `properties` lists, or null on error
      */
-    fun getApi(root: String, callback: (List<Map<String, Any>>) -> Unit) {
-        sendRequest("angelscript/getAPI", root) { result ->
-            @Suppress("UNCHECKED_CAST")
-            val apiItems = when (result) {
-                is List<*> -> {
-                    // Convert Gson's JsonObject instances to proper Maps
-                    result.mapNotNull { item ->
-                        convertToMap(item)
-                    }
-                }
-                null -> {
-                    LOG.warn("angelscript/getAPI returned null - LSP server may not be connected")
-                    emptyList()
-                }
-                else -> {
-                    LOG.warn("Unexpected response type: ${result.javaClass}")
-                    emptyList()
-                }
-            }
-            callback(apiItems)
+    fun getScriptDeclarations(callback: (Map<String, Any>?) -> Unit) {
+        sendRequest("angelscript/getScriptDeclarations", { it.getScriptDeclarations() }) { result ->
+            callback(convertToMap(result))
         }
     }
 
@@ -63,7 +45,7 @@ class AngelScriptApiService(private val project: Project) {
         return try {
             // Convert via JSON to handle Gson's internal types
             val json = gson.toJson(obj)
-            gson.fromJson(json, object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type)
+            gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
         } catch (e: Exception) {
             LOG.warn("Failed to convert object to Map: ${obj.javaClass}", e)
             null
@@ -71,70 +53,15 @@ class AngelScriptApiService(private val project: Project) {
     }
 
     /**
-     * Get detailed documentation for an API item.
+     * Send a custom LSP request to the AngelScript language server.
      *
-     * @param id Identifier for the API item
-     * @param callback Callback invoked with the markdown documentation
-     */
-    fun getApiDetails(id: Any, callback: (String) -> Unit) {
-        sendRequest("angelscript/getAPIDetails", id) { result ->
-            val details = when (result) {
-                is String -> result
-                null -> {
-                    LOG.warn("getAPIDetails returned null")
-                    "No details available"
-                }
-                else -> {
-                    LOG.warn("getAPIDetails returned unexpected type: ${result.javaClass}")
-                    result.toString()
-                }
-            }
-            callback(details)
-        }
-    }
-
-    /**
-     * Search the API for items matching a filter string.
-     *
-     * @param filter Search filter string
-     * @param callback Callback invoked with the list of matching API items
-     */
-    fun getApiSearch(filter: String, callback: (List<Map<String, Any>>) -> Unit) {
-        sendRequest("angelscript/getAPISearch", filter) { result ->
-            @Suppress("UNCHECKED_CAST")
-            val apiItems = when (result) {
-                is List<*> -> {
-                    // Convert Gson's JsonObject instances to proper Maps
-                    result.mapNotNull { item ->
-                        convertToMap(item)
-                    }
-                }
-                null -> {
-                    LOG.warn("angelscript/getAPISearch returned null")
-                    emptyList()
-                }
-                else -> {
-                    LOG.warn("Unexpected search response type: ${result.javaClass}")
-                    emptyList()
-                }
-            }
-            callback(apiItems)
-        }
-    }
-
-    /**
-     * Send a custom LSP request to the AngelScript language server using type-safe methods.
-     *
-     * @param method LSP method name (e.g., "angelscript/getAPI")
-     * @param params Request parameters
+     * @param method LSP method name, for the log
+     * @param request Sends the request through the server's typed interface
      * @param callback Callback invoked with the result (or null on error)
      */
-    private fun sendRequest(method: String, params: Any, callback: (Any?) -> Unit) {
+    private fun sendRequest(method: String, request: (AngelScriptLanguageServer) -> CompletableFuture<*>, callback: (Any?) -> Unit) {
         try {
-            // Get the language server manager
             val manager = LanguageServerManager.getInstance(project)
-
-            // Get the AngelScript language server
             val serverItemFuture = manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID)
 
             serverItemFuture.thenAccept { serverItem ->
@@ -146,22 +73,8 @@ class AngelScriptApiService(private val project: Project) {
 
                 try {
                     val server = serverItem.server
-
-                    // Cast to our custom AngelScriptLanguageServer interface for type-safe requests
-                    if (server is com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer) {
-                        // Call the appropriate type-safe method based on the request type
-                        val requestFuture: CompletableFuture<*> = when (method) {
-                            "angelscript/getAPI" -> server.getAPI(params as String)
-                            "angelscript/getAPIDetails" -> server.getAPIDetails(params)
-                            "angelscript/getAPISearch" -> server.getAPISearch(params as String)
-                            else -> {
-                                LOG.error("Unknown custom request method: $method")
-                                callback(null)
-                                return@thenAccept
-                            }
-                        }
-
-                        requestFuture
+                    if (server is AngelScriptLanguageServer) {
+                        request(server)
                             .thenAccept { result ->
                                 callback(result)
                             }

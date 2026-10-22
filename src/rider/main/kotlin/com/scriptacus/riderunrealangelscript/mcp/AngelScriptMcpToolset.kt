@@ -316,7 +316,7 @@ class AngelScriptMcpToolset : McpToolset {
                 "Connected to the Unreal editor, still receiving its type database. Nothing is analysed " +
                     "until it has arrived, usually within seconds."
             AngelScriptUnrealStatus.DISCONNECTED ->
-                "No Unreal editor is listening on port $port and no saved type database exists, so " +
+                "No Unreal editor is listening on port $port and no saved type database is in use, so " +
                     "nothing is analysed and an absence of problems means nothing. Start the Unreal editor."
             AngelScriptUnrealStatus.NOT_CONFIGURED ->
                 "The language server has not received its configuration, so it is not connecting to " +

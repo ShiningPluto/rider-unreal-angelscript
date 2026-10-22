@@ -8,6 +8,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.util.messages.Topic
 import com.redhat.devtools.lsp4ij.LanguageServerManager
 import com.redhat.devtools.lsp4ij.ServerStatus
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer
@@ -28,8 +29,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Service(Service.Level.PROJECT)
 class AngelScriptUnrealStatusService(private val project: Project) : Disposable {
 
+    fun interface Listener {
+        /** The status, or the type database behind it, changed. Called on the polling thread. */
+        fun statusChanged()
+    }
+
     companion object {
         private val LOG = Logger.getInstance(AngelScriptUnrealStatusService::class.java)
+
+        @Topic.ProjectLevel
+        val TOPIC: Topic<Listener> = Topic.create("AngelScript Unreal status", Listener::class.java)
 
         /** Poll quickly while something is wrong: the user is likely looking at the status right now. */
         private const val POLL_INTERVAL_PENDING_MS = 2_000L
@@ -135,8 +144,11 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
             return POLL_INTERVAL_PENDING_MS
         }
 
+        // A database captured at another time is a different one, even when the status stays the same:
+        // an editor that restarts sends its types again without the server ever losing the old ones.
+        val typesChanged = snapshot.typesCapturedAt != typesCapturedAt
         typesCapturedAt = snapshot.typesCapturedAt
-        update(snapshot.status, snapshot.configuredPort)
+        update(snapshot.status, snapshot.configuredPort, typesChanged)
         // Only a live connection is a settled state. Running on captured types is a degraded one
         // that an editor starting up would improve, so keep watching for that at the fast rate.
         return if (snapshot.status == AngelScriptUnrealStatus.READY) POLL_INTERVAL_READY_MS else POLL_INTERVAL_PENDING_MS
@@ -186,10 +198,13 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
         )
     }
 
-    private fun update(newStatus: AngelScriptUnrealStatus, port: Int?) {
+    private fun update(newStatus: AngelScriptUnrealStatus, port: Int?, typesChanged: Boolean = false) {
         val changed = newStatus != status || port != configuredPort
         status = newStatus
         configuredPort = port
+        if ((changed || typesChanged) && !project.isDisposed) {
+            project.messageBus.syncPublisher(TOPIC).statusChanged()
+        }
         if (!changed) {
             return
         }
