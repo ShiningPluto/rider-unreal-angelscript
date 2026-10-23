@@ -7,19 +7,41 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 
 ### Added
-- The Unreal AngelScript API tool window lists every class's members, inherited ones included. It used to show only namespaces: `APawn::` held APawn's two static functions and nothing else, and a class's own methods and properties could only be found by searching, never those it inherits. The language server's API requests have no way to list a class's members, so the tool window now reads the type database the server saves. Classes, structs, enums, delegates, namespaces and globals each have a group. A class lists its static members, constructors, its own properties and functions, and then what it inherits, a group per ancestor class, leaving out what a subclass declares again. Rows show argument and return types, so overloads can be told apart. The details pane shows the selected overload's own signature, its documentation with parameters listed, and the C++ name of a function script knows by another name, such as `K2_SetActorLocation` or `ReceiveBeginPlay`. Search covers types, members and namespaces and finds an event by its C++ name; `APawn.Get` or `Math::` searches one type's or namespace's members. What script declares is not in the type database and comes from the language server, with its arguments, return type and documentation, so it is listed and described as Unreal's API is. Script namespaces are listed under "Script namespaces". Functions and variables script declares outside any namespace, or adds to a namespace Unreal declares, are listed after Unreal's, followed in italics by the file that declares them. A script mixin is listed with the class it extends, after that class's own members and followed in italics by its file, and in a subclass among what the subclass inherits from that class, never with the subclass's own. The constructors of script structs are not listed, as script types are not. Search covers what script declares too. What script declares is asked for again whenever the tool window is shown and on Refresh, and the rows that were expanded stay expanded. The tool window shows the database the language server is using, or says why it has none. It reads the database the first time it is opened and then keeps it in memory, about 60 MB for a project with 29,000 Unreal types. Opening it starts the language server if nothing else has, as it always did.
-- The API tool window keeps the rows the top row is nested in, such as its group, its class and the ancestor it is inherited from, at the top of the tree as it scrolls, as the editor's sticky lines keep the scopes of the code on screen. Clicking one scrolls back to it and selects it, and clicking its arrow collapses it where it is. A row the tree scrolls to, from the keyboard or speed search, is not left under them.
+- The API tool window lists every class's members, inherited ones included. It used to show only namespaces: `APawn::` held APawn's two static functions and nothing else.
+  - Classes, structs, enums, delegates, namespaces and globals each have a group.
+  - A class lists its static members, its constructors and its own properties and functions, then an "Inherited from" group for each ancestor. What a subclass declares again is left out.
+  - Rows show argument and return types, so overloads can be told apart.
+  - The details pane shows the selected overload's own signature and documentation, and the C++ name of a function script knows by another name, such as `K2_SetActorLocation` or `ReceiveBeginPlay`.
+  - Search covers types, members and namespaces, and finds an event by its C++ name. `APawn.Get` or `Math::` searches one type's or namespace's members.
+  - The language server's API requests cannot list a class's members, so the tool window reads the type database the server saves. It reads it the first time it is opened and keeps it in memory: about 60 MB for a project with 29,000 Unreal types.
+  - Without a database, the tool window says why. Opening it starts the language server if nothing else has.
+- The API tool window lists what script declares beside Unreal's API, with arguments, return types and documentation.
+  - Script namespaces have a group of their own.
+  - Functions and variables script declares outside any namespace, or in one of Unreal's, come after Unreal's, followed in italics by the file that declares them.
+  - A script mixin is listed with the class it extends, after that class's own members. A subclass lists it in its "Inherited from" group for that class.
+  - Search covers what script declares too.
+  - The constructors of script structs are not listed, as script types are not.
+  - What script declares is asked for again whenever the tool window is shown and on Refresh. Expanded rows stay expanded.
+- The API tool window keeps the rows the top row is nested in at the top as it scrolls, like the editor's sticky lines: its group, its class, and the ancestor it inherits from.
+  - Clicking one scrolls back to it and selects it.
+  - Clicking its arrow collapses it where it is.
+  - A row the tree scrolls to, from the keyboard or speed search, is not left hidden under them.
 
 ### Changed
-- Expanding a row in the API tool window leaves it where it is. The tree used to scroll to show as many of its children as fit, which for a class with hundreds of members moved it to the top, away from the mouse that expanded it.
-- The type database cache setting is now "Use the saved type database until an Unreal editor connects", and only decides whether a saved database is loaded. Every database an editor sends is saved, whatever the setting, because the API tool window reads it. Turning the setting off still means no analysis until an editor connects, and still restarts the language server when a saved database is in use.
+- Expanding a row in the API tool window no longer scrolls the tree. A class with hundreds of members used to jump to the top, away from the mouse that expanded it.
+- The type database cache setting is now "Use the saved type database until an Unreal editor connects".
+  - It only decides whether a saved database is loaded. Every database an editor sends is saved whatever the setting, because the API tool window reads it.
+  - Turning it off still means no analysis until an editor connects, and still restarts the language server when a saved database is in use.
 
 ### Fixed
-- The API tool window's icon no longer disappears into the blue button of the active tool window in the New UI. The platform recolours an active tool window's icon by rewriting the colours on each SVG element, and the icon set its colour once on the root element, which is never rewritten, so it stayed grey on blue.
-- The API tool window describes the script function selected rather than another overload of it. The language server names a script function by an id that the next parse of its file replaces, and given an id it no longer knows, it describes the last function of that name, so overloads that had their own documentation all came to show the same one.
+- The API tool window's icon no longer disappears into the blue button of the active tool window in the New UI.
+  - The platform recolours an active icon by rewriting the colours on each SVG element. The icon set its colour once, on the root element, which is never rewritten, so it stayed grey on blue.
+- The API tool window describes the script function selected, not another overload of it.
+  - The language server names a script function by an id that the next parse of its file replaces. Given an id it no longer knows, it describes the last function of that name, so overloads came to show the same documentation.
 
 ### Internal
-- The bundled language server answers `angelscript/getScriptDeclarations`, which lists every function and variable script declares in a namespace, mixins included, each with its signature, documentation and file. Upstream's API requests could not serve the tool window: `getAPI` returns only namespaces at the root, skips mixins everywhere, and names a function rather than describing it, and `getAPIDetails` then finds it by an id each parse replaces.
+- The bundled language server answers `angelscript/getScriptDeclarations`. It lists every function and variable script declares in a namespace, mixins included, each with its signature, documentation and file.
+  - Upstream's API requests could not serve the tool window. `getAPI` returns only namespaces at the root, skips mixins, and names a function without describing it. `getAPIDetails` then finds it by an id each parse replaces.
 
 ## 1.0.1 - 2026-10-21
 

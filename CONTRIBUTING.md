@@ -209,6 +209,8 @@ checking, is recorded in
   comments.
 - **[docs/plans/](docs/plans/)** holds work that is understood but not done, so the investigation
   behind it is not repeated by whoever picks it up.
+- **[CHANGELOG.md](CHANGELOG.md)** says what changed. Open each entry with a sentence or two on
+  what changed, and put the details as nested points, one each.
 
 Read [decisions/0001](docs/decisions/0001-patch-the-language-server-at-bundle-time.md) and
 [decisions/0003](docs/decisions/0003-send-only-the-script-folders-as-the-workspace.md) before
