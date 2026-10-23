@@ -32,6 +32,7 @@ import com.scriptacus.riderunrealangelscript.typedb.UnrealType
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabaseService
 import java.awt.BorderLayout
+import java.awt.Rectangle
 import java.awt.event.HierarchyEvent
 import javax.swing.JEditorPane
 import javax.swing.JPanel
@@ -78,7 +79,12 @@ class AngelScriptApiPanel(
 
     // Asks allowsChildren, so a row shows as expandable before its children are built.
     private val treeModel = DefaultTreeModel(rootNode, true)
-    private val tree = Tree(treeModel)
+    private val tree = object : Tree(treeModel) {
+        override fun scrollRectToVisible(rect: Rectangle) {
+            super.scrollRectToVisible(rect)
+            StickyTreeRows.uncover(this, rect)
+        }
+    }
     private val detailsPane = JEditorPane()
     private val searchField = SearchTextField(true)
     private val searchAlarm = Alarm(Alarm.ThreadToUse.POOLED_THREAD, parentDisposable)
@@ -138,6 +144,9 @@ class AngelScriptApiPanel(
         tree.cellRenderer = ApiTreeCellRenderer()
         tree.isRootVisible = false
         tree.showsRootHandles = true
+        // Swing scrolls to show as many of a row's children as fit once it is expanded, which for a
+        // class with hundreds of members moves it to the top, away from the mouse that expanded it.
+        tree.scrollsOnExpand = false
         TreeSpeedSearch.installOn(tree, true) { path -> path.lastPathComponent.toString() }
 
         tree.addTreeWillExpandListener(object : TreeWillExpandListener {
@@ -158,7 +167,7 @@ class AngelScriptApiPanel(
         setDetails(null)
 
         val splitter = JBSplitter(true, 0.6f)
-        splitter.firstComponent = JBScrollPane(tree)
+        splitter.firstComponent = StickyTreeRows.install(tree, JBScrollPane(tree))
         splitter.secondComponent = JBScrollPane(detailsPane)
 
         add(toolbarPanel, BorderLayout.NORTH)
