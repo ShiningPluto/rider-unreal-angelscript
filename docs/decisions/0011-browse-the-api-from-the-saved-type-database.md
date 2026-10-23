@@ -98,9 +98,10 @@ were most of what the root namespace held.
 - Script namespaces are those the answer has members in, and their parents, that the file does not
   declare. What script adds to a namespace Unreal declares, or outside any, is listed after Unreal's,
   followed in italics by the file that declares it; that note is in italics, and worded as a
-  location, so that it does not read as the return type before it. A mixin is listed under "Script
-  mixins" with the type its first argument names and that type's subclasses, where it says "from"
-  the supertype it extends.
+  location, so that it does not read as the return type before it. A mixin is a script addition to
+  the type its first argument names, listed after that type's members in the same way; a subclass
+  lists it in its "Inherited from" group for that type, which is shown for the mixins alone if the
+  subclass declares everything else again.
 - Search and details are worked out in the plugin for script as for Unreal, so nothing is asked by
   id. Script results are listed under "From scripts".
 - The script declarations are asked once per database, again whenever the browser is shown, and on
@@ -186,3 +187,6 @@ types at all, so the browser shows nothing, which is consistent.
 - 2026-10-22: Everything script declares comes from `angelscript/getScriptDeclarations`, which
   replaced `angelscript/getScriptGlobals`; upstream's API requests are no longer used. Overloads
   showed as one name with stale details, and script struct constructors filled the globals.
+- 2026-10-23: Mixins are listed with the type they extend, and in a subclass under "Inherited from"
+  that type. A "Script mixins" group used to gather a class's own mixins with every supertype's, so
+  a deep class listed all of its ancestors' mixins among its own rows.

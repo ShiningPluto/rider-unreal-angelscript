@@ -119,21 +119,54 @@ class ApiBrowserTest : UsefulTestCase() {
         assertTrue(ApiTreeStructure.roots(database, script).any { (it as ApiNode.Group).kind == GroupKind.SCRIPT_NAMESPACES })
     }
 
-    fun testATypeListsTheScriptMixinsCallableOnIt() {
+    fun testAMixinIsListedWithTheTypeItExtends() {
         val children = ApiTreeStructure.children(ApiNode.Type(database.type("APawn")!!), database, script)
-        val mixins = children.filterIsInstance<ApiNode.ScriptMixins>().single()
-        // Between what the type declares and what it inherits.
-        assertEquals("Inherited from AActor", labels(children)[children.indexOf(mixins) + 1])
+        // After what the type declares, without the object it is called on, which is its first argument.
+        assertEquals(
+            listOf(
+                "Static members",
+                "BaseEyeHeight",
+                "AddMovementInput(FVector)",
+                "GetController()",
+                "Mute()",
+                "Inherited from AActor",
+                "Inherited from UObject",
+            ),
+            labels(children)
+        )
+        assertEquals("in Chat.as", (children[4] as ApiNode.Member).note)
 
-        val rows = ApiTreeStructure.children(mixins, database, script).map { it as ApiNode.Member }
-        // Without the object they are called on, which is their first argument.
-        assertEquals(listOf("Mute()", "Highlight(FLinearColor)"), labels(rows))
-        // A supertype's mixin says which supertype it extends.
-        assertEquals(listOf(null, "from AActor"), rows.map { it.note })
+        // A supertype's mixin is listed with what the type inherits from that supertype, and nowhere else.
+        val fromActor = children.filterIsInstance<ApiNode.Inherited>().first()
+        assertEquals(3, fromActor.size)
+        val rows = ApiTreeStructure.children(fromActor, database, script).map { it as ApiNode.Member }
+        assertEquals(listOf("Tags", "GetComponentsByClass(TSubclassOf<UActorComponent>)", "Highlight(FLinearColor)"), labels(rows))
+        assertEquals(listOf(null, null, "in Mixins.as"), rows.map { it.note })
 
         // A struct mixin is found through the type its first argument names.
-        assertEquals(listOf("LengthSquared2D()"), labels(ApiTreeStructure.mixinsFor(database.type("FVector")!!, database, script)))
-        assertTrue(ApiTreeStructure.mixinsFor(database.type("UObject")!!, database, script).isEmpty())
+        val vector = ApiNode.Type(database.type("FVector")!!)
+        assertEquals(listOf("FVector()", "LengthSquared2D()"), labels(ApiTreeStructure.children(vector, database, script)))
+        assertEquals(listOf("GetName()"), labels(ApiTreeStructure.children(ApiNode.Type(database.type("UObject")!!), database, script)))
+    }
+
+    fun testAnAncestorIsListedForItsMixinsAlone() {
+        // AActor's only member is one APawn declares again, so APawn inherits nothing else from it.
+        val database = UnrealTypeDatabase.parse(StringReader("""
+            {"version":1,"chunks":[{
+              "AActor": {"methods": [{"name": "Reset"}]},
+              "APawn": {"inherits": "AActor", "methods": [{"name": "Reset"}]}
+            }]}
+        """.trimIndent()))
+        val script = ScriptDeclarations.parse(
+            mapOf("functions" to listOf(function("Highlight", args = listOf("AActor" to "Actor"), isMixin = true, module = "Mixins"))),
+            database,
+        )
+
+        val children = ApiTreeStructure.children(ApiNode.Type(database.type("APawn")!!), database, script)
+        assertEquals(listOf("Reset()", "Inherited from AActor"), labels(children))
+        assertEquals(listOf("Highlight()"), labels(ApiTreeStructure.children(children.last(), database, script)))
+        // Without script, AActor has nothing left to list.
+        assertEquals(listOf("Reset()"), labels(ApiTreeStructure.children(ApiNode.Type(database.type("APawn")!!), database)))
     }
 
     /**

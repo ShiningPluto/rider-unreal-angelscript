@@ -28,7 +28,7 @@ object ApiDetailsHtml {
         is ApiNode.Statics -> namespace(node.namespace, statics = true)
         is ApiNode.ScriptNamespace -> namespace(node.namespace, statics = false) + "<p>Declared in script.</p>"
         is ApiNode.Member -> member(node.member)
-        is ApiNode.Group, is ApiNode.ScriptMixins, is ApiNode.Message -> null
+        is ApiNode.Group, is ApiNode.Message -> null
     }
 
     fun member(member: UnrealMember): String = when (member) {

@@ -3,6 +3,7 @@ package com.scriptacus.riderunrealangelscript.toolwindow
 import com.scriptacus.riderunrealangelscript.typedb.ScriptDeclarations
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMember
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMembers
+import com.scriptacus.riderunrealangelscript.typedb.UnrealMethod
 import com.scriptacus.riderunrealangelscript.typedb.UnrealNamespace
 import com.scriptacus.riderunrealangelscript.typedb.UnrealType
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
@@ -20,16 +21,19 @@ sealed class ApiNode {
     /** A type's static members: the namespace of the type's own name. */
     class Statics(val namespace: UnrealNamespace) : ApiNode()
 
-    /** The members a type inherits from [ancestor] and does not declare again. */
-    class Inherited(val ancestor: UnrealType, val members: UnrealMembers) : ApiNode()
-
-    /** The script mixins callable on a type, its own and its supertypes'. */
-    class ScriptMixins(val mixins: List<Member>) : ApiNode()
+    /**
+     * The members a type inherits from [ancestor] and does not declare again, and the script mixins
+     * that extend [ancestor].
+     */
+    class Inherited(val ancestor: UnrealType, val members: UnrealMembers, val mixins: List<UnrealMethod>) : ApiNode() {
+        val size: Int
+            get() = members.size + mixins.size
+    }
 
     /**
      * Unreal's or script's. [qualified] when listed away from its owner, as search results are.
      * [note] says what the row alone does not: which script file declares it, when listed among
-     * Unreal's API, or which supertype a mixin extends.
+     * Unreal's API.
      */
     class Member(val member: UnrealMember, val qualified: Boolean, val note: String? = null) : ApiNode()
 
@@ -79,8 +83,8 @@ object ApiTreeStructure {
             node.type.supertypeName?.let(database::type) != null ||
             database.staticsOf(node.type) != null ||
             database.constructorsOf(node.type).isNotEmpty() ||
-            mixinsFor(node.type, database, script).isNotEmpty()
-        is ApiNode.Namespace, is ApiNode.Statics, is ApiNode.Inherited, is ApiNode.ScriptMixins, is ApiNode.ScriptNamespace -> true
+            script.mixinsOn(node.type.name).isNotEmpty()
+        is ApiNode.Namespace, is ApiNode.Statics, is ApiNode.Inherited, is ApiNode.ScriptNamespace -> true
         is ApiNode.Member, is ApiNode.Message -> false
     }
 
@@ -98,29 +102,15 @@ object ApiTreeStructure {
         is ApiNode.Type -> typeChildren(node.type, database, script)
         is ApiNode.Namespace -> members(node.namespace) + scriptAdditions(script.additionsTo(node.namespace.name))
         is ApiNode.Statics -> members(node.namespace) + scriptAdditions(script.additionsTo(node.namespace.name))
-        is ApiNode.Inherited -> members(node.members.properties, node.members.methods)
-        is ApiNode.ScriptMixins -> node.mixins
+        is ApiNode.Inherited -> members(node.members.properties, node.members.methods) + scriptAdditions(node.mixins)
         is ApiNode.ScriptNamespace -> script.namespacesIn(node.namespace.name).map { ApiNode.ScriptNamespace(it) } + members(node.namespace)
         is ApiNode.Member, is ApiNode.Message -> emptyList()
     }
 
     /**
-     * The script mixins callable on [type]: those that extend it, then each supertype's, nearest
-     * first, saying which supertype they extend.
-     */
-    fun mixinsFor(type: UnrealType, database: UnrealTypeDatabase, script: ScriptDeclarations): List<ApiNode.Member> {
-        if (script === ScriptDeclarations.NONE) {
-            return emptyList()
-        }
-        return script.mixinsOn(type.name).map { ApiNode.Member(it, qualified = false) } +
-            database.supertypes(type).flatMap { ancestor ->
-                script.mixinsOn(ancestor.name).map { ApiNode.Member(it, qualified = false, note = "from ${ancestor.name}") }
-            }
-    }
-
-    /**
-     * What a type's row holds: its static members, its constructors, what it declares, the script
-     * mixins callable on it, and then what it inherits, a group per ancestor, nearest first.
+     * What a type's row holds: its static members, its constructors, what it declares and then the
+     * script mixins that extend it, and then what it inherits, a group per ancestor, nearest first.
+     * A mixin is listed only with the type it extends, so a supertype's are in that supertype's group.
      */
     private fun typeChildren(type: UnrealType, database: UnrealTypeDatabase, script: ScriptDeclarations): List<ApiNode> = buildList {
         database.staticsOf(type)?.let { add(ApiNode.Statics(it)) }
@@ -131,11 +121,11 @@ object ApiTreeStructure {
         } else {
             addAll(members(type.properties, type.methods))
         }
-        mixinsFor(type, database, script).takeIf { it.isNotEmpty() }?.let { add(ApiNode.ScriptMixins(it)) }
+        addAll(scriptAdditions(script.mixinsOn(type.name)))
         for (ancestor in database.supertypes(type)) {
-            val inherited = database.membersInheritedFrom(type, ancestor)
+            val inherited = ApiNode.Inherited(ancestor, database.membersInheritedFrom(type, ancestor), script.mixinsOn(ancestor.name))
             if (inherited.size > 0) {
-                add(ApiNode.Inherited(ancestor, inherited))
+                add(inherited)
             }
         }
     }
@@ -147,9 +137,11 @@ object ApiTreeStructure {
     private fun members(properties: List<UnrealMember>, methods: List<UnrealMember>): List<ApiNode> =
         (properties.sortedWith(BY_NAME) + methods.sortedWith(BY_NAME)).map { ApiNode.Member(it, qualified = false) }
 
+    private fun scriptAdditions(namespace: UnrealNamespace): List<ApiNode> = scriptAdditions(namespace.properties + namespace.functions)
+
     /** What script declares among Unreal's API: after it, each row naming the file it is in. */
-    private fun scriptAdditions(namespace: UnrealNamespace): List<ApiNode> =
-        (namespace.properties + namespace.functions).map { member ->
+    private fun scriptAdditions(members: List<UnrealMember>): List<ApiNode> =
+        members.map { member ->
             ApiNode.Member(member, qualified = false, note = member.scriptOrigin?.let { "in ${it.fileName}" })
         }
 

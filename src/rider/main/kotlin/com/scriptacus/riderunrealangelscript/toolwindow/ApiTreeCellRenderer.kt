@@ -3,7 +3,6 @@ package com.scriptacus.riderunrealangelscript.toolwindow
 import com.intellij.icons.AllIcons
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleTextAttributes
-import com.scriptacus.riderunrealangelscript.AngelScriptIcons
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMember
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMethod
 import com.scriptacus.riderunrealangelscript.typedb.UnrealProperty
@@ -25,7 +24,6 @@ class ApiTreeCellRenderer : ColoredTreeCellRenderer() {
             is ApiNode.Namespace -> node.namespace.name + "::"
             is ApiNode.Statics -> "Static members"
             is ApiNode.Inherited -> "Inherited from ${node.ancestor.name}"
-            is ApiNode.ScriptMixins -> "Script mixins"
             is ApiNode.Member -> memberText(node.member, node.qualified)
             is ApiNode.ScriptNamespace -> node.namespace.name + "::"
             is ApiNode.Message -> node.text
@@ -44,8 +42,7 @@ class ApiTreeCellRenderer : ColoredTreeCellRenderer() {
             is ApiNode.Group -> "  ${node.count}"
             is ApiNode.Type -> node.type.supertypeName?.let { " : $it" }
             is ApiNode.Statics -> "  ${node.namespace.name}::"
-            is ApiNode.Inherited -> "  ${node.members.size}"
-            is ApiNode.ScriptMixins -> "  ${node.mixins.size}"
+            is ApiNode.Inherited -> "  ${node.size}"
             is ApiNode.Member -> when (val member = node.member) {
                 is UnrealMethod -> if (member.isConstructor) null else ": " + member.returnType
                 // An enum value's type is the enum it is listed under.
@@ -65,7 +62,6 @@ class ApiTreeCellRenderer : ColoredTreeCellRenderer() {
             is ApiNode.Namespace, is ApiNode.ScriptNamespace -> AllIcons.Nodes.Package
             is ApiNode.Statics -> AllIcons.Nodes.Static
             is ApiNode.Inherited -> AllIcons.Hierarchy.Supertypes
-            is ApiNode.ScriptMixins -> AngelScriptIcons.FileIcon
             // m and p for what is reached through an object, f and v for what is not. Field's "f" read
             // as "function" next to Function's, so a type's properties use Property's "p" instead.
             is ApiNode.Member -> when (val member = node.member) {
