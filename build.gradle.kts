@@ -331,20 +331,42 @@ tasks.patchPluginXml {
     vendorName.set(providers.gradleProperty("riderPluginVendorName"))
     vendorUrl.set(providers.gradleProperty("riderPluginVendorUrl"))
 
-    // TODO: See also org.jetbrains.changelog: https://github.com/JetBrains/gradle-changelog-plugin
-    // "What's new" is the first list in the newest release's section, which is its Highlights: the
-    // full entries are too long for the IDE and the Marketplace. The section is found by its "## "
-    // heading first, because a heading's "- <date>" would otherwise be taken for the list.
-    val changelogText = file("${rootDir}/CHANGELOG.md").readText()
-    val latestSection = Regex("(?ms)^## .*?(?=^## |\\z)").find(changelogText)?.value.orEmpty()
-    val firstList = Regex("(?m)(?:^- .*(?:\\r?\\n|\\z))+").find(latestSection)?.value.orEmpty()
+    // "What's new" is the announcement users read, so it holds only the releases' Highlights. The
+    // full entries are mostly for maintainers, and too long for the IDE and the Marketplace.
+    changeNotes.set(whatsNew(file("${rootDir}/CHANGELOG.md").readText(), project.version.toString()))
+}
 
-    changeNotes.set(firstList.lines().filter { it.startsWith("- ") }.joinToString("", "<ul>", "</ul>") {
-        val text = it.removePrefix("- ").trim()
-            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            .replace(Regex("`([^`]+)`"), "<code>$1</code>")
-        "<li>$text</li>"
-    })
+/**
+ * The plugin's "What's new": the Highlights of the newest releases in [changelog], newest first, as
+ * many as fit in [maxChars] characters, and a link to the whole changelog. The newest release with
+ * Highlights is always there, and one without, such as a release of internal changes only, is
+ * skipped. An Unreleased section is headed with [version], the version being built.
+ */
+fun whatsNew(changelog: String, version: String, maxChars: Int = 1500): String {
+    fun html(markdown: String) = markdown
+        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace(Regex("`([^`]+)`"), "<code>$1</code>")
+
+    val notes = StringBuilder()
+    var length = 0
+    for (section in Regex("(?ms)^## (.+?)$(.*?)(?=^## |\\z)").findAll(changelog)) {
+        val highlights = Regex("(?ms)^### Highlights$(.*?)(?=^#|\\z)").find(section.groupValues[2])?.groupValues?.get(1)
+        val items = highlights.orEmpty().lines().filter { it.startsWith("- ") }.map { it.removePrefix("- ").trim() }
+        val itemsLength = items.sumOf { it.length }
+        if (items.isEmpty()) {
+            continue
+        }
+        if (length > 0 && length + itemsLength > maxChars) {
+            break
+        }
+        length += itemsLength
+        val title = section.groupValues[1].trim().let { if (it == "Unreleased") version else it }
+        notes.append("<h3>").append(html(title)).append("</h3><ul>")
+        items.forEach { notes.append("<li>").append(html(it)).append("</li>") }
+        notes.append("</ul>")
+    }
+    notes.append("<p><a href=\"https://github.com/ShiningPluto/rider-unreal-angelscript/blob/main/CHANGELOG.md\">All changes</a></p>")
+    return notes.toString()
 }
 
 // Install npm dependencies in the third-party VSCode extension

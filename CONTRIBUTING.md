@@ -211,6 +211,11 @@ checking, is recorded in
   behind it is not repeated by whoever picks it up.
 - **[CHANGELOG.md](CHANGELOG.md)** says what changed. Open each entry with a sentence or two on
   what changed, and put the details as nested points, one each.
+  - A release's **Highlights** are its announcement to users: one line for each change they will
+    notice, and nothing that only maintainers need to know. Leave them out of a release that users
+    will not notice.
+  - The plugin's "What's new" shows the Highlights of the newest releases, as many as fit in about
+    1,500 characters (`whatsNew` in `build.gradle.kts`).
 
 Read [decisions/0001](docs/decisions/0001-patch-the-language-server-at-bundle-time.md) and
 [decisions/0003](docs/decisions/0003-send-only-the-script-folders-as-the-workspace.md) before

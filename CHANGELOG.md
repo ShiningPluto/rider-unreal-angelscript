@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+### Highlights
+- The API tool window lists every class's members, inherited ones included, beside the functions, variables and mixins script declares.
+- Each overload shows its own arguments, return type and documentation, and `APawn.Get` searches one type's members.
+- The group and class being scrolled through stay pinned at the top of the API tool window, and clicking one goes back to it.
+
 ### Added
 - The API tool window lists every class's members, inherited ones included. It used to show only namespaces: `APawn::` held APawn's two static functions and nothing else.
   - Classes, structs, enums, delegates, namespaces and globals each have a group.
