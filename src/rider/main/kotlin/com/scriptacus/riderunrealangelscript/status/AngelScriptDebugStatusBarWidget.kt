@@ -2,16 +2,11 @@ package com.scriptacus.riderunrealangelscript.status
 
 import com.intellij.execution.RunManagerListener
 import com.intellij.execution.RunnerAndConfigurationSettings
-import com.intellij.ide.DataManager
-import com.intellij.openapi.actionSystem.ActionGroup
-import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.WindowManager
-import com.intellij.ui.awt.RelativePoint
 import com.intellij.util.Consumer
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebuggerManager
@@ -21,7 +16,6 @@ import com.intellij.xdebugger.breakpoints.XBreakpointListener
 import com.scriptacus.riderunrealangelscript.debug.AngelScriptDebugConfigurations
 import com.scriptacus.riderunrealangelscript.debug.AngelScriptDebugConfigurations.State
 import java.awt.Component
-import java.awt.Point
 import java.awt.event.MouseEvent
 
 /**
@@ -125,15 +119,6 @@ class AngelScriptDebugStatusBarWidget(private val project: Project) :
     }
 
     override fun getClickConsumer(): Consumer<MouseEvent> = Consumer { event ->
-        val group = ActionManager.getInstance().getAction(POPUP_GROUP_ID) as? ActionGroup ?: return@Consumer
-        val popup = JBPopupFactory.getInstance().createActionGroupPopup(
-            null,
-            group,
-            DataManager.getInstance().getDataContext(event.component),
-            JBPopupFactory.ActionSelectionAid.MNEMONICS,
-            false
-        )
-        // Open upwards, since the status bar is at the bottom of the frame.
-        popup.show(RelativePoint(event.component, Point(0, -popup.content.preferredSize.height)))
+        showStatusBarPopup(event, POPUP_GROUP_ID, showDisabledActions = false)
     }
 }

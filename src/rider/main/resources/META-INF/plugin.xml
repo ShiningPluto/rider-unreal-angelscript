@@ -189,6 +189,24 @@
             <reference ref="AngelScript.StartDebugging"/>
             <reference ref="AngelScript.EditDebugConfiguration"/>
         </group>
+
+        <!-- Has the Unreal editor compile again the files it reports errors in; it only notices a file whose time changed -->
+        <action id="AngelScript.RecompileUnrealErrors"
+                class="com.scriptacus.riderunrealangelscript.recompile.RecompileUnrealErrorsAction"
+                text="Recompile Files with Unreal Errors"
+                description="Has the Unreal editor compile again the script files it reports compile errors in"/>
+        <action id="AngelScript.OpenSettings"
+                class="com.scriptacus.riderunrealangelscript.settings.OpenAngelScriptSettingsAction"
+                text="AngelScript Settings…"
+                description="Opens the AngelScript settings, where the Unreal connection port is set"
+                icon="AllIcons.General.Settings"/>
+
+        <!-- Shown when the AngelScript Unreal connection status bar widget is clicked -->
+        <group id="AngelScript.UnrealStatusBarPopup">
+            <reference ref="AngelScript.RecompileUnrealErrors"/>
+            <separator/>
+            <reference ref="AngelScript.OpenSettings"/>
+        </group>
     </actions>
 
 </idea-plugin>

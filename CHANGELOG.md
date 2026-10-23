@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Each overload shows its own arguments, return type and documentation, and `APawn.Get` searches one type's members.
 - The group and class being scrolled through stay pinned at the top of the API tool window, and clicking one goes back to it.
 - A compile error from before the Unreal editor restarted no longer stays once the script compiles, such as one for a C++ symbol that has since been built.
+- A compile error from Unreal has a quick fix that makes the editor compile the file again, and the status bar item does it for every such file.
 
 ### Added
 - The API tool window lists every class's members, inherited ones included. It used to show only namespaces: `APawn::` held APawn's two static functions and nothing else.
@@ -32,8 +33,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - Clicking one scrolls back to it and selects it.
   - Clicking its arrow collapses it where it is.
   - A row the tree scrolls to, from the keyboard or speed search, is not left hidden under them.
+- Compile errors from Unreal have a "Recompile in the Unreal editor" quick fix. Such an error stays until the file is compiled again, even once its cause is gone, for example a gameplay tag added since.
+  - The `AngelScript: Unreal` status bar item's menu does the same for every file Unreal reports errors in.
+  - The debug protocol has no message for compiling, so Rider moves the file's modification time forward without changing it, which is all the editor looks at. This works on read-only Perforce files.
+  - A file with unsaved changes is saved instead.
+  - Only offered while an editor is connected. One that starts later compiles every script anyway.
 
 ### Changed
+- Clicking the `AngelScript: Unreal` status bar item opens a menu instead of the settings, which are its last entry.
 - Expanding a row in the API tool window no longer scrolls the tree. A class with hundreds of members used to jump to the top, away from the mouse that expanded it.
 - The type database cache setting is now "Use the saved type database until an Unreal editor connects".
   - It only decides whether a saved database is loaded. Every database an editor sends is saved whatever the setting, because the API tool window reads it.

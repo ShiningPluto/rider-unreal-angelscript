@@ -56,12 +56,6 @@ class AngelScriptMcpToolset : McpToolset {
         /** Answered from memory once types are loaded; a slow answer means the server is wedged. */
         const val REQUEST_TIMEOUT_MS = 15_000L
 
-        /** `source` of the diagnostics the server relays from Unreal's own script compilation. */
-        const val UNREAL_COMPILE_SOURCE = "as"
-
-        /** `source` of the diagnostics the language server's own analysis produces. */
-        const val ANALYSIS_SOURCE = "angelscript"
-
         val gson = GsonBuilder().disableHtmlEscaping().create()
     }
 
@@ -337,8 +331,8 @@ class AngelScriptMcpToolset : McpToolset {
         column = character + 1,
         message = message,
         reportedBy = when (source) {
-            UNREAL_COMPILE_SOURCE -> "unreal"
-            ANALYSIS_SOURCE -> "languageServer"
+            AngelScriptDiagnosticsStore.UNREAL_COMPILE_SOURCE -> "unreal"
+            AngelScriptDiagnosticsStore.ANALYSIS_SOURCE -> "languageServer"
             else -> source ?: "unknown"
         },
     )

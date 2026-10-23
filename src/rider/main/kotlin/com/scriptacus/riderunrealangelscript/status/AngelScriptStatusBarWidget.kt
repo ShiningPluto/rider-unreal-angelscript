@@ -1,11 +1,9 @@
 package com.scriptacus.riderunrealangelscript.status
 
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.util.Consumer
-import com.scriptacus.riderunrealangelscript.settings.AngelScriptSettingsConfigurable
 import java.awt.Component
 import java.awt.event.MouseEvent
 import java.time.Duration
@@ -14,14 +12,17 @@ import java.time.Instant
 /**
  * Reports why AngelScript analysis is unavailable, instead of leaving the editor silently inert.
  *
- * Clicking opens the AngelScript settings, where the Unreal connection port lives - the one thing
- * the user can actually act on from here.
+ * Clicking opens a menu for having the Unreal editor compile the files it reports errors in again,
+ * and for the AngelScript settings, where the Unreal connection port lives.
  */
 class AngelScriptStatusBarWidget(private val project: Project) :
     StatusBarWidget, StatusBarWidget.TextPresentation {
 
     companion object {
         const val WIDGET_ID = "AngelScriptUnrealStatus"
+
+        /** Action group declared in plugin.xml, shown when the widget is clicked. */
+        const val POPUP_GROUP_ID = "AngelScript.UnrealStatusBarPopup"
     }
 
     override fun ID(): String = WIDGET_ID
@@ -116,7 +117,8 @@ class AngelScriptStatusBarWidget(private val project: Project) :
         }
     }
 
-    override fun getClickConsumer(): Consumer<MouseEvent> = Consumer {
-        ShowSettingsUtil.getInstance().showSettingsDialog(project, AngelScriptSettingsConfigurable::class.java)
+    // Disabled entries stay visible, so the recompile entry can be found before there is anything to recompile.
+    override fun getClickConsumer(): Consumer<MouseEvent> = Consumer { event ->
+        showStatusBarPopup(event, POPUP_GROUP_ID, showDisabledActions = true)
     }
 }

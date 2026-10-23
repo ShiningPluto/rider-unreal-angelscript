@@ -48,5 +48,6 @@ class AngelScriptLanguageServerFactory : LanguageServerFactory {
             .setFileUriSupport(AngelScriptFileUriSupport())
             .setWorkspaceFolderFeature(AngelScriptWorkspaceFolderFeature())
             .setCompletionFeature(AngelScriptCompletionFeature())
+            .setDiagnosticFeature(AngelScriptDiagnosticFeature())
     }
 }

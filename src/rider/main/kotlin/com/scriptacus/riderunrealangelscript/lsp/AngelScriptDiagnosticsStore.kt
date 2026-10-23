@@ -63,6 +63,12 @@ class AngelScriptDiagnosticsStore {
     fun all(): List<FileProblems> = files.values.filter { it.problems.isNotEmpty() }
 
     companion object {
+        /** `source` of the diagnostics the server relays from Unreal's own script compilation. */
+        const val UNREAL_COMPILE_SOURCE = "as"
+
+        /** `source` of the diagnostics the language server's own analysis produces. */
+        const val ANALYSIS_SOURCE = "angelscript"
+
         fun getInstance(project: Project): AngelScriptDiagnosticsStore = project.service()
 
         /**
