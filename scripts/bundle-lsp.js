@@ -33,6 +33,9 @@ const INJECTED_REFERENCES = [
   'DBMethod',
   'DBProperty',
   'ModuleDatabase',
+  'CompileDiagnostics',
+  'UpdateCompileDiagnostics',
+  'GetModuleByUri',
 ];
 
 function verifyInjectedReferences(content) {
@@ -747,6 +750,69 @@ setInterval(() => {
       console.warn('⚠ Warning: Type database cache not fully applied'
         + ' (support: ' + typeCacheAdded + ', capture: ' + captureAdded + ', save: ' + saveAdded
         + ', settings: ' + settingsAdded + ')');
+    }
+
+    // Patch to drop the compile errors of an editor session that has ended.
+    //
+    // The server keeps each file's compile diagnostics until an editor sends that file again, and
+    // merges them into every later push for it. An editor only says a file is clean again when it
+    // told this connection otherwise, so a restarted editor never mentions the files the previous
+    // one complained about: an error for a C++ symbol that did not exist yet stayed after the C++
+    // was rebuilt and the editor restarted, while hover already found the symbol in the new types.
+    //
+    // A new connection is answered with the database and then every file the editor currently has
+    // diagnostics for, so once its database is finished the old ones can go and the current ones
+    // arrive right behind. Later databases on the same connection are broadcasts after a C++
+    // reload, which come without diagnostics, so only the first one clears anything.
+    const compileDiagnosticsSupport = `
+// Runs ahead of the handler's own work, so a failure here must not cost the types their finish.
+function __asOnDatabaseFinished() {
+  if (!unreal || unreal.__asDatabaseFinished)
+    return;
+  unreal.__asDatabaseFinished = true;
+  try {
+    let stale = [];
+    for (let [uri, diagnostics] of CompileDiagnostics) {
+      if (diagnostics.length != 0)
+        stale.push(uri);
+    }
+    if (stale.length == 0)
+      return;
+    connection.console.log("[compileDiagnostics] Dropping the previous connection's compile diagnostics for "
+      + stale.length + " files; the editor re-sends the current ones");
+    // The key is lowercased, so push under the file's own spelling when the server has it loaded.
+    for (let uri of stale) {
+      let asmodule = GetModuleByUri(uri);
+      UpdateCompileDiagnostics(asmodule ? asmodule.displayUri : uri, []);
+    }
+  } catch (e) {
+    connection.console.log("[compileDiagnostics] Failed to drop stale compile diagnostics: " + e);
+  }
+}
+`;
+
+    let compileDiagnosticsAdded = false;
+    const compileDiagnosticsInsertionPoint = /connection\.onRequest\("angelscript\/getAPIDetails"[\s\S]*?return promise;\s*\}\);/;
+    content = content.replace(compileDiagnosticsInsertionPoint, (match) => {
+      if (!compileDiagnosticsAdded) {
+        compileDiagnosticsAdded = true;
+        return match + compileDiagnosticsSupport;
+      }
+      return match;
+    });
+
+    const databaseFinishedHook = content.replace(
+      /(\} else if \(msg\.type == \d+ \/\* DebugDatabaseFinished \*\/\) \{)/,
+      '$1\n        __asOnDatabaseFinished();'
+    );
+    const databaseFinishedAdded = databaseFinishedHook !== content;
+    content = databaseFinishedHook;
+
+    if (compileDiagnosticsAdded && databaseFinishedAdded) {
+      console.log('✓ Patched to drop compile diagnostics from a previous editor connection');
+    } else {
+      console.warn('⚠ Warning: Stale compile diagnostics patch not fully applied'
+        + ' (support: ' + compileDiagnosticsAdded + ', hook: ' + databaseFinishedAdded + ')');
     }
 
     verifyInjectedReferences(content);

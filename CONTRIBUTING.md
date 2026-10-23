@@ -168,6 +168,7 @@ The build scripts (`scripts/bundle-lsp.js` and `scripts/bundle-dap.js`) automati
 - **C++ navigation handlers**: Adds `angelscript/getCppSymbol` and `angelscript/navigateToCpp`
 - **Unreal status handler**: Adds `angelscript/getUnrealStatus` and `angelscript/setTypeCacheEnabled`, which back the status bar widget
 - **Type database cache**: Persists the database the editor sends and replays it when no editor is running
+- **Stale compile diagnostics**: Drops the compile errors of the previous editor connection once a new one has sent its database, since a restarted editor never says that a file the old one complained about now compiles
 
 The transport is not patched: the server selects stdio itself when no Node IPC channel is present.
 

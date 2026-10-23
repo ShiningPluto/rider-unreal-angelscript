@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The API tool window lists every class's members, inherited ones included, beside the functions, variables and mixins script declares.
 - Each overload shows its own arguments, return type and documentation, and `APawn.Get` searches one type's members.
 - The group and class being scrolled through stay pinned at the top of the API tool window, and clicking one goes back to it.
+- A compile error from before the Unreal editor restarted no longer stays once the script compiles, such as one for a C++ symbol that has since been built.
 
 ### Added
 - The API tool window lists every class's members, inherited ones included. It used to show only namespaces: `APawn::` held APawn's two static functions and nothing else.
@@ -43,6 +44,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - The platform recolours an active icon by rewriting the colours on each SVG element. The icon set its colour once, on the root element, which is never rewritten, so it stayed grey on blue.
 - The API tool window describes the script function selected, not another overload of it.
   - The language server names a script function by an id that the next parse of its file replaces. Given an id it no longer knows, it describes the last function of that name, so overloads came to show the same documentation.
+- Compile errors Unreal reported before the editor restarted are dropped when the language server connects to the new editor. A reference to a newly added C++ symbol kept its error after the C++ was built and the editor restarted, while hover already showed the symbol.
+  - An editor only says a file compiles again if it told the same connection it did not. A new editor never mentions the files the old one complained about.
+  - What the new editor still reports comes back at once: it re-sends every file it has diagnostics for right after the type database.
 
 ### Internal
 - The bundled language server answers `angelscript/getScriptDeclarations`. It lists every function and variable script declares in a namespace, mixins included, each with its signature, documentation and file.

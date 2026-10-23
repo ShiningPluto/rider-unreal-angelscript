@@ -40754,6 +40754,7 @@ function connect_unreal() {
           clearTimeout(ReceivingTypesTimeout);
         ReceivingTypesTimeout = setTimeout(DetectUnrealTypeListTimeout, 1e3);
       } else if (msg.type == 26 /* DebugDatabaseFinished */) {
+        __asOnDatabaseFinished();
         if (ReceivingTypesTimeout)
           clearTimeout(ReceivingTypesTimeout);
         FinishTypesFromUnreal();
@@ -41406,6 +41407,31 @@ connection.onRequest("angelscript/getAPIDetails", (root) => {
   });
   return promise;
 });
+// Runs ahead of the handler's own work, so a failure here must not cost the types their finish.
+function __asOnDatabaseFinished() {
+  if (!unreal || unreal.__asDatabaseFinished)
+    return;
+  unreal.__asDatabaseFinished = true;
+  try {
+    let stale = [];
+    for (let [uri, diagnostics] of CompileDiagnostics) {
+      if (diagnostics.length != 0)
+        stale.push(uri);
+    }
+    if (stale.length == 0)
+      return;
+    connection.console.log("[compileDiagnostics] Dropping the previous connection's compile diagnostics for "
+      + stale.length + " files; the editor re-sends the current ones");
+    // The key is lowercased, so push under the file's own spelling when the server has it loaded.
+    for (let uri of stale) {
+      let asmodule = GetModuleByUri(uri);
+      UpdateCompileDiagnostics(asmodule ? asmodule.displayUri : uri, []);
+    }
+  } catch (e) {
+    connection.console.log("[compileDiagnostics] Failed to drop stale compile diagnostics: " + e);
+  }
+}
+
 var __asTypeCache = {
   path: (() => {
     const arg = process.argv.find((a) => a.startsWith("--type-cache="));
