@@ -32,13 +32,18 @@ class CppNavigationBundleTest : UsefulTestCase() {
 
     /** Every name the handlers call has to be defined in the same bundle. */
     fun testTheHandlersCallNamesTheBundleDefines() {
-        for (name in listOf("GetCppSymbol", "GetAndParseModule", "buildGoTo")) {
+        for (name in listOf("GetCppSymbol", "GetDefinition", "GetAndParseModule", "buildGoTo")) {
             assertTrue(
                 "The bundle calls $name but does not define it",
                 Regex("(?:^|\\n)\\s*function $name\\b").containsMatchIn(bundle)
             )
         }
         assertTrue("The handlers must call the bundled GetCppSymbol", bundle.contains("GetCppSymbol(asmodule, position)"))
+        assertTrue(
+            "A symbol declared in script is not a C++ symbol: the handlers must ask GetDefinition first",
+            bundle.contains("GetDefinition(asmodule, position)") &&
+                bundle.contains("let cppSymbol = __asCppSymbolAt(asmodule, position)")
+        )
         assertFalse(
             "The handlers reach for a module namespace the esbuild bundle does not have",
             bundle.contains("scriptsymbols.")

@@ -32,6 +32,8 @@ class's member of the same name.
 
 Stage one is `angelscript/getCppSymbol`, injected by the bundler: it returns the owning C++ type,
 the member name, and (since 2026-09-20) the type's C++ ancestry, read out of Unreal's type database.
+It answers only where `GetDefinition` finds nothing in script, as upstream's `onImplementation`
+does: `GetCppSymbol` alone names any member of a script class as a member of its first C++ base.
 Stage two used to ask `FilenameIndex` for a header named after the type - `AActor` meant `Actor.h` -
 and then match the member name anywhere in that file. On a real project that produced:
 
@@ -122,8 +124,9 @@ trip per candidate would cost more and buy the same answer.
   the type database has them.
 - Accuracy depends on the frontend content index covering C++ files. If it ever stops, the
   file-name candidates carry the search alone and recall drops to what it was before.
-- `getCppSymbol` now returns `ancestry`; `GetTypeByName` is therefore in the bundler's
-  `INJECTED_REFERENCES` ([0001](0001-patch-the-language-server-at-bundle-time.md)).
+- `getCppSymbol` now returns `ancestry` and checks for a script declaration first; `GetTypeByName`
+  and `GetDefinition` are therefore in the bundler's `INJECTED_REFERENCES`
+  ([0001](0001-patch-the-language-server-at-bundle-time.md)).
 - The search reads whole files. It is capped: 12 candidates per step, 4 MB per file, and the
   synchronous path has a deadline ([0006](0006-answer-goto-declaration-synchronously.md)).
 
@@ -132,6 +135,8 @@ trip per candidate would cost more and buy the same answer.
 - Navigation lands in the wrong file. The log line `Found <Type>::<Member> in <path>` says which
   step produced it; a target whose enclosing class is not the type means step 3 accepted something
   it should not have.
+- A script-declared member opens the C++ base class of its script class. `C++ symbol:` in the log
+  names a member C++ does not have: `getCppSymbol` answered without checking `GetDefinition` first.
 - Navigation stops finding anything for a category of symbol - most likely a C++ idiom `CppSource`
   does not parse. `CppSourceSearchTest` pins the ones that are known.
 - A new Unreal version changes how a type is spelled (another alias scheme like large-world
@@ -145,3 +150,6 @@ trip per candidate would cost more and buy the same answer.
   `UBlueprintFunctionLibrary`.
 - 2026-09-20 - Added the type/member index intersection, the enclosing-class check and the ancestry
   from the type database, after two measured wrong jumps.
+- 2026-10-26 - `getCppSymbol` and `navigateToCpp` ask `GetDefinition` first. Ctrl-clicking a method
+  of a `UScriptWorldSubsystem` subclass opened `ScriptWorldSubsystem.h`, for every script method of
+  every script class, since stage one started working again on 2026-09-20.

@@ -14,6 +14,7 @@ const { execFileSync } = require('child_process');
 const INJECTED_REFERENCES = [
   'GetAndParseModule',
   'GetCppSymbol',
+  'GetDefinition',
   'GetTypeByName',
   'buildGoTo',
   'unreal',
@@ -274,6 +275,19 @@ function __asCppAncestry(typename) {
   return names;
 }
 
+// The C++ symbol at a position, or null when the symbol is declared in script.
+//
+// GetCppSymbol on its own answers for any member of a script class: it walks up to the first C++
+// base and names the member there, so OnHit declared by a script subclass of UScriptWorldSubsystem
+// comes back as UScriptWorldSubsystem::OnHit, which does not exist. Upstream only asks it once
+// GetDefinition has found nothing in script (see onImplementation), and so does this.
+function __asCppSymbolAt(asmodule, position) {
+  let definitions = GetDefinition(asmodule, position);
+  if (definitions && definitions.length != 0)
+    return null;
+  return GetCppSymbol(asmodule, position);
+}
+
 connection.onRequest("angelscript/getCppSymbol", (params) => {
   let uri = params.uri;
   let position = params.position;
@@ -288,7 +302,7 @@ connection.onRequest("angelscript/getCppSymbol", (params) => {
     return null;
   }
   connection.console.log(\`[getCppSymbol] Module found and resolved: \${asmodule.modulename}\`);
-  let cppSymbol = GetCppSymbol(asmodule, position);
+  let cppSymbol = __asCppSymbolAt(asmodule, position);
   if (!cppSymbol) {
     connection.console.log(\`[getCppSymbol] No C++ symbol found at position \${position.line}:\${position.character}\`);
     return null;
@@ -314,7 +328,7 @@ connection.onRequest("angelscript/navigateToCpp", (params) => {
     return false;
   }
   connection.console.log(\`[navigateToCpp] Module found and resolved: \${asmodule.modulename}\`);
-  let cppSymbol = GetCppSymbol(asmodule, position);
+  let cppSymbol = __asCppSymbolAt(asmodule, position);
   if (!cppSymbol) {
     connection.console.log(\`[navigateToCpp] No C++ symbol found at position \${position.line}:\${position.character}\`);
     return false;

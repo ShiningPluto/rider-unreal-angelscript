@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The API tool window's details read like Quick Documentation: the declaration, the documentation as paragraphs and lists, then parameters, return value and links in a table.
 - A compile error from before the Unreal editor restarted no longer stays once the script compiles, such as one for a C++ symbol that has since been built.
 - A compile error from Unreal has a quick fix that makes the editor compile the file again, and the status bar item does it for every such file.
+- Go to declaration on a function a script class declares goes to it again, instead of to the C++ class it derives from.
 
 ### Added
 - The API tool window lists every class's members, inherited ones included. It used to show only namespaces: `APawn::` held APawn's two static functions and nothing else.
@@ -64,6 +65,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Compile errors Unreal reported before the editor restarted are dropped when the language server connects to the new editor. A reference to a newly added C++ symbol kept its error after the C++ was built and the editor restarted, while hover already showed the symbol.
   - An editor only says a file compiles again if it told the same connection it did not. A new editor never mentions the files the old one complained about.
   - What the new editor still reports comes back at once: it re-sends every file it has diagnostics for right after the type database.
+- Go to declaration on a function or property a script class declares goes to that declaration again, not to the C++ class the script class derives from. Ctrl-clicking a method of a `UScriptWorldSubsystem` subclass opened `ScriptWorldSubsystem.h`.
+  - The language server named any member of a script class as a member of its first C++ base, so Rider searched the C++ sources for it and fell back to that class's declaration.
+  - It now names a C++ symbol only where nothing in script declares one, as upstream does before asking the Unreal editor to open C++.
 
 ### Internal
 - The bundled language server answers `angelscript/getScriptDeclarations`. It lists every function and variable script declares in a namespace, mixins included, each with its signature, documentation and file.
