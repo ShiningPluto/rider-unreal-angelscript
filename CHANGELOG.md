@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The API tool window lists every class's members, inherited ones included, beside the functions, variables and mixins script declares.
 - Each overload shows its own arguments, return type and documentation, and `APawn.Get` searches one type's members.
 - The group and class being scrolled through stay pinned at the top of the API tool window, and clicking one goes back to it.
+- The API tool window's details read like Quick Documentation: the declaration, the documentation as paragraphs and lists, then parameters, return value and links in a table.
 - A compile error from before the Unreal editor restarted no longer stays once the script compiles, such as one for a C++ symbol that has since been built.
 - A compile error from Unreal has a quick fix that makes the editor compile the file again, and the status bar item does it for every such file.
 
@@ -42,6 +43,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - Clicking the `AngelScript: Unreal` status bar item opens a menu instead of the settings, which are its last entry.
 - Expanding a row in the API tool window no longer scrolls the tree. A class with hundreds of members used to jump to the top, away from the mouse that expanded it.
+- The API tool window's details pane is laid out like Quick Documentation: the declaration with its name in bold, the documentation, then a table of parameters, return value, notes, links, what a class inherits and where script declares something.
+  - Unreal's comments are wrapped by hand at about 100 columns, so a narrower pane broke every line twice. Their lines are joined into paragraphs again; lists, indented examples and a line ending in a colon keep their breaks.
+  - Paragraphs have space between them.
+  - Parameters are listed with their names in one column and their descriptions in the next, so every description starts in the same place.
+  - Links open in the browser. `@see` names and text in backquotes are shown as code.
+  - `@PARAM`, `@Param` and `@params` are read as `@param`, as `ACharacter.LaunchCharacter` writes them. The other tags were already read whatever their case.
+  - A class's counts are a row each, leaving out what there is none of. A namespace's include what script adds to it.
+  - Selecting a group describes it, instead of asking for an item to be selected.
 - The type database cache setting is now "Use the saved type database until an Unreal editor connects".
   - It only decides whether a saved database is loaded. Every database an editor sends is saved whatever the setting, because the API tool window reads it.
   - Turning it off still means no analysis until an editor connects, and still restarts the language server when a saved database is in use.

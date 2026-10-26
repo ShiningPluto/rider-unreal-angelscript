@@ -1,6 +1,7 @@
 package com.scriptacus.riderunrealangelscript.toolwindow
 
 import com.intellij.icons.AllIcons
+import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnAction
@@ -10,6 +11,7 @@ import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.ui.BrowserHyperlinkListener
 import com.intellij.ui.JBSplitter
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.TreeSpeedSearch
@@ -164,7 +166,14 @@ class AngelScriptApiPanel(
         detailsPane.editorKit = HTMLEditorKitBuilder().withWordWrapViewFactory().build()
         detailsPane.isEditable = false
         detailsPane.border = JBUI.Borders.empty(4, 8)
+        // Unreal's documentation links to its online docs.
+        detailsPane.addHyperlinkListener(BrowserHyperlinkListener.INSTANCE)
         setDetails(null)
+        // The style sheet is in the theme's colours.
+        ApplicationManager.getApplication().messageBus.connect(parentDisposable).subscribe(
+            LafManagerListener.TOPIC,
+            LafManagerListener { showDetails(tree.selectionPath?.lastPathComponent as? ApiTreeNode) }
+        )
 
         val splitter = JBSplitter(true, 0.6f)
         splitter.firstComponent = StickyTreeRows.install(tree, JBScrollPane(tree))
@@ -403,11 +412,13 @@ class AngelScriptApiPanel(
     }
 
     private fun showDetails(treeNode: ApiTreeNode?) {
-        setDetails(treeNode?.node?.let { node -> database?.let { ApiDetailsHtml.of(node, it) } })
+        setDetails(treeNode?.node?.let { node -> database?.let { ApiDetailsHtml.of(node, it, script ?: ScriptDeclarations.NONE) } })
     }
 
     private fun setDetails(body: String?) {
-        detailsPane.text = "<html><body>${body ?: "<p>Select an item to see its details.</p>"}</body></html>"
+        detailsPane.text = "<html><head><style>${ApiDetailsHtml.css()}</style></head><body>" +
+            (body ?: "<p class='${ApiDetailsHtml.GREYED}'>Select an item to see its details.</p>") +
+            "</body></html>"
         detailsPane.caretPosition = 0
     }
 }

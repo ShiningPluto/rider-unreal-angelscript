@@ -232,12 +232,14 @@ class ApiBrowserTest : UsefulTestCase() {
     fun testScriptDetailsSayWhereTheyAreDeclared() {
         val printToScreen = script.globals.functions.single()
         val html = ApiDetailsHtml.member(printToScreen)
-        assertTrue(html, html.contains("void PrintToScreen(\n    FString Text,\n    float32 Duration\n)"))
-        assertTrue(html, html.contains("Declared in <code>d:/Game/Script/Debug.as</code>"))
+        assertEquals("void PrintToScreen(\n    FString Text,\n    float32 Duration\n)", ApiDetailsHtml.signature(printToScreen))
+        assertTrue(html, html.contains("void <b>PrintToScreen</b>(\n"))
+        assertEquals(listOf("<code>d:/Game/Script/Debug.as</code>"), row(html, "Declared in"))
 
         val highlight = script.mixinsOn("AActor").single()
-        assertEquals("void AActor.Highlight(\n    FLinearColor Color\n)", ApiDetailsHtml.signature(highlight))
-        assertTrue(ApiDetailsHtml.member(highlight).contains("Script mixin: called on AActor as one of its methods."))
+        // One argument fits on the line.
+        assertEquals("void AActor.Highlight(FLinearColor Color)", ApiDetailsHtml.signature(highlight))
+        assertEquals(listOf("Called on AActor as one of its methods."), row(ApiDetailsHtml.member(highlight), "Script mixin"))
     }
 
     fun testOverloadsKeepTheirOwnDocumentation() {
@@ -295,12 +297,51 @@ class ApiBrowserTest : UsefulTestCase() {
         val method = database.type("AActor")!!.methods.single()
         val html = ApiDetailsHtml.member(method)
 
-        assertTrue(html, html.contains("TArray&lt;UActorComponent&gt; AActor.GetComponentsByClass(\n    TSubclassOf&lt;UActorComponent&gt; ComponentClass\n)"))
+        assertTrue(html, html.contains("TArray&lt;UActorComponent&gt; AActor.<b>GetComponentsByClass</b>(TSubclassOf&lt;UActorComponent&gt; ComponentClass)"))
         assertFalse(html, html.contains("<UActorComponent>"))
         // The indented line continues the parameter it follows.
-        assertTrue(html, html.contains("<li><code>ComponentClass</code> - The class to look for and its subclasses</li>"))
-        assertTrue(html, html.contains("<p><b>Returns:</b> The components found</p>"))
+        // In a column of their own, beside their names.
+        assertTrue(
+            html,
+            html.contains("<td valign='top' class='parameter'><p><code>ComponentClass</code></p></td><td valign='top'><p>The class to look for and its subclasses</p></td>")
+        )
+        assertEquals(listOf("The components found"), row(html, "Returns"))
         assertTrue(html, html.contains("<p>Gets all components of a class.</p>"))
+    }
+
+    fun testDocTextIsJoinedAsItReadsAndItsListsAndExamplesKept() {
+        val doc = DocComment.parse(
+            "Actor is the base class for an Object that can be placed or spawned in a level, and wrapped\n" +
+                "here by hand.\n\n\n" +
+                "Actor initialization has multiple steps:\n" +
+                "- UObject::PostLoad: For actors statically placed in a level.\n" +
+                "                     This is not called for newly spawned actors.\n" +
+                "- AActor::BeginPlay: Called when the level starts ticking.\n\n" +
+                "Example: three levels\n" +
+                "    LOD(0) = 0.0\n" +
+                "    LOD(1) = 2500.0\n\n" +
+                "@note: Reads `Tags` too.\n" +
+                "@see https://docs.unrealengine.com/Actors\n" +
+                "@see UActorComponent, APawn"
+        )
+        assertEquals(
+            "<p>Actor is the base class for an Object that can be placed or spawned in a level, and wrapped here by hand.</p>" +
+                "<p>Actor initialization has multiple steps:</p>" +
+                "<ul><li><b>UObject::PostLoad</b>: For actors statically placed in a level. This is not called for newly spawned actors.</li>" +
+                "<li><b>AActor::BeginPlay</b>: Called when the level starts ticking.</li></ul>" +
+                "<p>Example: three levels<br>&nbsp;&nbsp;&nbsp;&nbsp;LOD(0) = 0.0<br>&nbsp;&nbsp;&nbsp;&nbsp;LOD(1) = 2500.0</p>",
+            doc.content
+        )
+        assertEquals(
+            listOf(
+                "Note" to listOf("Reads <code>Tags</code> too."),
+                "See also" to listOf(
+                    "<a href=\"https://docs.unrealengine.com/Actors\">https://docs.unrealengine.com/Actors</a>",
+                    "<code>UActorComponent</code>, <code>APawn</code>",
+                ),
+            ),
+            doc.rows(DocTag.NOTE, DocTag.SEE)
+        )
     }
 
     fun testSignaturesShowConstAndLeaveTheReturnTypeOffConstructors() {
@@ -312,11 +353,51 @@ class ApiBrowserTest : UsefulTestCase() {
     }
 
     fun testATypesDetailsCountWhatItInherits() {
-        val html = ApiDetailsHtml.of(ApiNode.Type(database.type("APawn")!!), database)!!
-        assertTrue(html, html.contains("class APawn : AActor"))
-        assertTrue(html, html.contains("<b>Inherits:</b> AActor → UObject"))
-        assertTrue(html, html.contains("Declares 2 functions and 1 property; inherits 2 functions and 1 property; has 1 static member."))
+        val html = ApiDetailsHtml.of(ApiNode.Type(database.type("APawn")!!), database, script)!!
+        assertTrue(html, html.contains("class <b>APawn</b> : AActor"))
+        assertEquals(listOf("AActor → UObject"), row(html, "Inherits"))
+        assertEquals(listOf("2 functions, 1 property"), row(html, "Declares"))
+        assertEquals(listOf("2 functions, 1 property"), row(html, "Inherited"))
+        // What there is none of is left out.
+        assertEquals(listOf("1 function"), row(html, "Static members"))
+        assertEquals(listOf("1 function"), row(html, "Script mixins"))
     }
+
+    fun testANamespaceCountsWhatScriptAddsToIt() {
+        val html = ApiDetailsHtml.of(ApiNode.Namespace(database.namespace("Math")!!), database, script)!!
+        assertEquals(listOf("1 function, 1 property"), row(html, "Declares"))
+        assertEquals(listOf("2 functions, 1 property"), row(html, "Script adds"))
+        assertEquals(listOf("<code>d:/Game/Script/MathExtras.as</code>"), row(html, "Declared in"))
+    }
+
+    fun testDocTagsAreReadWhateverTheirCase() {
+        // As ACharacter.LaunchCharacter's comment has them.
+        val doc = DocComment.parse(
+            "Set a pending launch velocity on the Character.\n" +
+                "@PARAM LaunchVelocity is the velocity to impart to the Character\n" +
+                "@Param bXYOverride if true replace the XY part\n" +
+                "@params bZOverride if true replace the Z component\n" +
+                "@Return whether it launched"
+        )
+        assertEquals("<p>Set a pending launch velocity on the Character.</p>", doc.content)
+        assertEquals(
+            listOf(
+                "LaunchVelocity" to "is the velocity to impart to the Character",
+                "bXYOverride" to "if true replace the XY part",
+                "bZOverride" to "if true replace the Z component",
+            ),
+            doc.params
+        )
+        assertEquals(listOf("Returns" to listOf("whether it launched")), doc.rows(DocTag.RETURN))
+    }
+
+    /** The values in a row of the details' table, as HTML. */
+    private fun row(html: String, label: String): List<String>? =
+        Regex("<td valign='top' class='section'><p>${Regex.escape(label)}:</p></td><td valign='top'>(.*?)</td>")
+            .find(html)
+            ?.groupValues?.get(1)
+            ?.removePrefix("<p>")?.removeSuffix("</p>")
+            ?.split("</p><p>")
 
     fun testGlobalFunctionsAreNamedWithoutAnOwner() {
         val print = database.globals.functions.single() as UnrealMethod
