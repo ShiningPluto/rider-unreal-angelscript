@@ -255,7 +255,20 @@ tasks.buildPlugin {
 
 dependencies {
     intellijPlatform {
-        rider(productVersion) { this.useInstaller = false }
+        // -PlocalRiderSdk=<folder> builds against an already extracted riderRD-<productVersion> instead
+        // of the 3 GB SDK Gradle downloads and extracts into its caches. An antivirus that deletes a
+        // script it flags from the cached zip leaves Gradle extracting it again from a broken archive.
+        val localRiderSdk = providers.gradleProperty("localRiderSdk").orNull
+        if (localRiderSdk != null) {
+            val sdk = file(localRiderSdk)
+            val productInfo = sdk.resolve("product-info.json")
+            require(productInfo.isFile) { "localRiderSdk: $sdk has no product-info.json, so it is not an extracted Rider" }
+            val sdkVersion = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(productInfo.readText())?.groupValues?.get(1)
+            require(sdkVersion == productVersion) { "localRiderSdk: $sdk is Rider $sdkVersion, but the plugin is built against $productVersion" }
+            local(sdk)
+        } else {
+            rider(productVersion) { this.useInstaller = false }
+        }
         jetbrainsRuntime()
 
         // Bundled plugins

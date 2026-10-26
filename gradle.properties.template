@@ -33,6 +33,9 @@ publishToken="_PLACEHOLDER_"
 #   Nightly:  2020.3-SNAPSHOT
 productVersion=2025.2.5
 
+# Build against this extracted Rider SDK, of productVersion, instead of downloading and extracting it.
+#localRiderSdk=C:/Users/<you>/.gradle/local-sdks/riderRD-2025.2.5
+
 # Kotlin 1.4 will bundle the stdlib dependency by default, causing problems with the version bundled with the IDE
 # https://blog.jetbrains.com/kotlin/2020/07/kotlin-1-4-rc-released/#stdlib-default
 kotlin.stdlib.default.dependency=false

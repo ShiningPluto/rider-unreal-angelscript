@@ -68,6 +68,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Internal
 - The bundled language server answers `angelscript/getScriptDeclarations`. It lists every function and variable script declares in a namespace, mixins included, each with its signature, documentation and file.
   - Upstream's API requests could not serve the tool window. `getAPI` returns only namespaces at the root, skips mixins, and names a function without describing it. `getAPIDetails` then finds it by an id each parse replaces.
+- `-PlocalRiderSdk=<folder of an extracted Rider SDK>` builds against that folder instead of the SDK Gradle downloads and extracts. The build checks that it is `productVersion`.
+  - Kaspersky deletes `lib/ReSharperHost/dotnet-sdk.cmd` from the cached SDK zip during its weekly scan, and the zip it rewrites cannot be extracted. Gradle then fails with "Cannot expand ZIP".
 
 ## 1.0.1 - 2026-10-21
 

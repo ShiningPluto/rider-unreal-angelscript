@@ -24,6 +24,12 @@ This guide covers building the Rider Unreal AngelScript plugin from source.
 3. Edit `gradle.properties` to configure paths for your system (optional):
    - Set Java home path if needed
    - Customize build settings if desired
+   - Set `localRiderSdk` to a folder holding the Rider SDK, extracted, to build against it instead of
+     the 3 GB SDK Gradle downloads and extracts. It must be the `productVersion` the build is set
+     to, which the build checks. Extracting `riderRD-<productVersion>.zip` from Gradle's cache
+     (`caches/modules-2/files-2.1/com.jetbrains.intellij.rider/riderRD`) gives one. This also keeps
+     the build working when an antivirus deletes a script it flags from that zip and breaks it, as
+     Kaspersky does with `lib/ReSharperHost/dotnet-sdk.cmd`.
 
 ## Building the Plugin
 
