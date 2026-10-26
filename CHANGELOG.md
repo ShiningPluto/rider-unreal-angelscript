@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - Rows show argument and return types, so overloads can be told apart.
   - The details pane shows the selected overload's own signature and documentation, and the C++ name of a function script knows by another name, such as `K2_SetActorLocation` or `ReceiveBeginPlay`.
   - Search covers types, members and namespaces, and finds an event by its C++ name. `APawn.Get` or `Math::` searches one type's or namespace's members.
+  - Clearing the search keeps the selected result selected where the whole API lists it, with the rows above it expanded.
   - The language server's API requests cannot list a class's members, so the tool window reads the type database the server saves. It reads it the first time it is opened and keeps it in memory: about 60 MB for a project with 29,000 Unreal types.
   - Without a database, the tool window says why. Opening it starts the language server if nothing else has.
 - The API tool window lists what script declares beside Unreal's API, with arguments, return types and documentation.

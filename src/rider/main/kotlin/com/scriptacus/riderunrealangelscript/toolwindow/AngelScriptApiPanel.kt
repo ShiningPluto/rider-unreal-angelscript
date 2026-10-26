@@ -20,6 +20,7 @@ import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.Alarm
 import com.intellij.util.ui.HTMLEditorKitBuilder
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.tree.TreeUtil
 import com.redhat.devtools.lsp4ij.LanguageServerManager
 import com.redhat.devtools.lsp4ij.ServerStatus
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
@@ -113,6 +114,9 @@ class AngelScriptApiPanel(
 
     /** Bumped whenever the tree is rebuilt, so that answers meant for an older one are dropped. */
     private var generation = 0
+
+    /** Whether the tree holds search results rather than the whole API. */
+    private var showingSearchResults = false
 
     init {
         searchField.textEditor.emptyText.text = "Search API... (Type.member narrows to one type)"
@@ -278,6 +282,7 @@ class AngelScriptApiPanel(
         val db = database
 
         if (db == null) {
+            showingSearchResults = false
             setRoots(stateMessages().map { ApiNode.Message(it) })
             return
         }
@@ -288,9 +293,13 @@ class AngelScriptApiPanel(
         if (query.length < MIN_SEARCH_LENGTH) {
             val expanded = if (keepExpansion) expandedRows() else emptyList()
             val selected = if (keepExpansion) tree.selectionPath?.let(::rowTexts) else null
+            // The search result selected when the search is cleared stays selected, where the whole API lists it.
+            val found = if (showingSearchResults) (tree.selectionPath?.lastPathComponent as? ApiTreeNode)?.node else null
+            showingSearchResults = false
             setRoots(ApiTreeStructure.roots(db, declarations))
             tree.emptyText.text = "The type database is empty"
             restoreRows(expanded, selected)
+            found?.let(::reveal)
             return
         }
 
@@ -306,6 +315,7 @@ class AngelScriptApiPanel(
     }
 
     private fun showSearchResults(query: String, result: UnrealSearchResult, scriptResult: UnrealSearchResult) {
+        showingSearchResults = true
         setRoots(searchHits(result, script = false))
         tree.emptyText.text = "Nothing matches \"$query\""
 
@@ -345,6 +355,20 @@ class AngelScriptApiPanel(
         // Expanding a row builds its children, so a parent's are there before its children are looked for.
         expanded.forEach { texts -> findRow(texts)?.let(tree::expandPath) }
         selected?.let(::findRow)?.let { tree.selectionPath = it }
+    }
+
+    /** Expands the rows a search result is listed under in the whole API, and selects it there. */
+    private fun reveal(node: ApiNode) {
+        val db = database ?: return
+        val path = ApiTreeStructure.pathTo(node, db) ?: return
+        var row: DefaultMutableTreeNode = rootNode
+        for (matches in path) {
+            (row as? ApiTreeNode)?.let(::loadChildren)
+            row = row.children().asSequence().firstOrNull { (it as? ApiTreeNode)?.node?.let(matches) == true } as? DefaultMutableTreeNode
+                ?: return
+        }
+        // Centred: in a group of thousands it would otherwise sit at the very edge.
+        TreeUtil.selectPath(tree, TreePath(row.path), true)
     }
 
     private fun findRow(texts: List<String>): TreePath? {

@@ -130,6 +130,60 @@ object ApiTreeStructure {
         }
     }
 
+    /**
+     * Where a search result is listed in the whole tree: a test for the row at each level, from its
+     * group down to its own. Null for what the tree does not list, such as a mixin on a script type.
+     */
+    fun pathTo(node: ApiNode, database: UnrealTypeDatabase): List<(ApiNode) -> Boolean>? =
+        when (node) {
+            is ApiNode.Type -> pathTo(node.type)
+            is ApiNode.Namespace -> listOf(isGroup(GroupKind.NAMESPACES), { it is ApiNode.Namespace && it.namespace.name == node.namespace.name })
+            is ApiNode.ScriptNamespace -> scriptNamespacePath(node.namespace.name, database)
+            is ApiNode.Member -> ownerPath(node.member, database)?.plus { it: ApiNode -> it is ApiNode.Member && it.member === node.member }
+            is ApiNode.Group, is ApiNode.Statics, is ApiNode.Inherited, is ApiNode.Message -> null
+        }
+
+    private fun pathTo(type: UnrealType): List<(ApiNode) -> Boolean> {
+        val group = when (type.kind) {
+            UnrealTypeKind.CLASS -> GroupKind.CLASSES
+            UnrealTypeKind.STRUCT -> GroupKind.STRUCTS
+            UnrealTypeKind.ENUM -> GroupKind.ENUMS
+            UnrealTypeKind.DELEGATE, UnrealTypeKind.EVENT -> GroupKind.DELEGATES
+        }
+        return listOf(isGroup(group), { it is ApiNode.Type && it.type === type })
+    }
+
+    /** The rows a member is listed under, as [children] lists it. */
+    private fun ownerPath(member: UnrealMember, database: UnrealTypeDatabase): List<(ApiNode) -> Boolean>? {
+        val owner = member.owner ?: return listOf(isGroup(GroupKind.GLOBALS))
+        database.type(owner)?.let { type ->
+            // A type's own members and enum values are its children; its static members are a row down.
+            return if (member.ownerSeparator == "." || type.kind == UnrealTypeKind.ENUM) {
+                pathTo(type)
+            } else {
+                pathTo(type) + { it: ApiNode -> it is ApiNode.Statics }
+            }
+        }
+        if (member.ownerSeparator == ".") {
+            return null
+        }
+        return if (database.declaresNamespace(owner)) {
+            listOf(isGroup(GroupKind.NAMESPACES), { it is ApiNode.Namespace && it.namespace.name == owner })
+        } else {
+            scriptNamespacePath(owner, database)
+        }
+    }
+
+    /** A namespace only script declares is listed in the one it is nested in, if script declares that alone too. */
+    private fun scriptNamespacePath(name: String, database: UnrealTypeDatabase): List<(ApiNode) -> Boolean> {
+        val names = generateSequence(name) { it.substringBeforeLast("::", "").takeIf { parent -> parent.isNotEmpty() && !database.declaresNamespace(parent) } }
+            .toList()
+            .asReversed()
+        return listOf(isGroup(GroupKind.SCRIPT_NAMESPACES)) + names.map { namespace -> { it: ApiNode -> it is ApiNode.ScriptNamespace && it.namespace.name == namespace } }
+    }
+
+    private fun isGroup(kind: GroupKind): (ApiNode) -> Boolean = { it is ApiNode.Group && it.kind == kind }
+
     private fun size(namespace: UnrealNamespace) = namespace.properties.size + namespace.functions.size
 
     private fun members(namespace: UnrealNamespace): List<ApiNode> = members(namespace.properties, namespace.functions)

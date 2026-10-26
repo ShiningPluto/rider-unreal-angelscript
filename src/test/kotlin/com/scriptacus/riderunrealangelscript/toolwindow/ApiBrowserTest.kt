@@ -4,6 +4,8 @@ import com.intellij.testFramework.UsefulTestCase
 import com.scriptacus.riderunrealangelscript.typedb.ScriptDeclarations
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMember
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMethod
+import com.scriptacus.riderunrealangelscript.typedb.UnrealNamespace
+import com.scriptacus.riderunrealangelscript.typedb.UnrealSearchResult
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
 import java.io.StringReader
 
@@ -389,6 +391,38 @@ class ApiBrowserTest : UsefulTestCase() {
             doc.params
         )
         assertEquals(listOf("Returns" to listOf("whether it launched")), doc.rows(DocTag.RETURN))
+    }
+
+    fun testASearchResultIsFoundAgainInTheWholeTree() {
+        /** The rows down to where [node] is listed, expanded as the panel expands them. */
+        fun reveal(node: ApiNode): List<String> {
+            var rows = ApiTreeStructure.roots(database, script)
+            return ApiTreeStructure.pathTo(node, database)!!.map { matches ->
+                val row = rows.first(matches)
+                rows = ApiTreeStructure.children(row, database, script)
+                ApiTreeCellRenderer.text(row)
+            }
+        }
+        fun found(result: UnrealSearchResult) = ApiNode.Member(result.hits.first() as UnrealMember, qualified = true)
+
+        assertEquals(listOf("Structs", "FVector"), reveal(ApiNode.Type(database.type("FVector")!!)))
+        assertEquals(listOf("Classes", "APawn", "GetController()"), reveal(found(database.search("GetController", 5))))
+        assertEquals(listOf("Classes", "APawn", "Static members", "GetMovementBaseActor(const APawn)"), reveal(found(database.search("GetMovementBase", 5))))
+        assertEquals(listOf("Enums", "EMode", "Fly"), reveal(found(database.search("Fly", 5))))
+        assertEquals(listOf("Namespaces", "Math::", "Lerp()"), reveal(found(database.search("Lerp", 5))))
+        assertEquals(listOf("Globals", "Print()"), reveal(found(database.search("Print", 5))))
+
+        // What script declares, wherever it is listed.
+        assertEquals(listOf("Globals", "PrintToScreen(FString, float32)"), reveal(found(script.search("PrintTo", 5))))
+        assertEquals(listOf("Namespaces", "Math::", "Tau"), reveal(found(script.search("Tau", 5))))
+        assertEquals(listOf("Classes", "AActor", "Highlight(FLinearColor)"), reveal(found(script.search("AActor.High", 5))))
+        assertEquals(
+            listOf("Script namespaces", "Backend_battle::", "Backend_battle::Arena::", "Start()"),
+            reveal(found(script.search("Start", 5)))
+        )
+        assertEquals(listOf("Script namespaces", "Math::Curves::", "Blend()"), reveal(found(script.search("Blend", 5))))
+        val arena = script.search("Arena", 5).hits.single() as UnrealNamespace
+        assertEquals(listOf("Script namespaces", "Backend_battle::", "Backend_battle::Arena::"), reveal(ApiNode.ScriptNamespace(arena)))
     }
 
     /** The values in a row of the details' table, as HTML. */
