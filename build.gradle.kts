@@ -52,7 +52,18 @@ tasks.wrapper {
     distributionUrl = "https://cache-redirector.jetbrains.com/services.gradle.org/distributions/gradle-${gradleVersion}-all.zip"
 }
 
-version = extra["pluginVersion"] as String
+/** The patch release after the newest one in [changelog], marked -dev: 1.0.1 gives 1.0.2-dev. */
+fun nextDevVersion(changelog: String): String {
+    val newest = Regex("(?m)^## (\\d+)\\.(\\d+)\\.(\\d+)\\b").find(changelog)
+        ?: throw GradleException("CHANGELOG.md has no release to take the version from; set pluginVersion")
+    val (major, minor, patch) = newest.destructured
+    return "$major.$minor.${patch.toInt() + 1}-dev"
+}
+
+// The release workflow sets pluginVersion to the tag's version. Any other build is the release after
+// the newest one in CHANGELOG.md, marked -dev, so that it never carries a version left over in a
+// local gradle.properties, and the release it precedes is offered as an update once it ships.
+version = providers.gradleProperty("pluginVersion").orNull ?: nextDevVersion(file("CHANGELOG.md").readText())
 
 tasks.processResources {
     from("dependencies.json") { into("META-INF") }

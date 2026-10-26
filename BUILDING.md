@@ -43,6 +43,10 @@ The plugin ZIP will be created at:
 build/distributions/Scriptacus.RiderUnrealAngelscript-<version>.zip
 ```
 
+The version is the release after the newest one in `CHANGELOG.md`, marked `-dev`: `1.0.2-dev` after
+1.0.1. Set `pluginVersion` in `gradle.properties` or with `-PpluginVersion=` to build another; the
+release workflow sets it to the version of the tag it builds.
+
 You can install this ZIP file in Rider via **Settings** → **Plugins** → ⚙️ → **Install Plugin from Disk...**
 
 ## Development Tasks

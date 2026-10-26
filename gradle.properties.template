@@ -18,7 +18,9 @@ riderPluginId=com.shiningpluto.rider-unreal-angelscript
 riderPluginName=AngelScript UE
 riderPluginVendorName=ShiningPluto
 riderPluginVendorUrl=https://github.com/ShiningPluto/rider-unreal-angelscript
-pluginVersion=9999.0.0
+# Without pluginVersion, a build is the release after the newest one in CHANGELOG.md, marked -dev
+# (1.0.2-dev after 1.0.1). The release workflow sets it to the tag's version.
+#pluginVersion=1.0.2
 
 buildConfiguration=Debug
 

@@ -70,6 +70,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - Upstream's API requests could not serve the tool window. `getAPI` returns only namespaces at the root, skips mixins, and names a function without describing it. `getAPIDetails` then finds it by an id each parse replaces.
 - `-PlocalRiderSdk=<folder of an extracted Rider SDK>` builds against that folder instead of the SDK Gradle downloads and extracts. The build checks that it is `productVersion`.
   - Kaspersky deletes `lib/ReSharperHost/dotnet-sdk.cmd` from the cached SDK zip during its weekly scan, and the zip it rewrites cannot be extracted. Gradle then fails with "Cannot expand ZIP".
+- A build without `pluginVersion` is versioned as the release after the newest one in the changelog, marked `-dev`, such as `1.0.2-dev`. It used to take whatever `pluginVersion` a local `gradle.properties` was copied with.
+  - The release workflow still sets `pluginVersion` to the tag's version.
 
 ## 1.0.1 - 2026-10-21
 
