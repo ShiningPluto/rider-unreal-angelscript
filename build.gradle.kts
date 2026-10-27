@@ -52,16 +52,22 @@ tasks.wrapper {
     distributionUrl = "https://cache-redirector.jetbrains.com/services.gradle.org/distributions/gradle-${gradleVersion}-all.zip"
 }
 
-/** The patch release after the newest one in [changelog], marked -dev: 1.0.1 gives 1.0.2-dev. */
+/**
+ * The patch release after the newest one in [changelog], marked -SNAPSHOT: 1.0.1 gives 1.0.2-SNAPSHOT.
+ *
+ * The suffix has to be one the IDE's VersionComparatorUtil ranks below the release itself, or the
+ * release is never offered as an update. SNAPSHOT, EAP, alpha, beta and rc are; a word it does not
+ * know is not - it took 1.0.2-dev to be newer than 1.0.2.
+ */
 fun nextDevVersion(changelog: String): String {
     val newest = Regex("(?m)^## (\\d+)\\.(\\d+)\\.(\\d+)\\b").find(changelog)
         ?: throw GradleException("CHANGELOG.md has no release to take the version from; set pluginVersion")
     val (major, minor, patch) = newest.destructured
-    return "$major.$minor.${patch.toInt() + 1}-dev"
+    return "$major.$minor.${patch.toInt() + 1}-SNAPSHOT"
 }
 
 // The release workflow sets pluginVersion to the tag's version. Any other build is the release after
-// the newest one in CHANGELOG.md, marked -dev, so that it never carries a version left over in a
+// the newest one in CHANGELOG.md, marked -SNAPSHOT, so that it never carries a version left over in a
 // local gradle.properties, and the release it precedes is offered as an update once it ships.
 version = providers.gradleProperty("pluginVersion").orNull ?: nextDevVersion(file("CHANGELOG.md").readText())
 

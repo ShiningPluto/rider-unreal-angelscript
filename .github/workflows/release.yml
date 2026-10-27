@@ -48,7 +48,7 @@ jobs:
           # Remove the hardcoded Java home path - GitHub Actions sets up Java correctly
           sed -i '/^org.gradle.java.home=/d' gradle.properties
           # Update version and build configuration
-          # The template leaves pluginVersion out, so that other builds take a -dev version from CHANGELOG.md
+          # The template leaves pluginVersion out, so that other builds take a -SNAPSHOT version from CHANGELOG.md
           sed -i '/^pluginVersion=/d' gradle.properties
           printf '\npluginVersion=%s\n' "${{ steps.get_version.outputs.VERSION }}" >> gradle.properties
           sed -i 's/^buildConfiguration=.*/buildConfiguration=Release/' gradle.properties
