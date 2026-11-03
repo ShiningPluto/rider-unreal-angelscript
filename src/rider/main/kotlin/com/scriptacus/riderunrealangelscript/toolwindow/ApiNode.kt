@@ -5,6 +5,7 @@ import com.scriptacus.riderunrealangelscript.typedb.UnrealMember
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMembers
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMethod
 import com.scriptacus.riderunrealangelscript.typedb.UnrealNamespace
+import com.scriptacus.riderunrealangelscript.typedb.UnrealSearchHit
 import com.scriptacus.riderunrealangelscript.typedb.UnrealType
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeKind
@@ -33,9 +34,15 @@ sealed class ApiNode {
     /**
      * Unreal's or script's. [qualified] when listed away from its owner, as search results are.
      * [note] says what the row alone does not: which script file declares it, when listed among
-     * Unreal's API.
+     * Unreal's API, or which supertype declares a search result found through [inheritedBy].
      */
-    class Member(val member: UnrealMember, val qualified: Boolean, val note: String? = null) : ApiNode()
+    class Member(
+        val member: UnrealMember,
+        val qualified: Boolean,
+        val note: String? = null,
+        /** The type a search named, which inherits [member]: it is named through that type. */
+        val inheritedBy: UnrealType? = null,
+    ) : ApiNode()
 
     /** A namespace only script declares. */
     class ScriptNamespace(val namespace: UnrealNamespace) : ApiNode()
@@ -131,6 +138,22 @@ object ApiTreeStructure {
     }
 
     /**
+     * The row of a search result, named through its owner. A member found among what a searched type
+     * inherits is named through that type, as script calls it, and its row notes which supertype
+     * declares it. [script] when the result is among what script declares.
+     */
+    fun searchResult(hit: UnrealSearchHit, script: Boolean): ApiNode = when (val symbol = hit.symbol) {
+        is UnrealType -> ApiNode.Type(symbol)
+        is UnrealNamespace -> if (script) ApiNode.ScriptNamespace(symbol) else ApiNode.Namespace(symbol)
+        is UnrealMember -> ApiNode.Member(
+            symbol,
+            qualified = true,
+            note = hit.inheritedBy?.let { "from ${symbol.owner}" },
+            inheritedBy = hit.inheritedBy,
+        )
+    }
+
+    /**
      * Where a search result is listed in the whole tree: a test for the row at each level, from its
      * group down to its own. Null for what the tree does not list, such as a mixin on a script type.
      */
@@ -139,7 +162,8 @@ object ApiTreeStructure {
             is ApiNode.Type -> pathTo(node.type)
             is ApiNode.Namespace -> listOf(isGroup(GroupKind.NAMESPACES), { it is ApiNode.Namespace && it.namespace.name == node.namespace.name })
             is ApiNode.ScriptNamespace -> scriptNamespacePath(node.namespace.name, database)
-            is ApiNode.Member -> ownerPath(node.member, database)?.plus { it: ApiNode -> it is ApiNode.Member && it.member === node.member }
+            is ApiNode.Member -> (node.inheritedBy?.let { inheritedPath(it, node.member) } ?: ownerPath(node.member, database))
+                ?.plus { it: ApiNode -> it is ApiNode.Member && it.member === node.member }
             is ApiNode.Group, is ApiNode.Statics, is ApiNode.Inherited, is ApiNode.Message -> null
         }
 
@@ -152,6 +176,10 @@ object ApiTreeStructure {
         }
         return listOf(isGroup(group), { it is ApiNode.Type && it.type === type })
     }
+
+    /** The rows of what [type] inherits from the supertype that declares [member]. */
+    private fun inheritedPath(type: UnrealType, member: UnrealMember): List<(ApiNode) -> Boolean> =
+        pathTo(type) + { it: ApiNode -> it is ApiNode.Inherited && it.ancestor.name == member.owner }
 
     /** The rows a member is listed under, as [children] lists it. */
     private fun ownerPath(member: UnrealMember, database: UnrealTypeDatabase): List<(ApiNode) -> Boolean>? {

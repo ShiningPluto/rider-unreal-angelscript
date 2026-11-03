@@ -6,39 +6,15 @@ import java.util.concurrent.CompletableFuture
 
 /**
  * Custom language server interface for AngelScript LSP.
- * Extends the standard LSP protocol with custom requests for API browsing and inline debug values.
+ * Extends the standard LSP protocol with the custom requests the plugin sends.
+ *
+ * Upstream's API requests (angelscript/getAPI, getAPISearch, getAPIDetails) are not here: the API
+ * tool window and the MCP tools read the type database the server saves instead (decisions 0011 and
+ * 0012). A request added here with an array as its one parameter must take it as a [List]:
+ * vscode-jsonrpc spreads an array of params over the handler's arguments, and lsp4j wraps a lone
+ * parameter in an array of its own only if it is a collection, which a Gson `JsonArray` is not.
  */
 interface AngelScriptLanguageServer : LanguageServer {
-
-    /**
-     * Get API tree data from the language server.
-     * Custom LSP request: angelscript/getAPI
-     *
-     * @param root Root identifier for the API tree ("" for root, or a namespace/class ID)
-     * @return CompletableFuture that resolves to a list of API items
-     */
-    @JsonRequest("angelscript/getAPI")
-    fun getAPI(root: String): CompletableFuture<List<*>>
-
-    /**
-     * Get detailed documentation for an API item.
-     * Custom LSP request: angelscript/getAPIDetails
-     *
-     * @param id Identifier for the API item
-     * @return CompletableFuture that resolves to markdown documentation
-     */
-    @JsonRequest("angelscript/getAPIDetails")
-    fun getAPIDetails(id: Any): CompletableFuture<String>
-
-    /**
-     * Search the API for items matching a filter string.
-     * Custom LSP request: angelscript/getAPISearch
-     *
-     * @param filter Search filter string
-     * @return CompletableFuture that resolves to a list of matching API items
-     */
-    @JsonRequest("angelscript/getAPISearch")
-    fun getAPISearch(filter: String): CompletableFuture<List<*>>
 
     /**
      * Get C++ symbol information for a symbol at a given position.

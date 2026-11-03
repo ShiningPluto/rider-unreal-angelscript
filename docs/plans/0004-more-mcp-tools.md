@@ -42,7 +42,7 @@ cannot tell a same-named member of another class from the one it means.
   `angelscript_search_api` and `angelscript_get_api_details`. Landed with this plan.
 - `AngelScriptDiagnosticsStore` keeps every diagnostic the server publishes, for all files.
 - `AngelScriptUnrealStatusService.query()` answers "can the server analyse anything" without
-  starting it, and the toolset's `serverWithTypes()` starts it and waits for a type database.
+  starting it, and the toolset's `awaitTypes()` starts it and waits for a type database.
 - `AngelScriptMcpToolsetTest` runs the MCP server's own reflection over the toolset, so a tool
   signature it cannot handle fails the build instead of silently removing the whole toolset.
 
@@ -87,8 +87,13 @@ Checked and not needed:
 - **lsp4j exists twice.** The plugin compiles against the SDK's lsp4j 0.21 and runs against lsp4ij's
   1.0 - see CONTRIBUTING.md. Compare the signature of every lsp4j member a new tool touches in both
   jars; `Diagnostic.getMessage()` is the one known to differ.
+- **An array parameter must be a `List`.** vscode-jsonrpc calls a handler with an array of params
+  spread over its arguments, and lsp4j wraps a request's one parameter in an array of its own only
+  if it is a collection. A Gson `JsonArray` is not one: sent as `getAPIDetails`'s parameter, the
+  handler got only the first element of the item, and `angelscript_get_api_details` found nothing
+  for any item until it stopped asking the server.
 - **Nothing answers without a type database.** The server's own API requests wait for one
-  indefinitely, so check the state before sending, as `serverWithTypes()` does.
+  indefinitely, so check the state before sending, as `awaitTypes()` does.
 - **The asset database is live-only.** It arrives from a connected editor and, unlike the type
   database, is not cached, so `angelscript_find_assets` must say when it has no editor rather than
   return an empty list.

@@ -28,10 +28,7 @@ import com.scriptacus.riderunrealangelscript.services.AngelScriptApiService
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 import com.scriptacus.riderunrealangelscript.status.AngelScriptUnrealStatus
 import com.scriptacus.riderunrealangelscript.typedb.ScriptDeclarations
-import com.scriptacus.riderunrealangelscript.typedb.UnrealMember
-import com.scriptacus.riderunrealangelscript.typedb.UnrealNamespace
 import com.scriptacus.riderunrealangelscript.typedb.UnrealSearchResult
-import com.scriptacus.riderunrealangelscript.typedb.UnrealType
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabaseService
 import java.awt.BorderLayout
@@ -331,13 +328,7 @@ class AngelScriptApiPanel(
     }
 
     private fun searchHits(result: UnrealSearchResult, script: Boolean): List<ApiNode> {
-        val hits = result.hits.map { hit ->
-            when (hit) {
-                is UnrealType -> ApiNode.Type(hit)
-                is UnrealNamespace -> if (script) ApiNode.ScriptNamespace(hit) else ApiNode.Namespace(hit)
-                is UnrealMember -> ApiNode.Member(hit, qualified = true)
-            }
-        }
+        val hits = result.hits.map { ApiTreeStructure.searchResult(it, script) }
         val more = result.total - result.hits.size
         return hits + if (more > 0) listOf(ApiNode.Message("$more more - narrow the search to see them")) else emptyList()
     }

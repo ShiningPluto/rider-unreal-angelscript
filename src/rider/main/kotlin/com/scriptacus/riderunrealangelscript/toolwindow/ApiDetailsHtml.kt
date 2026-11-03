@@ -6,7 +6,7 @@ import com.intellij.ui.JBColor
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.scriptacus.riderunrealangelscript.typedb.ScriptDeclarations
-import com.scriptacus.riderunrealangelscript.typedb.UnrealArg
+import com.scriptacus.riderunrealangelscript.typedb.UnrealDeclaration
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMember
 import com.scriptacus.riderunrealangelscript.typedb.UnrealMethod
 import com.scriptacus.riderunrealangelscript.typedb.UnrealNamespace
@@ -56,8 +56,7 @@ object ApiDetailsHtml {
         is UnrealProperty -> property(member)
     }
 
-    /** As upstream's getAPIDetails lays it out, one argument per line, unless there is only one. */
-    fun signature(method: UnrealMethod): String = signatureParts(method).joinToString("")
+    fun signature(method: UnrealMethod): String = UnrealDeclaration.of(method).toString()
 
     /**
      * The style sheet the classes used here need, in the colours of the current theme. Margins are
@@ -100,14 +99,7 @@ object ApiDetailsHtml {
     }
 
     private fun type(type: UnrealType, database: UnrealTypeDatabase, script: ScriptDeclarations): String = buildString {
-        val signature = type.signature
-        definition(
-            if (signature != null) {
-                escape("${type.kind.keyword} ${signature.returnType} ") + bold(type.name) + escape(argumentList(signature.args))
-            } else {
-                escape("${type.kind.keyword} ") + bold(type.displayName) + escape(type.supertypeName?.let { " : $it" }.orEmpty())
-            }
-        )
+        definition(UnrealDeclaration.of(type))
         val doc = DocComment.parse(type.documentation)
         append(doc.content)
 
@@ -172,8 +164,7 @@ object ApiDetailsHtml {
     }
 
     private fun method(method: UnrealMethod): String = buildString {
-        val (before, name, after) = signatureParts(method)
-        definition(escape(before) + bold(name) + escape(after))
+        definition(UnrealDeclaration.of(method))
         val doc = DocComment.parse(method.documentation)
         append(doc.content)
 
@@ -193,14 +184,7 @@ object ApiDetailsHtml {
     }
 
     private fun property(property: UnrealProperty): String = buildString {
-        // An enum value's type is its enum, which its qualified name already says.
-        val isEnumValue = property.ownerSeparator == "::" && property.type == property.owner
-        val before = buildString {
-            if (property.isProtected) append("protected ")
-            if (!isEnumValue) append(property.type).append(' ')
-            property.owner?.let { append(it).append(property.ownerSeparator) }
-        }
-        definition(escape(before) + bold(property.name))
+        definition(UnrealDeclaration.of(property))
         val doc = DocComment.parse(property.documentation)
         append(doc.content)
 
@@ -210,20 +194,8 @@ object ApiDetailsHtml {
         sections(rows)
     }
 
-    /** What comes before the name, the name, and what comes after it. */
-    private fun signatureParts(method: UnrealMethod): List<String> {
-        val before = buildString {
-            if (method.isProtected) append("protected ")
-            if (!method.isConstructor) append(method.returnType).append(' ')
-            method.owner?.let { append(it).append(method.ownerSeparator) }
-        }
-        return listOf(before, method.name, argumentList(method.args) + if (method.isConst) " const" else "")
-    }
-
-    private fun argumentList(args: List<UnrealArg>): String = when (args.size) {
-        0 -> "()"
-        1 -> "(${args.single().format()})"
-        else -> args.joinToString(",\n", "(\n", "\n)") { "    " + it.format() }
+    private fun StringBuilder.definition(declaration: UnrealDeclaration) {
+        definition(escape(declaration.before) + bold(declaration.name) + escape(declaration.after))
     }
 
     private fun StringBuilder.definition(html: String) {

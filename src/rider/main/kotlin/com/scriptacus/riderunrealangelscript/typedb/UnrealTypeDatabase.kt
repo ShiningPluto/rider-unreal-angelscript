@@ -89,7 +89,11 @@ class UnrealProperty(
     override val documentation: String?,
     override val isProtected: Boolean,
     override val scriptOrigin: ScriptOrigin? = null,
-) : UnrealMember()
+) : UnrealMember() {
+    /** A value of an enum: named through the enum, and of its type. */
+    val isEnumValue: Boolean
+        get() = ownerSeparator == "::" && type == owner
+}
 
 enum class UnrealTypeKind(val keyword: String) {
     CLASS("class"),
@@ -137,12 +141,25 @@ class UnrealMembers(val properties: List<UnrealProperty>, val methods: List<Unre
         get() = properties.size + methods.size
 }
 
+/** One search result. */
+class UnrealSearchHit(
+    val symbol: UnrealSymbol,
+    /**
+     * The type the query named, when [symbol] is a member that type inherits rather than declares:
+     * `ACharacter.GetActor` finds AActor's GetActorLocation through ACharacter.
+     */
+    val inheritedBy: UnrealType? = null,
+)
+
 class UnrealSearchResult(
     /** The best matches, best first, at most as many as were asked for. */
-    val hits: List<UnrealSymbol>,
+    val hits: List<UnrealSearchHit>,
     /** How many matched in all. */
     val total: Int,
-)
+) {
+    val symbols: List<UnrealSymbol>
+        get() = hits.map { it.symbol }
+}
 
 /**
  * The C++ API Unreal binds to script, as described by the type database the editor sends the
@@ -240,15 +257,24 @@ class UnrealTypeDatabase private constructor(
     }
 
     /**
-     * Types, namespaces and members whose name matches [query], best first.
+     * Types, namespaces and members whose name matches [query], best first, with what [script]
+     * declares ranked among them when it is given.
      *
      * Words separated by spaces must all match, as in upstream's own API search: a word shorter than
      * three letters has to start the name, unless a longer word came before it, and any other word
      * may appear anywhere in it. `Owner.member` or `Owner::member` looks only at the members of types
-     * and namespaces whose name contains `Owner`.
+     * and namespaces whose name contains `Owner`. When the `Owner` of `Owner.member` is a type's whole
+     * name, what that type inherits is looked at too, after what it declares, as script calls both
+     * the same way.
      */
-    fun search(query: String, limit: Int): UnrealSearchResult {
+    fun search(query: String, limit: Int, script: ScriptDeclarations? = null): UnrealSearchResult {
         val matches = UnrealSearchMatches.of(query) ?: return UnrealSearchResult(emptyList(), 0)
+        addTo(matches)
+        script?.addTo(matches)
+        return matches.best(limit)
+    }
+
+    private fun addTo(matches: UnrealSearchMatches) {
         for (type in typesByName.values) {
             matches.addName(type)
             matches.addMembers(type.name, type.properties)
@@ -263,8 +289,18 @@ class UnrealTypeDatabase private constructor(
         }
         matches.addMembers("", globals.properties)
         matches.addMembers("", globals.functions)
-        return matches.best(limit)
+
+        val type = matches.inheritingType(this) ?: return
+        for ((index, ancestor) in supertypes(type).withIndex()) {
+            val inherited = membersInheritedFrom(type, ancestor)
+            matches.addInherited(type, index + 1, inherited.properties)
+            matches.addInherited(type, index + 1, inherited.methods)
+        }
     }
+
+    /** The type of this name, ignoring case, as a search query may spell it. */
+    internal fun typeIgnoringCase(name: String): UnrealType? =
+        typesByName[name] ?: typesByName.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
     companion object {
         private const val SUPPORTED_VERSION = 1
@@ -463,28 +499,58 @@ internal class UnrealSearchMatches private constructor(private val query: Unreal
     /** [owner] is what the `Owner` of an `Owner.member` query is matched against. */
     fun addMembers(owner: String, members: List<UnrealMember>) {
         for (member in members) {
-            if (member is UnrealMethod && member.isConstructor) {
-                continue
-            }
-            val rank = query.rankMember(owner, member.name)
-                ?: (member as? UnrealMethod)?.unrealName?.let { query.rankMember(owner, it) }
-                ?: continue
+            val rank = rank(owner, member) ?: continue
             matches += Match(member, rank, isMember = true)
         }
+    }
+
+    /**
+     * The type whose inherited members the query looks at as well: the one the `Owner` of an
+     * `Owner.member` query names whole. Only that one - `Actor.Get` would otherwise list AActor's
+     * members again for every type with Actor in its name.
+     */
+    fun inheritingType(database: UnrealTypeDatabase): UnrealType? = query.inheritingOwner?.let(database::typeIgnoringCase)
+
+    /** Members [type] inherits from the ancestor [distance] steps up, found as members of [type]. */
+    fun addInherited(type: UnrealType, distance: Int, members: List<UnrealMember>) {
+        for (member in members) {
+            val rank = rank(type.name, member) ?: continue
+            matches += Match(member, rank, isMember = true, distance = distance, inheritedBy = type)
+        }
+    }
+
+    private fun rank(owner: String, member: UnrealMember): Int? {
+        if (member is UnrealMethod && member.isConstructor) {
+            return null
+        }
+        return query.rankMember(owner, member.name)
+            ?: (member as? UnrealMethod)?.unrealName?.let { query.rankMember(owner, it) }
     }
 
     fun best(limit: Int): UnrealSearchResult {
         val best = matches.sortedWith(
             compareBy<Match> { it.rank }
                 .thenBy { it.isMember }
+                // What a type declares before what it inherits, and that nearest first.
+                .thenBy { it.distance }
                 .thenBy { it.symbol.name.length }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.symbol.name }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { (it.symbol as? UnrealMember)?.owner.orEmpty() }
         )
-        return UnrealSearchResult(best.take(limit).map { it.symbol }, matches.size)
+            // An ancestor whose name contains the type's offers its members as its own as well. They
+            // are listed once, where they rank best, which is as inherited.
+            .distinctBy { it.symbol }
+        return UnrealSearchResult(best.take(limit).map { UnrealSearchHit(it.symbol, it.inheritedBy) }, best.size)
     }
 
-    private class Match(val symbol: UnrealSymbol, val rank: Int, val isMember: Boolean)
+    private class Match(
+        val symbol: UnrealSymbol,
+        val rank: Int,
+        val isMember: Boolean,
+        /** How many supertypes up from the type the query named a member was declared; 0 for its own. */
+        val distance: Int = 0,
+        val inheritedBy: UnrealType? = null,
+    )
 
     companion object {
         /** Null for a query with nothing to match. */
@@ -496,9 +562,15 @@ internal class UnrealSearchMatches private constructor(private val query: Unreal
 internal class UnrealSearchQuery private constructor(
     /** Only members of types and namespaces whose name contains this, when the query named one. */
     private val ownerFilter: String?,
+    /** Whether the owner was named with `.`, as members are called, rather than `::`. */
+    private val memberAccess: Boolean,
     private val phrases: List<String>,
     private val text: String,
 ) {
+    /** The owner of an `Owner.member` query, whose inherited members are members too. */
+    val inheritingOwner: String?
+        get() = ownerFilter?.takeIf { memberAccess }
+
     /** Lower is better: an exact name, then one the query starts, then any other match. */
     fun rankName(name: String): Int? = if (ownerFilter != null) null else rank(name)
 
@@ -548,10 +620,10 @@ internal class UnrealSearchQuery private constructor(
                 if (separator > 0) {
                     val length = if (trimmed.startsWith("::", separator)) 2 else 1
                     val member = trimmed.substring(separator + length)
-                    return UnrealSearchQuery(trimmed.substring(0, separator).removeSuffix(":"), phrasesOf(member), member)
+                    return UnrealSearchQuery(trimmed.substring(0, separator).removeSuffix(":"), length == 1, phrasesOf(member), member)
                 }
             }
-            return UnrealSearchQuery(null, phrasesOf(trimmed), trimmed)
+            return UnrealSearchQuery(null, false, phrasesOf(trimmed), trimmed)
         }
 
         private fun phrasesOf(text: String): List<String> = text.split(WHITESPACE).filter { it.isNotEmpty() }

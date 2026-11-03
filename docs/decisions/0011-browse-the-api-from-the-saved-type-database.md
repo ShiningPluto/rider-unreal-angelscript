@@ -190,3 +190,6 @@ types at all, so the browser shows nothing, which is consistent.
 - 2026-10-23: Mixins are listed with the type they extend, and in a subclass under "Inherited from"
   that type. A "Script mixins" group used to gather a class's own mixins with every supertype's, so
   a deep class listed all of its ancestors' mixins among its own rows.
+- 2026-11-03: The MCP API tools read the database and script declarations too, and `Type.word`
+  with a type's whole name searches what it inherits; see
+  [0012](0012-serve-the-mcp-api-tools-from-the-type-database.md).

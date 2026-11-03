@@ -36,6 +36,13 @@ class AngelScriptApiService(private val project: Project) {
         }
     }
 
+    /** As [getScriptDeclarations], for a caller that waits for the answer. Null on error. */
+    fun scriptDeclarations(): CompletableFuture<Map<String, Any>?> {
+        val answer = CompletableFuture<Map<String, Any>?>()
+        getScriptDeclarations { answer.complete(it) }
+        return answer
+    }
+
     /**
      * Convert Gson's internal types (JsonObject, JsonArray, etc.) to standard Java types.
      */

@@ -216,7 +216,7 @@ class ApiBrowserTest : UsefulTestCase() {
     }
 
     fun testSearchFindsWhatScriptDeclares() {
-        fun found(query: String) = script.search(query, limit = 10).hits.map { hit ->
+        fun found(query: String) = script.search(query, limit = 10).symbols.map { hit ->
             when (hit) {
                 is UnrealMember -> ApiTreeCellRenderer.text(ApiNode.Member(hit, qualified = true))
                 else -> hit.name
@@ -291,7 +291,7 @@ class ApiBrowserTest : UsefulTestCase() {
     }
 
     fun testSearchResultsAreNamedThroughTheirOwner() {
-        val member = database.search("GetController", limit = 5).hits.single() as UnrealMember
+        val member = database.search("GetController", limit = 5).symbols.single() as UnrealMember
         assertEquals("APawn.GetController()", ApiTreeCellRenderer.text(ApiNode.Member(member, qualified = true)))
     }
 
@@ -393,17 +393,37 @@ class ApiBrowserTest : UsefulTestCase() {
         assertEquals(listOf("Returns" to listOf("whether it launched")), doc.rows(DocTag.RETURN))
     }
 
-    fun testASearchResultIsFoundAgainInTheWholeTree() {
-        /** The rows down to where [node] is listed, expanded as the panel expands them. */
-        fun reveal(node: ApiNode): List<String> {
-            var rows = ApiTreeStructure.roots(database, script)
-            return ApiTreeStructure.pathTo(node, database)!!.map { matches ->
-                val row = rows.first(matches)
-                rows = ApiTreeStructure.children(row, database, script)
-                ApiTreeCellRenderer.text(row)
-            }
+    /** The rows down to where [node] is listed, expanded as the panel expands them. */
+    private fun reveal(node: ApiNode): List<String> {
+        var rows = ApiTreeStructure.roots(database, script)
+        return ApiTreeStructure.pathTo(node, database)!!.map { matches ->
+            val row = rows.first(matches)
+            rows = ApiTreeStructure.children(row, database, script)
+            ApiTreeCellRenderer.text(row)
         }
-        fun found(result: UnrealSearchResult) = ApiNode.Member(result.hits.first() as UnrealMember, qualified = true)
+    }
+
+    fun testAnInheritedSearchResultIsNamedThroughTheTypeSearched() {
+        val tags = ApiTreeStructure.searchResult(database.search("APawn.Tags", 5).hits.single(), script = false) as ApiNode.Member
+        assertEquals("APawn.Tags", ApiTreeCellRenderer.text(tags))
+        assertEquals("from AActor", tags.note)
+        // Where APawn lists it, not where AActor declares it.
+        assertEquals(listOf("Classes", "APawn", "Inherited from AActor", "Tags"), reveal(tags))
+
+        // A supertype's mixin is called on the subclass the same way.
+        val highlight = ApiTreeStructure.searchResult(script.search("APawn.High", 5).hits.single(), script = true) as ApiNode.Member
+        assertEquals("APawn.Highlight(FLinearColor)", ApiTreeCellRenderer.text(highlight))
+        assertEquals("from AActor", highlight.note)
+        assertEquals(listOf("Classes", "APawn", "Inherited from AActor", "Highlight(FLinearColor)"), reveal(highlight))
+
+        // What the type declares itself has no note.
+        val own = ApiTreeStructure.searchResult(database.search("APawn.BaseEye", 5).hits.single(), script = false) as ApiNode.Member
+        assertEquals("APawn.BaseEyeHeight", ApiTreeCellRenderer.text(own))
+        assertNull(own.note)
+    }
+
+    fun testASearchResultIsFoundAgainInTheWholeTree() {
+        fun found(result: UnrealSearchResult) = ApiNode.Member(result.symbols.first() as UnrealMember, qualified = true)
 
         assertEquals(listOf("Structs", "FVector"), reveal(ApiNode.Type(database.type("FVector")!!)))
         assertEquals(listOf("Classes", "APawn", "GetController()"), reveal(found(database.search("GetController", 5))))
@@ -421,7 +441,7 @@ class ApiBrowserTest : UsefulTestCase() {
             reveal(found(script.search("Start", 5)))
         )
         assertEquals(listOf("Script namespaces", "Math::Curves::", "Blend()"), reveal(found(script.search("Blend", 5))))
-        val arena = script.search("Arena", 5).hits.single() as UnrealNamespace
+        val arena = script.search("Arena", 5).symbols.single() as UnrealNamespace
         assertEquals(listOf("Script namespaces", "Backend_battle::", "Backend_battle::Arena::"), reveal(ApiNode.ScriptNamespace(arena)))
     }
 

@@ -16,6 +16,8 @@ class ScriptDeclarations private constructor(
     /** The namespaces only script declares, nested ones included, sorted by name. */
     private val scriptNamespaces: List<String>,
     private val mixinsByType: Map<String, List<UnrealMethod>>,
+    /** Unreal's API these were read against, which says what a mixin's type inherits from. */
+    private val database: UnrealTypeDatabase?,
 ) {
     /** The namespaces only script declares that are not nested in another of them. */
     val topLevelNamespaces: List<UnrealNamespace> by lazy {
@@ -37,9 +39,20 @@ class ScriptDeclarations private constructor(
     fun namespace(name: String): UnrealNamespace =
         membersByNamespace[name] ?: UnrealNamespace(name, emptyList(), emptyList())
 
-    /** As [UnrealTypeDatabase.search] searches Unreal's API; a mixin is a member of the type it extends. */
+    /** Whether [name] is a namespace only script declares, rather than one of Unreal's. */
+    fun declaresNamespace(name: String): Boolean = name in scriptNamespaces
+
+    /**
+     * As [UnrealTypeDatabase.search] searches Unreal's API; a mixin is a member of the type it
+     * extends, and of the types that inherit from that one.
+     */
     fun search(query: String, limit: Int): UnrealSearchResult {
         val matches = UnrealSearchMatches.of(query) ?: return UnrealSearchResult(emptyList(), 0)
+        addTo(matches)
+        return matches.best(limit)
+    }
+
+    internal fun addTo(matches: UnrealSearchMatches) {
         for (name in scriptNamespaces) {
             matches.addName(namespace(name))
         }
@@ -52,11 +65,16 @@ class ScriptDeclarations private constructor(
         for ((type, mixins) in mixinsByType) {
             matches.addMembers(type, mixins)
         }
-        return matches.best(limit)
+
+        val db = database ?: return
+        val type = matches.inheritingType(db) ?: return
+        for ((index, ancestor) in db.supertypes(type).withIndex()) {
+            matches.addInherited(type, index + 1, mixinsOn(ancestor.name))
+        }
     }
 
     companion object {
-        val NONE = ScriptDeclarations(UnrealNamespace("", emptyList(), emptyList()), emptyMap(), emptyList(), emptyMap())
+        val NONE = ScriptDeclarations(UnrealNamespace("", emptyList(), emptyList()), emptyMap(), emptyList(), emptyMap(), null)
 
         /**
          * Reads the server's answer: `{functions: [...], properties: [...]}`, each with its name,
@@ -133,6 +151,7 @@ class ScriptDeclarations private constructor(
                 membersByNamespace = members - "",
                 scriptNamespaces = scriptNamespaces,
                 mixinsByType = mixins.sortedWith(byName).groupBy { it.owner.orEmpty() },
+                database = database,
             )
         }
 

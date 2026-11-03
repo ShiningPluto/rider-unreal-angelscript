@@ -6,7 +6,32 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+### Highlights
+- The MCP tools `angelscript_search_api` and `angelscript_get_api_details` answer from the API tool window's type database, and `angelscript_get_api_details` no longer fails for every item.
+- Searching `ACharacter.Get` covers what ACharacter inherits as well, in the API tool window and through MCP, and each such result names the class that declares it.
+
+### Changed
+- `angelscript_search_api` searches what the API tool window does, instead of asking the language server.
+  - `Type.word` and `Namespace::word` search one type or namespace. The server took them as part of a name and found nothing.
+  - A class matches by its own name, not by its members': `Actor` used to list every member of every class with Actor in its name, 4,107 items in one project.
+  - Results include classes, structs, enums and namespaces, with a function's return type or a property's type, and the file of what script declares.
+  - Script's results are ranked with Unreal's rather than mixed in by the server's order.
+- `angelscript_get_api_details` returns the declaration in a code block, the C++ comment as written, and what the declaration leaves out.
+  - For a function: whether it is a blueprint event or a script mixin, its C++ name, and the file script declares it in.
+  - For a class or struct: what it inherits from, how many members it declares and inherits, and its constructors. For an enum: its values.
+  - Each overload has a ref of its own. The server's refs named every overload of a namespace function alike, and described the last one.
+  - Refs from earlier searches no longer resolve; search again.
+- The MCP API tools read the type database into memory the first time they are used, as opening the API tool window does: about 60 MB for 29,000 Unreal types.
+- `Type.word` with a type's whole name searches what the type inherits as well, after what it declares, nearest supertype first. A supertype's script mixins are included.
+  - Such a result is named through the type searched, and notes the class that declares it, such as `ACharacter.GetActorLocation()  from AActor`. Clearing the search shows it in that class's "Inherited from" group.
+  - Only a whole name does this: `Actor.Get` would otherwise list AActor's members again for every class with Actor in its name.
+
+### Fixed
+- `angelscript_get_api_details` failed for every item, saying nothing was documented under its ref.
+  - It sent the ref as a Gson `JsonArray`. lsp4j wraps a request's one parameter in an array only if it is a collection, which `JsonArray` is not, and vscode-jsonrpc spreads an array of params over the handler's arguments, so the handler got only the ref's first word. The tool no longer asks the server.
+
 ### Internal
+- The language server interface drops upstream's `angelscript/getAPI`, `getAPISearch` and `getAPIDetails`, which nothing sends any more.
 - A build without `pluginVersion` is marked `-SNAPSHOT` instead of `-dev`, such as `1.0.3-SNAPSHOT`, so the IDE offers the release it precedes as an update.
   - The IDE ranks a word it does not know above the version it follows, so it took `1.0.2-dev` to be newer than `1.0.2` and never offered 1.0.2. `SNAPSHOT` is one it ranks below.
 

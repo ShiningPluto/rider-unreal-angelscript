@@ -1,13 +1,12 @@
 package com.scriptacus.riderunrealangelscript.mcp
 
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
 import com.redhat.devtools.lsp4ij.LanguageServerManager
@@ -15,8 +14,13 @@ import com.redhat.devtools.lsp4ij.ServerStatus
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptDiagnosticsStore
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
+import com.scriptacus.riderunrealangelscript.services.AngelScriptApiService
 import com.scriptacus.riderunrealangelscript.status.AngelScriptUnrealStatus
 import com.scriptacus.riderunrealangelscript.status.AngelScriptUnrealStatusService
+import com.scriptacus.riderunrealangelscript.typedb.ScriptDeclarations
+import com.scriptacus.riderunrealangelscript.typedb.ScriptOrigin
+import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
+import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabaseService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -28,7 +32,6 @@ import org.eclipse.lsp4j.DiagnosticSeverity
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Instant
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 
@@ -55,6 +58,12 @@ class AngelScriptMcpToolset : McpToolset {
 
         /** Answered from memory once types are loaded; a slow answer means the server is wedged. */
         const val REQUEST_TIMEOUT_MS = 15_000L
+
+        /**
+         * Reading the saved database takes about a second for a large project, after a status poll
+         * of up to two seconds notices the types; this only guards against waiting forever.
+         */
+        const val DATABASE_WAIT_MS = 30_000L
 
         val gson = GsonBuilder().disableHtmlEscaping().create()
     }
@@ -150,17 +159,28 @@ class AngelScriptMcpToolset : McpToolset {
 
     @McpTool(name = "angelscript_search_api")
     @McpDescription("""
-        |Searches the API available to Unreal AngelScript: the C++ classes, structs, functions and
-        |properties the Unreal editor binds to script, under the names and call syntax script uses.
-        |These differ from the C++ declarations - static functions live in namespaces like
-        |`System::`, and mixin functions are called as members of their first argument's type - so
-        |use this instead of guessing from C++ headers whether and how something can be called.
-        |The query is one or more words that must all occur in the name, case-insensitively. A word
-        |that matches a class or namespace name returns all of its members, so prefer specific words.
-        |Pass an item's `ref` to angelscript_get_api_details for its signature and documentation.
+        |Searches the API available to Unreal AngelScript: the classes, structs, enums, functions and
+        |properties Unreal binds to script, and the functions, variables and mixins script declares,
+        |under the names and call syntax script uses. These differ from the C++ declarations - static
+        |functions live in namespaces like `System::`, and mixin functions are called as members of
+        |their first argument's type - so use this instead of guessing from C++ headers whether and
+        |how something can be called.
+        |The query is one of:
+        |- Words separated by spaces that must all occur in one name, case-insensitively: "Actor
+        |  Location" finds AActor.GetActorLocation(). A word shorter than three letters must start the
+        |  name unless a longer word came before it. A type or namespace matches by its own name,
+        |  not by its members'.
+        |- `Type.word`: only the members of types whose name contains Type. When Type is a type's
+        |  whole name, such as "ACharacter.GetActor", what it inherits is searched too, and each such
+        |  item names the supertype that declares it in `inheritedFrom`.
+        |- `Namespace::word`: only that namespace's members, or a type's static members.
+        |Nothing after the separator lists every member. A blueprint event is also found by its C++
+        |name, such as ReceiveBeginPlay. Best matches come first: exact names, then names starting
+        |with the query. Pass an item's `ref` to angelscript_get_api_details for its declaration and
+        |documentation.
     """)
     suspend fun searchApi(
-        @McpDescription("Words to search for, separated by spaces, e.g. \"GetActorLocation\" or \"Actor Location\".")
+        @McpDescription("Words separated by spaces, \"Type.word\" or \"Namespace::word\", e.g. \"GetActorLocation\", \"Actor Location\" or \"ACharacter.Jump\".")
         query: String,
         @McpDescription("Maximum number of items to return.")
         limit: Int = 50,
@@ -169,25 +189,30 @@ class AngelScriptMcpToolset : McpToolset {
             mcpFail("Give at least one word to search for.")
         }
         val project = currentCoroutineContext().project
-        val server = serverWithTypes(project)
-        val results = request("angelscript/getAPISearch") { server.getAPISearch(query) }.orEmpty()
-
-        val items = results.mapNotNull { result ->
-            val item = gson.toJsonTree(result) as? JsonObject ?: return@mapNotNull null
-            val label = item.get("label")?.takeIf { it.isJsonPrimitive }?.asString ?: return@mapNotNull null
-            val ref = (item.get("data") as? JsonArray)
-                ?.map { if (it.isJsonPrimitive) it.asString else it.toString() }
-                ?: return@mapNotNull null
-            SearchItem(label = label, kind = item.get("type")?.takeIf { it.isJsonPrimitive }?.asString, ref = ref)
+        val api = api(project)
+        val result = withContext(Dispatchers.Default) {
+            api.database.search(query, limit.coerceIn(1, 1_000), api.script)
         }
-        val returned = items.take(limit.coerceIn(1, 1_000))
-        return gson.toJson(SearchReport(query = query, total = items.size, returned = returned.size, items = returned))
+        val path = scriptPath(project)
+        val items = result.hits.map { ApiItems.item(it, path) }
+        return gson.toJson(
+            SearchReport(
+                query = query,
+                total = result.total,
+                returned = items.size,
+                items = items,
+                note = if (api.scriptListed) null else SCRIPT_MISSING,
+            )
+        )
     }
 
     @McpTool(name = "angelscript_get_api_details")
     @McpDescription("""
-        |Returns the AngelScript signature and documentation of one API item found by
-        |angelscript_search_api, as markdown.
+        |Returns the declaration and documentation of one item angelscript_search_api found, as
+        |markdown. For a function, also whether it is a blueprint event, a script mixin, or known to
+        |C++ by another name; for a class or struct, what it inherits from, how many members it
+        |declares and inherits, and its constructors; for an enum, its values. Says which file
+        |declares what script declares.
     """)
     suspend fun getApiDetails(
         @McpDescription("The item's `ref`, exactly as angelscript_search_api returned it.")
@@ -197,14 +222,14 @@ class AngelScriptMcpToolset : McpToolset {
             mcpFail("Pass the `ref` of an item returned by angelscript_search_api.")
         }
         val project = currentCoroutineContext().project
-        val server = serverWithTypes(project)
-        // Search hands out a method's overload id as a number; ref carries it as text.
-        val id = JsonArray().apply { ref.forEach { part -> part.toLongOrNull()?.let { add(it) } ?: add(part) } }
-        val details = request("angelscript/getAPIDetails") { server.getAPIDetails(id) }
-        if (details.isNullOrBlank()) {
-            mcpFail("Nothing is documented under $ref. Refs come from angelscript_search_api; one kept from an earlier search may name something that no longer exists.")
-        }
-        return details
+        val api = api(project)
+        val symbol = ApiItems.resolve(ref, api.database, api.script)
+            ?: mcpFail(
+                "Nothing in the API is named by $ref. Refs come from angelscript_search_api; one kept from " +
+                    "an earlier search may name something that has since been renamed or removed, so search again." +
+                    if (api.scriptListed) "" else " $SCRIPT_MISSING"
+            )
+        return ApiDetailsMarkdown.of(symbol, api.database, api.script, scriptPath(project))
     }
 
     /** The server's view of its analysis state, or null when it is too busy to say. */
@@ -220,13 +245,56 @@ class AngelScriptMcpToolset : McpToolset {
         }
 
     /**
-     * The running server, once it has a type database to answer API requests from.
+     * Unreal's API and what script declares, as the API tool window has them: the type database the
+     * server saved, read once and kept, and the server's list of script declarations, asked afresh
+     * every time since script changes without the database doing so.
+     */
+    private class Api(val database: UnrealTypeDatabase, val script: ScriptDeclarations, val scriptListed: Boolean)
+
+    private suspend fun api(project: Project): Api {
+        awaitTypes(project)
+        val database = typeDatabase(project)
+        val reply = try {
+            withTimeout(REQUEST_TIMEOUT_MS) { project.service<AngelScriptApiService>().scriptDeclarations().await() }
+        } catch (e: TimeoutCancellationException) {
+            null
+        }
+        val script = reply?.let { withContext(Dispatchers.Default) { ScriptDeclarations.parse(it, database) } }
+        return Api(database, script ?: ScriptDeclarations.NONE, scriptListed = script != null)
+    }
+
+    /** The type database the server saved, once [UnrealTypeDatabaseService] has read it. */
+    private suspend fun typeDatabase(project: Project): UnrealTypeDatabase {
+        val service = UnrealTypeDatabaseService.getInstance(project)
+        service.activate()
+        // The service follows the server's status, which it polls every couple of seconds while
+        // the server has no types: a server that has only just got them takes a poll to be noticed.
+        val deadline = System.currentTimeMillis() + DATABASE_WAIT_MS
+        while (true) {
+            when (val state = service.state) {
+                is UnrealTypeDatabaseService.State.Loaded -> return state.database
+                is UnrealTypeDatabaseService.State.Failed ->
+                    mcpFail("The type database the language server saved could not be read: ${state.reason}.")
+                else -> if (System.currentTimeMillis() >= deadline) {
+                    mcpFail("The type database the language server saved was not read within ${DATABASE_WAIT_MS / 1000}s. ${explain(querySnapshot(project))}")
+                }
+            }
+            delay(TYPES_POLL_MS)
+        }
+    }
+
+    /** Where script declares something, relative to the project when it is in it. */
+    private fun scriptPath(project: Project): (ScriptOrigin) -> String = { origin ->
+        origin.path?.let { FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, it)) } ?: origin.module
+    }
+
+    /**
+     * Returns once the server has Unreal's types, which is when it saves them for the API.
      *
      * Starts the server if it is not running, as opening the API tool window does: a search is an
-     * explicit request for something only the server knows. What it will not do is send a request
-     * the server cannot answer - the API requests wait for a type database indefinitely.
+     * explicit request for something only Unreal's types can answer.
      */
-    private suspend fun serverWithTypes(project: Project): AngelScriptLanguageServer {
+    private suspend fun awaitTypes(project: Project) {
         val manager = LanguageServerManager.getInstance(project)
         val wasRunning = manager.getServerStatus(AngelScriptLanguageServerFactory.SERVER_ID) == ServerStatus.started
 
@@ -238,15 +306,16 @@ class AngelScriptMcpToolset : McpToolset {
         } catch (e: TimeoutCancellationException) {
             null
         }
-        val server = item?.server as? AngelScriptLanguageServer
-            ?: mcpFail("The AngelScript language server could not be started. See the AngelScript LSP console in Rider.")
+        if (item?.server !is AngelScriptLanguageServer) {
+            mcpFail("The AngelScript language server could not be started. See the AngelScript LSP console in Rider.")
+        }
 
         val deadline = System.currentTimeMillis() + TYPES_WAIT_MS
         while (true) {
             val snapshot = querySnapshot(project)
             val status = snapshot?.status
             if (status != null && status.isAnalysisAvailable) {
-                return server
+                return
             }
             // A server that was already running and is not even connecting will not have types in
             // ten seconds either; one that has just started still needs to receive its configuration.
@@ -258,13 +327,6 @@ class AngelScriptMcpToolset : McpToolset {
             delay(TYPES_POLL_MS)
         }
     }
-
-    private suspend fun <T> request(method: String, send: () -> CompletableFuture<T>): T? =
-        try {
-            withTimeout(REQUEST_TIMEOUT_MS) { send().await() }
-        } catch (e: TimeoutCancellationException) {
-            mcpFail("The language server did not answer $method within ${REQUEST_TIMEOUT_MS / 1000}s.")
-        }
 
     /** The absolute path of the script file [filePath] names, or a failure the agent can act on. */
     private fun resolveScriptFile(project: Project, filePath: String): String {
@@ -370,6 +432,15 @@ private data class ProblemsReport(
     val files: List<FileReport>,
 )
 
-private data class SearchItem(val label: String, val kind: String?, val ref: List<String>)
+private data class SearchReport(
+    val query: String,
+    val total: Int,
+    val returned: Int,
+    val items: List<ApiSearchItem>,
+    /** Why the result may be incomplete; left out when it is not. */
+    val note: String?,
+)
 
-private data class SearchReport(val query: String, val total: Int, val returned: Int, val items: List<SearchItem>)
+/** Said when the server did not list what script declares, which the API is then without. */
+private const val SCRIPT_MISSING =
+    "The language server did not list what script declares, so only Unreal's API is searched; try again in a moment."

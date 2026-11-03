@@ -160,35 +160,79 @@ class UnrealTypeDatabaseTest : UsefulTestCase() {
         val result = database.search("SetActorLocation", limit = 2)
         assertEquals(3, result.total)
         assertEquals(2, result.hits.size)
-        assertTrue(result.hits.all { it.name == "SetActorLocation" })
+        assertTrue(result.symbols.all { it.name == "SetActorLocation" })
 
-        val types = database.search("APawn", limit = 10).hits
+        val types = database.search("APawn", limit = 10).symbols
         assertSame(type("APawn"), types.first())
     }
 
     fun testShortWordsMustStartTheName() {
-        assertEquals(listOf("Lerp"), database.search("le", limit = 10).hits.map { it.name })
+        assertEquals(listOf("Lerp"), database.search("le", limit = 10).symbols.map { it.name })
         // A long word may appear anywhere, and then a short one may too.
-        assertEquals(listOf("GetController"), database.search("controller ge", limit = 10).hits.map { it.name })
+        assertEquals(listOf("GetController"), database.search("controller ge", limit = 10).symbols.map { it.name })
     }
 
     fun testOwnerAndMemberNarrowTheSearchToOneType() {
-        // The type's static members are part of what it offers, so they match as well.
-        val hits = database.search("APawn.Get", limit = 10).hits.map { (it as UnrealMember).qualifiedName }
-        assertEquals(listOf("APawn.GetController", "APawn::GetMovementBaseActor"), hits)
+        // The type's static members are part of what it offers, so they match as well, and then what
+        // it inherits: AActor's GetName, which hides UObject's.
+        val hits = database.search("APawn.Get", limit = 10).symbols.map { (it as UnrealMember).qualifiedName }
+        assertEquals(listOf("APawn.GetController", "APawn::GetMovementBaseActor", "AActor.GetName"), hits)
 
-        assertEquals(listOf("Math::Lerp"), database.search("Math::Le", limit = 10).hits.map { (it as UnrealMember).qualifiedName })
+        assertEquals(listOf("Math::Lerp"), database.search("Math::Le", limit = 10).symbols.map { (it as UnrealMember).qualifiedName })
         // Nothing after the separator lists the owner's members.
-        assertEquals(setOf("Math::PI", "Math::Lerp"), database.search("Math::", limit = 10).hits.map { (it as UnrealMember).qualifiedName }.toSet())
+        assertEquals(setOf("Math::PI", "Math::Lerp"), database.search("Math::", limit = 10).symbols.map { (it as UnrealMember).qualifiedName }.toSet())
+    }
+
+    /** "Owner.Member(argument types)", and the type each hit was found through, if inherited. */
+    private fun found(query: String): List<Pair<String, String?>> = database.search(query, limit = 10).hits.map { hit ->
+        val member = hit.symbol as UnrealMember
+        val key = if (member is UnrealMethod) member.signatureKey else member.name
+        "${member.owner}.$key" to hit.inheritedBy?.name
+    }
+
+    fun testATypeNamedWholeOffersWhatItInheritsNearestFirst() {
+        // APawn declares SetActorLocation(float32) again, hiding AActor's; AActor's other overload shows.
+        assertEquals(
+            listOf(
+                "APawn.SetActorLocation(float32)" to "AMyCharacter",
+                "AActor.SetActorLocation(FVector,bool)" to "AMyCharacter",
+            ),
+            found("AMyCharacter.SetActorLocation")
+        )
+        // What a type declares itself comes first, whatever it inherits of the same rank.
+        assertEquals(
+            listOf("AMyCharacter.GetStance()" to null, "APawn.GetController()" to "AMyCharacter", "AActor.GetName()" to "AMyCharacter"),
+            found("AMyCharacter.Get")
+        )
+    }
+
+    fun testOnlyATypesWholeNameSearchesWhatItInherits() {
+        // Typed in any case.
+        assertEquals(listOf("AActor.GetName()" to "AMyCharacter"), found("amycharacter.getn"))
+        // Character is in AMyCharacter's name but is not all of it: every type with it in its name
+        // would list the same inherited members again.
+        assertEmpty(found("Character.GetName"))
+        // `::` names a namespace, and a type's static members are not inherited.
+        assertEquals(listOf("AMyCharacter.GetStance()" to null), found("AMyCharacter::Get"))
+    }
+
+    fun testAMemberFoundAsBothOwnAndInheritedIsListedOnce() {
+        // ABase's name contains A's, so `A.Reset` matches its members as its own as well.
+        val database = UnrealTypeDatabase.parse(StringReader(
+            """{"version":1,"chunks":[{"ABase":{"methods":[{"name":"Reset"}]},"A":{"inherits":"ABase"}}]}"""
+        ))
+        val result = database.search("A.Reset", limit = 10)
+        assertEquals(1, result.total)
+        assertSame(database.type("A"), result.hits.single().inheritedBy)
     }
 
     fun testSearchFindsAnEventByItsCppName() {
-        assertEquals(listOf("AActor.BeginPlay"), database.search("ReceiveBeginPlay", limit = 10).hits.map { (it as UnrealMember).qualifiedName })
+        assertEquals(listOf("AActor.BeginPlay"), database.search("ReceiveBeginPlay", limit = 10).symbols.map { (it as UnrealMember).qualifiedName })
     }
 
     fun testConstructorsAreNotSearchResults() {
-        assertEquals(listOf("FVector"), database.search("FVector", limit = 10).hits.map { it.name })
-        assertTrue(database.search("FVector", limit = 10).hits.single() is UnrealType)
+        assertEquals(listOf("FVector"), database.search("FVector", limit = 10).symbols.map { it.name })
+        assertTrue(database.search("FVector", limit = 10).symbols.single() is UnrealType)
     }
 
     fun testAnotherVersionIsRejected() {

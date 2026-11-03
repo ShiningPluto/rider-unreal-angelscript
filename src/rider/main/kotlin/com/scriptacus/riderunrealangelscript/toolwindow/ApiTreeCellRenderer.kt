@@ -24,13 +24,18 @@ class ApiTreeCellRenderer : ColoredTreeCellRenderer() {
             is ApiNode.Namespace -> node.namespace.name + "::"
             is ApiNode.Statics -> "Static members"
             is ApiNode.Inherited -> "Inherited from ${node.ancestor.name}"
-            is ApiNode.Member -> memberText(node.member, node.qualified)
+            is ApiNode.Member -> memberText(node)
             is ApiNode.ScriptNamespace -> node.namespace.name + "::"
             is ApiNode.Message -> node.text
         }
 
-        private fun memberText(member: UnrealMember, qualified: Boolean): String {
-            val name = if (qualified) member.qualifiedName else member.name
+        private fun memberText(node: ApiNode.Member): String {
+            val member = node.member
+            val name = when {
+                !node.qualified -> member.name
+                node.inheritedBy != null -> node.inheritedBy.name + member.ownerSeparator + member.name
+                else -> member.qualifiedName
+            }
             return when (member) {
                 is UnrealMethod -> member.args.joinToString(", ", "$name(", ")") { it.type }
                 is UnrealProperty -> name
