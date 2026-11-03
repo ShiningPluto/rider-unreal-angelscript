@@ -31,6 +31,9 @@ broken analyser rather than a stale workspace.
   in the index scope by then.
 - On the Rider side, `AngelScriptContentRootProvider` watches the VFS and registers a `Script`
   folder as a content root when one is created next to a `.uproject`/`.uplugin`.
+- `angelscript_get_problems` with `filePath` sends the server a file event for that one file
+  before answering ([decision 0013](../decisions/0013-analyse-an-asked-for-file-behind-a-status-barrier.md)),
+  so a file an agent edits or creates is analysed when the agent asks about it. Nothing else is.
 
 ## What is missing
 

@@ -41585,7 +41585,12 @@ connection.onRequest("angelscript/getUnrealStatus", () => {
     usingCachedTypes: __asTypeCache.loaded,
     // When the database in use was captured, live or cached. HasTypesFromUnreal() never goes back
     // to false, so this is what tells a current database apart from one an editor left behind.
-    typesCapturedAt: __asTypeCache.capturedAt
+    typesCapturedAt: __asTypeCache.capturedAt,
+    // Scripts still waiting to be loaded or parsed. Until both queues are empty, no handler
+    // analyses a file - opening, editing and file events all check them - so diagnostics cover only
+    // what was analysed before. The client also sends this request after a file event, as a barrier:
+    // handlers run one message at a time, so the answer comes after that event was handled.
+    pendingScripts: ParseQueue.length + LoadQueue.length
   };
 });
 

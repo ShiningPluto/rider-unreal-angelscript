@@ -6,21 +6,32 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.psi.PsiDocumentManager
 import com.redhat.devtools.lsp4ij.LanguageServerManager
 import com.redhat.devtools.lsp4ij.ServerStatus
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptDiagnosticsStore
+import com.scriptacus.riderunrealangelscript.lsp.AngelScriptFileUriSupport
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
 import com.scriptacus.riderunrealangelscript.services.AngelScriptApiService
+import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
+import com.scriptacus.riderunrealangelscript.util.GlobMatcher
 import com.scriptacus.riderunrealangelscript.status.AngelScriptUnrealStatus
 import com.scriptacus.riderunrealangelscript.status.AngelScriptUnrealStatusService
 import com.scriptacus.riderunrealangelscript.typedb.ScriptDeclarations
 import com.scriptacus.riderunrealangelscript.typedb.ScriptOrigin
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabase
 import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabaseService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -29,6 +40,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams
+import org.eclipse.lsp4j.FileChangeType
+import org.eclipse.lsp4j.FileEvent
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Instant
@@ -65,6 +79,16 @@ class AngelScriptMcpToolset : McpToolset {
          */
         const val DATABASE_WAIT_MS = 30_000L
 
+        /**
+         * Lets lsp4ij send the change it queued for an open file before the file event that has it
+         * analysed: its queue sends one message after another in moments, and cannot be waited for.
+         */
+        const val OPEN_FILE_SETTLE_MS = 200L
+
+        const val NOT_REANALYSED =
+            "The language server could not analyse the file again just now, so these are the problems it last " +
+                "reported, which may predate recent edits."
+
         val gson = GsonBuilder().disableHtmlEscaping().create()
     }
 
@@ -74,6 +98,8 @@ class AngelScriptMcpToolset : McpToolset {
         |right now, and if not, why not.
         |Analysis needs the C++ type database of the Unreal editor. Without it the server reports no
         |problems at all and has no API to search, so check this before trusting an empty result.
+        |`pendingScripts` counts the scripts the server has still to load after starting; until it
+        |is 0, problems are reported only for what it analysed before.
     """)
     suspend fun status(): String {
         val project = currentCoroutineContext().project
@@ -86,6 +112,7 @@ class AngelScriptMcpToolset : McpToolset {
                 languageServerRunning = snapshot?.serverRunning ?: true,
                 unrealPort = snapshot?.configuredPort?.takeIf { it >= 0 },
                 typesCapturedAt = snapshot?.typesCapturedAt?.let { Instant.ofEpochMilli(it).toString() },
+                pendingScripts = snapshot?.pendingScripts,
             )
         )
     }
@@ -94,16 +121,19 @@ class AngelScriptMcpToolset : McpToolset {
     @McpDescription("""
         |Returns the errors and warnings in Unreal AngelScript (.as) files: both the language server's
         |own analysis and the compile errors the Unreal editor reported when it hot-reloaded the
-        |script. Use it after editing .as files; Rider's get_file_problems cannot analyse them.
-        |Covers every script file the server has reported on, not only files open in the editor.
-        |Each file carries updatedAt, when the server last reported on it: diagnostics follow an edit
-        |asynchronously, so an updatedAt older than the edit means the result may not reflect it yet.
+        |script. Rider's get_file_problems cannot analyse them.
+        |After editing a .as file, pass it as filePath: the server then reads the file again and
+        |analyses it before this answers, so the result reflects it as it is now, and its updatedAt
+        |is when it was analysed. A `note` says when that did not happen and why.
+        |Without filePath, the result lists the files the server has reported problems for, as it
+        |last reported them. The server does not notice a file changed outside the editor until it
+        |is asked for with filePath or opened, so this can be out of date for files edited since.
         |`reportedBy` is "unreal" for Unreal's compile errors and "languageServer" for analysis.
         |Lines and columns are 1-based. Check `analysis.available` before reading an empty result as
         |"no problems".
     """)
     suspend fun getProblems(
-        @McpDescription("Path of one .as file, relative to the project root or absolute. Omit for every file with problems.")
+        @McpDescription("Path of one .as file, relative to the project root or absolute; analysed again before the answer. Omit for every file with problems.")
         filePath: String? = null,
         @McpDescription("Only report errors, leaving out warnings and informational messages.")
         errorsOnly: Boolean = false,
@@ -116,6 +146,7 @@ class AngelScriptMcpToolset : McpToolset {
         val maxProblems = limit.coerceIn(1, 5_000)
 
         val requested = filePath?.takeIf { it.isNotBlank() }?.let { resolveScriptFile(project, it) }
+        val reanalysis = if (requested != null && snapshot?.status?.isAnalysisAvailable == true) reanalyse(project, requested) else null
         val files = if (requested != null) {
             listOf(store.get(requested) ?: AngelScriptDiagnosticsStore.FileProblems(requested, emptyList(), 0L))
         } else {
@@ -139,9 +170,11 @@ class AngelScriptMcpToolset : McpToolset {
             }
             val kept = problems.take(room)
             returned += kept.size
+            // Analysed for this request, the file's problems are as of then, whether or not they changed.
+            val updatedAt = reanalysis?.analysedAt ?: file.updatedAt.takeIf { it > 0 }
             reports += FileReport(
                 path = FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, file.path)),
-                updatedAt = file.updatedAt.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).toString() },
+                updatedAt = updatedAt?.let { Instant.ofEpochMilli(it).toString() },
                 problems = kept.map { it.toReport() },
             )
         }
@@ -153,8 +186,119 @@ class AngelScriptMcpToolset : McpToolset {
                 truncated = total > returned,
                 checkedAt = Instant.now().toString(),
                 files = reports,
+                note = reanalysis?.note,
             )
         )
+    }
+
+    /** How [reanalyse] went: when the file was analysed, if it was, and what the agent should know. */
+    private class Reanalysis(val analysedAt: Long?, val note: String?)
+
+    /**
+     * Has the server read [path] again and analyse it, and returns once it has.
+     *
+     * The server registers no file watchers, and lsp4ij forwards file changes only for patterns a
+     * server registers, so a file edited outside the editor stays as the server last read it (see
+     * plan-0002). This sends the server the file event it would otherwise never get, for this one
+     * file: upstream's handler reads the file from disk, or keeps an open document's text, and
+     * analyses it, all before it returns.
+     *
+     * It reports the diagnostics only if they changed, so a report is not what tells that the
+     * analysis happened. The server handles one message at a time, so the answer to a status request
+     * sent after the event comes once the event has been handled, and any report it made has been
+     * recorded: lsp4j hands the client both on one thread, in the order the server sent them. Then
+     * what the store holds for the file, or the lack of anything, is the result. The status also
+     * says whether the server could analyse at all: it analyses nothing while scripts are queued.
+     *
+     * An open file is analysed from the editor's text, which lsp4ij sends on a queue of its own that
+     * public API cannot wait for. So the file is refreshed, which reloads an unmodified document, and
+     * its document committed, which has lsp4ij queue the change, and the event is sent a moment later.
+     */
+    private suspend fun reanalyse(project: Project, path: String): Reanalysis {
+        val patterns = AngelScriptLspSettings.getInstance().state.scriptIgnorePatterns
+        if (patterns.isNotEmpty() && GlobMatcher.matchesAny(path, patterns)) {
+            return Reanalysis(
+                null,
+                "The file matches one of the script ignore patterns in Settings | Languages & Frameworks | " +
+                    "AngelScript, so the language server does not analyse it.",
+            )
+        }
+        val manager = LanguageServerManager.getInstance(project)
+        if (manager.getServerStatus(AngelScriptLanguageServerFactory.SERVER_ID) != ServerStatus.started) {
+            // The analysis section says why nothing is analysed.
+            return Reanalysis(null, null)
+        }
+        val server = try {
+            withTimeout(SERVER_START_TIMEOUT_MS) {
+                manager.getLanguageServer(AngelScriptLanguageServerFactory.SERVER_ID).thenApply { it }.await()
+            }?.server as? AngelScriptLanguageServer
+        } catch (e: TimeoutCancellationException) {
+            null
+        } ?: return Reanalysis(null, NOT_REANALYSED)
+
+        // Queued scripts only shrink while loading, so none before the event and none after means none during it.
+        stillLoading(server)?.let { return Reanalysis(null, it) }
+
+        val file = withContext(Dispatchers.IO) {
+            LocalFileSystem.getInstance().refreshAndFindFileByNioFile(Path.of(path))
+                ?.also { VfsUtil.markDirtyAndRefresh(false, false, false, it) }
+        } ?: return Reanalysis(null, NOT_REANALYSED)
+        var open = false
+        var unsaved = false
+        withContext(Dispatchers.IO) {
+            // Any modality: a dialog open in the IDE must not hold the answer up until it closes.
+            ApplicationManager.getApplication().invokeAndWait({
+                val documents = FileDocumentManager.getInstance()
+                val document = documents.getCachedDocument(file) ?: return@invokeAndWait
+                // lsp4ij hands the server only the documents open in an editor; the rest it reads from disk.
+                open = FileEditorManager.getInstance(project).isFileOpen(file)
+                unsaved = open && documents.isDocumentUnsaved(document)
+                PsiDocumentManager.getInstance(project).commitDocument(document)
+            }, ModalityState.any())
+        }
+        if (open) {
+            delay(OPEN_FILE_SETTLE_MS)
+        }
+
+        try {
+            server.workspaceService.didChangeWatchedFiles(
+                DidChangeWatchedFilesParams(listOf(FileEvent(AngelScriptFileUriSupport.normalizedUri(file), FileChangeType.Changed)))
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The connection closed under it: the server is stopping, and the status says so next time.
+            return Reanalysis(null, NOT_REANALYSED)
+        }
+        stillLoading(server)?.let { return Reanalysis(null, it) }
+        return Reanalysis(
+            System.currentTimeMillis(),
+            if (unsaved) "The file has unsaved changes in Rider's editor; those are what was analysed, not the file on disk." else null,
+        )
+    }
+
+    /**
+     * Asks the server for its status, and says why it cannot analyse a file now, or null if it can.
+     * Its answer also marks that every message sent before it has been handled.
+     */
+    private suspend fun stillLoading(server: AngelScriptLanguageServer): String? {
+        val status = try {
+            withTimeout(REQUEST_TIMEOUT_MS) { server.getUnrealStatus().await() }
+        } catch (e: TimeoutCancellationException) {
+            return NOT_REANALYSED
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The request failed: the server is stopping, and the status says so next time.
+            return NOT_REANALYSED
+        } ?: return NOT_REANALYSED
+        val pending = (status["pendingScripts"] as? Number)?.toInt() ?: return NOT_REANALYSED
+        return when {
+            status["typesLoaded"] != true -> NOT_REANALYSED
+            pending > 0 -> "The language server is still loading the scripts ($pending to go) and analyses nothing until " +
+                "it is done, so these are the problems it last reported. Ask again in a moment."
+            else -> null
+        }
     }
 
     @McpTool(name = "angelscript_search_api")
@@ -350,9 +494,18 @@ class AngelScriptMcpToolset : McpToolset {
         state = snapshot?.status?.name ?: NOT_RESPONDING,
         available = snapshot?.status?.isAnalysisAvailable ?: false,
         explanation = explain(snapshot),
+        pendingScripts = snapshot?.pendingScripts,
     )
 
     private fun explain(snapshot: AngelScriptUnrealStatusService.Snapshot?): String {
+        val loading = snapshot?.pendingScripts?.takeIf { it > 0 && snapshot.status.isAnalysisAvailable }?.let { pending ->
+            " It is still loading the scripts ($pending to go), and until it is done, problems are reported only " +
+                "for what it analysed before."
+        }.orEmpty()
+        return describe(snapshot) + loading
+    }
+
+    private fun describe(snapshot: AngelScriptUnrealStatusService.Snapshot?): String {
         val port = snapshot?.configuredPort
         return when (snapshot?.status) {
             null ->
@@ -410,9 +563,10 @@ private data class StatusReport(
     val languageServerRunning: Boolean,
     val unrealPort: Int?,
     val typesCapturedAt: String?,
+    val pendingScripts: Int?,
 )
 
-private data class AnalysisReport(val state: String, val available: Boolean, val explanation: String)
+private data class AnalysisReport(val state: String, val available: Boolean, val explanation: String, val pendingScripts: Int?)
 
 private data class ProblemReport(
     val severity: String,
@@ -430,6 +584,8 @@ private data class ProblemsReport(
     val truncated: Boolean,
     val checkedAt: String,
     val files: List<FileReport>,
+    /** Why an asked-for file's problems may not reflect it as it is now; left out when they do. */
+    val note: String?,
 )
 
 private data class SearchReport(

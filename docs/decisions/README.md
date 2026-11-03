@@ -16,6 +16,7 @@ Why the code is the way it is. Format and rules: [../README.md](../README.md).
 | [0010](0010-show-script-implementations-of-cpp-blueprint-events.md) | Show script implementations of C++ blueprint events from the frontend, and hide Rider's warning for them there | editor | accepted | 2026-09-25 |
 | [0011](0011-browse-the-api-from-the-saved-type-database.md) | Browse the Unreal API from the type database the server saves, and save it whatever the cache setting says | lsp-client | accepted | 2026-10-22 |
 | [0012](0012-serve-the-mcp-api-tools-from-the-type-database.md) | Serve the MCP API tools from the type database the API tool window reads, and search what a named type inherits | mcp | accepted | 2026-11-03 |
+| [0013](0013-analyse-an-asked-for-file-behind-a-status-barrier.md) | Have the server analyse a file angelscript_get_problems is asked for, and know it did from a status request sent after it | mcp | accepted | 2026-11-03 |
 
 ## Reading order
 

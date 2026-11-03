@@ -166,7 +166,7 @@ The build scripts (`scripts/bundle-lsp.js` and `scripts/bundle-dap.js`) automati
 - **Streamed workspace scan**: Loads each workspace root as soon as it has been scanned, instead of waiting for the slowest one. `AngelScriptWorkspaceFolderFeature` keeps the roots down to the script folders, so this mainly covers projects that fall back to Rider's content roots, where the slowest root is minutes away and unrelated to AngelScript
 - **Re-resolve after a batch loads**: Re-resolves whenever newly loaded modules have drained through the queues, since modules resolved before them cache their failed cross-module lookups until the file is edited
 - **C++ navigation handlers**: Adds `angelscript/getCppSymbol` and `angelscript/navigateToCpp`
-- **Unreal status handler**: Adds `angelscript/getUnrealStatus` and `angelscript/setTypeCacheEnabled`, which back the status bar widget
+- **Unreal status handler**: Adds `angelscript/getUnrealStatus` and `angelscript/setTypeCacheEnabled`, which back the status bar widget. The status also counts the scripts still queued, which `angelscript_get_problems` reads after a file event to know the event was handled and the file analysed (decision 0013)
 - **Type database cache**: Persists the database the editor sends and replays it when no editor is running
 - **Stale compile diagnostics**: Drops the compile errors of the previous editor connection once a new one has sent its database, since a restarted editor never says that a file the old one complained about now compiles
 

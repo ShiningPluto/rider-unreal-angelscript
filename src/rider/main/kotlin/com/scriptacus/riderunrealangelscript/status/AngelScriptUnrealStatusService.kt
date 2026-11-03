@@ -161,6 +161,11 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
         val status: AngelScriptUnrealStatus,
         val configuredPort: Int?,
         val typesCapturedAt: Long?,
+        /**
+         * Scripts the server has still to load or parse; null when it did not say. Nothing is
+         * analysed until it reaches 0, so diagnostics cover only what was analysed before.
+         */
+        val pendingScripts: Int? = null,
     )
 
     /**
@@ -195,6 +200,7 @@ class AngelScriptUnrealStatusService(private val project: Project) : Disposable 
             status = classify(port, socketState, typesLoaded, usingCachedTypes),
             configuredPort = port,
             typesCapturedAt = (raw["typesCapturedAt"] as? Number)?.toLong(),
+            pendingScripts = (raw["pendingScripts"] as? Number)?.toInt(),
         )
     }
 

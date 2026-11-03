@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Highlights
 - The MCP tools `angelscript_search_api` and `angelscript_get_api_details` answer from the API tool window's type database, and `angelscript_get_api_details` no longer fails for every item.
 - Searching `ACharacter.Get` covers what ACharacter inherits as well, in the API tool window and through MCP, and each such result names the class that declares it.
+- `angelscript_get_problems` analyses a file again before answering for it, so an agent sees the problems of its edit rather than those from before.
 
 ### Changed
 - `angelscript_search_api` searches what the API tool window does, instead of asking the language server.
@@ -25,8 +26,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `Type.word` with a type's whole name searches what the type inherits as well, after what it declares, nearest supertype first. A supertype's script mixins are included.
   - Such a result is named through the type searched, and notes the class that declares it, such as `ACharacter.GetActorLocation()  from AActor`. Clearing the search shows it in that class's "Inherited from" group.
   - Only a whole name does this: `Actor.Get` would otherwise list AActor's members again for every class with Actor in its name.
+- `angelscript_status` and the `analysis` of `angelscript_get_problems` give `pendingScripts`, the scripts the server has still to load after starting. Until it is 0, problems are reported only for what it analysed before.
 
 ### Fixed
+- `angelscript_get_problems` with `filePath` answered with the problems from before an edit made outside Rider's editor, such as an agent's.
+  - The server registers no file watchers, so it never heard of the change until the file was opened. The tool now sends it a change for the file and waits until it has been analysed.
+  - A file without problems carried no `updatedAt`, so "no problems" could not be told from "not analysed yet". Its `updatedAt` is now when it was analysed for the request.
+  - A `note` says why when the file could not be analysed: the server is still loading scripts, or the file matches a script ignore pattern. Another says when the editor's unsaved text was analysed rather than the file on disk.
 - `angelscript_get_api_details` failed for every item, saying nothing was documented under its ref.
   - It sent the ref as a Gson `JsonArray`. lsp4j wraps a request's one parameter in an array only if it is a collection, which `JsonArray` is not, and vscode-jsonrpc spreads an array of params over the handler's arguments, so the handler got only the ref's first word. The tool no longer asks the server.
 
