@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The MCP tools `angelscript_search_api` and `angelscript_get_api_details` answer from the API tool window's type database, and `angelscript_get_api_details` no longer fails for every item.
 - Searching `ACharacter.Get` covers what ACharacter inherits as well, in the API tool window and through MCP, and each such result names the class that declares it.
 - `angelscript_get_problems` analyses a file again before answering for it, so an agent sees the problems of its edit rather than those from before.
+- Two new MCP tools: `angelscript_search_symbols` finds where script declares something, and `angelscript_find_references` finds every use of a symbol, telling a member from a same-named member of another class.
+
+### Added
+- MCP tool `angelscript_search_symbols`: the classes, structs, enums, namespaces, functions and variables script declares, with the file and line of each.
+  - The query takes the forms `angelscript_search_api` does: words that must all occur in a name, or `Owner.words` and `Owner::words` for the members of a type or namespace.
+  - Each result points at the declared name, ready to pass to `angelscript_find_references`, and gives the line a type's or function's body ends on.
+  - As in the language server's own symbol search, functions and variables are found only for a word of five letters or more.
+- MCP tool `angelscript_find_references`: every place script refers to the symbol at a position, whether script declares it or Unreal does, grouped by file with the text of each line.
+  - A function's overrides in subclasses, and the calls to them, are included.
+  - Each reference to a variable or property says whether it reads or writes it, as Find Usages groups them.
+  - The file asked about is analysed again first, as `angelscript_get_problems` does, so the position matches the file as it is now.
 
 ### Changed
 - `angelscript_search_api` searches what the API tool window does, instead of asking the language server.

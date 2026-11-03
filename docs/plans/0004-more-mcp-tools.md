@@ -12,11 +12,11 @@ context: ../CONTRIBUTING.md
 
 ## TL;DR
 
-The plugin serves four MCP tools through Rider's built-in MCP server - problems, API search, API
-details and status. Three more are worth having, in this order: where an AngelScript symbol is
-declared in C++, semantic queries over script (symbols, references, type hierarchy), and which
-Blueprint assets derive from a script class. Each is backed by something the plugin or the language
-server can already do; what is missing is the tool around it.
+The plugin serves six MCP tools through Rider's built-in MCP server - problems, API search, API
+details, status, symbol search and references. Three more are worth having, in this order: where an
+AngelScript symbol is declared in C++, the type hierarchy of script classes, and which Blueprint
+assets derive from a script class. Each is backed by something the plugin or the language server
+can already do; what is missing is the tool around it.
 
 ## Why it matters
 
@@ -40,6 +40,13 @@ cannot tell a same-named member of another class from the one it means.
 - `AngelScriptMcpToolset` (`mcp/`), registered through the optional dependency in
   `angelscript-mcp.xml`, with `angelscript_status`, `angelscript_get_problems`,
   `angelscript_search_api` and `angelscript_get_api_details`. Landed with this plan.
+- `angelscript_search_symbols` over `workspace/symbol` and `workspaceSymbol/resolve`, and
+  `angelscript_find_references` over `textDocument/references`, through the server proxy lsp4ij
+  hands out. The server finds members only for a query of five letters or more and matches one
+  piece of text, so `ScriptSymbolQuery` asks it for the longest piece and filters for the query
+  forms `angelscript_search_api` takes. References get their line's text and, from the plugin's
+  parse tree, whether they read or write (`AngelScriptAccess`); the file asked about is analysed
+  again first, as `angelscript_get_problems` does.
 - `AngelScriptDiagnosticsStore` keeps every diagnostic the server publishes, for all files.
 - `AngelScriptUnrealStatusService.query()` answers "can the server analyse anything" without
   starting it, and the toolset's `awaitTypes()` starts it and waits for a type database.
@@ -54,10 +61,8 @@ cannot tell a same-named member of another class from the one it means.
    in the way is that `AngelScriptCppNavigationHandler` does both inside a `GotoDeclarationHandler`,
    so the lookup has to be split from the navigation first. The tool has no caret waiting on it, so
    it can run the full search instead of the synchronous budget.
-2. **Semantic queries** - `angelscript_search_symbols(query)` over `workspace/symbol`,
-   `angelscript_find_references(filePath, line, column)` over `textDocument/references`, and
-   supertypes/subtypes over the type hierarchy requests. All are implemented by the server already;
-   the tool sends them through the lsp4ij server item as the API tools do.
+2. **Type hierarchy** - supertypes and subtypes of a script class over the type hierarchy
+   requests, which the server implements. The two other semantic queries landed first.
 3. **`angelscript_find_assets(className)`** - the Blueprint assets that derive from a script class,
    for judging the impact of a change before making it. The server has
    `GetAssetsImplementing(className)`, but only the code lens reaches it, so it needs a custom
@@ -109,3 +114,6 @@ Checked and not needed:
 
 - 2026-09-23 - Written when the first four tools landed, from the survey of what the built-in tools
   cover for AngelScript.
+- 2026-11-03 - `angelscript_search_symbols` and `angelscript_find_references` landed, checked
+  against the bundled server: members are told apart by their class, and a method's overrides and
+  `Super::` calls are found.

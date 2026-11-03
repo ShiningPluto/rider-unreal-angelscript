@@ -8,6 +8,7 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -16,6 +17,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiFile
 import com.redhat.devtools.lsp4ij.LanguageServerManager
 import com.redhat.devtools.lsp4ij.ServerStatus
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptDiagnosticsStore
@@ -34,6 +36,9 @@ import com.scriptacus.riderunrealangelscript.typedb.UnrealTypeDatabaseService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
@@ -43,9 +48,18 @@ import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams
 import org.eclipse.lsp4j.FileChangeType
 import org.eclipse.lsp4j.FileEvent
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.ReferenceContext
+import org.eclipse.lsp4j.ReferenceParams
+import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.WorkspaceSymbol
+import org.eclipse.lsp4j.WorkspaceSymbolParams
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 
@@ -85,9 +99,19 @@ class AngelScriptMcpToolset : McpToolset {
          */
         const val OPEN_FILE_SETTLE_MS = 200L
 
+        /** Finding references reads and resolves every module that may use the symbol, a few at a time. */
+        const val REFERENCES_TIMEOUT_MS = 60_000L
+
         const val NOT_REANALYSED =
             "The language server could not analyse the file again just now, so these are the problems it last " +
                 "reported, which may predate recent edits."
+
+        const val IGNORED =
+            "The file matches one of the script ignore patterns in Settings | Languages & Frameworks | AngelScript, " +
+                "so the language server does not analyse it."
+
+        const val UNSAVED_ANALYSED =
+            "The file has unsaved changes in Rider's editor; those are what was analysed, not the file on disk."
 
         val gson = GsonBuilder().disableHtmlEscaping().create()
     }
@@ -147,6 +171,15 @@ class AngelScriptMcpToolset : McpToolset {
 
         val requested = filePath?.takeIf { it.isNotBlank() }?.let { resolveScriptFile(project, it) }
         val reanalysis = if (requested != null && snapshot?.status?.isAnalysisAvailable == true) reanalyse(project, requested) else null
+        val analysedAt = (reanalysis as? Reanalysis.Done)?.at
+        val note = when (reanalysis) {
+            null, Reanalysis.NotRunning -> null // The analysis section says why nothing is analysed.
+            is Reanalysis.Done -> if (reanalysis.unsaved) UNSAVED_ANALYSED else null
+            Reanalysis.Ignored -> IGNORED
+            is Reanalysis.Loading -> "The language server is still loading the scripts (${reanalysis.pending} to go) and analyses " +
+                "nothing until it is done, so these are the problems it last reported. Ask again in a moment."
+            Reanalysis.Failed -> NOT_REANALYSED
+        }
         val files = if (requested != null) {
             listOf(store.get(requested) ?: AngelScriptDiagnosticsStore.FileProblems(requested, emptyList(), 0L))
         } else {
@@ -171,7 +204,7 @@ class AngelScriptMcpToolset : McpToolset {
             val kept = problems.take(room)
             returned += kept.size
             // Analysed for this request, the file's problems are as of then, whether or not they changed.
-            val updatedAt = reanalysis?.analysedAt ?: file.updatedAt.takeIf { it > 0 }
+            val updatedAt = analysedAt ?: file.updatedAt.takeIf { it > 0 }
             reports += FileReport(
                 path = FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, file.path)),
                 updatedAt = updatedAt?.let { Instant.ofEpochMilli(it).toString() },
@@ -186,13 +219,23 @@ class AngelScriptMcpToolset : McpToolset {
                 truncated = total > returned,
                 checkedAt = Instant.now().toString(),
                 files = reports,
-                note = reanalysis?.note,
+                note = note,
             )
         )
     }
 
-    /** How [reanalyse] went: when the file was analysed, if it was, and what the agent should know. */
-    private class Reanalysis(val analysedAt: Long?, val note: String?)
+    /** How [reanalyse] went. */
+    private sealed interface Reanalysis {
+        /** Analysed at [at], from the editor's text rather than the file on disk when [unsaved]. */
+        class Done(val at: Long, val unsaved: Boolean) : Reanalysis
+        /** A script ignore pattern keeps the file from the server. */
+        object Ignored : Reanalysis
+        /** The server analyses nothing while it has scripts queued to load. */
+        class Loading(val pending: Int) : Reanalysis
+        /** The server did not answer, or the file could not be read. */
+        object Failed : Reanalysis
+        object NotRunning : Reanalysis
+    }
 
     /**
      * Has the server read [path] again and analyse it, and returns once it has.
@@ -217,16 +260,11 @@ class AngelScriptMcpToolset : McpToolset {
     private suspend fun reanalyse(project: Project, path: String): Reanalysis {
         val patterns = AngelScriptLspSettings.getInstance().state.scriptIgnorePatterns
         if (patterns.isNotEmpty() && GlobMatcher.matchesAny(path, patterns)) {
-            return Reanalysis(
-                null,
-                "The file matches one of the script ignore patterns in Settings | Languages & Frameworks | " +
-                    "AngelScript, so the language server does not analyse it.",
-            )
+            return Reanalysis.Ignored
         }
         val manager = LanguageServerManager.getInstance(project)
         if (manager.getServerStatus(AngelScriptLanguageServerFactory.SERVER_ID) != ServerStatus.started) {
-            // The analysis section says why nothing is analysed.
-            return Reanalysis(null, null)
+            return Reanalysis.NotRunning
         }
         val server = try {
             withTimeout(SERVER_START_TIMEOUT_MS) {
@@ -234,15 +272,15 @@ class AngelScriptMcpToolset : McpToolset {
             }?.server as? AngelScriptLanguageServer
         } catch (e: TimeoutCancellationException) {
             null
-        } ?: return Reanalysis(null, NOT_REANALYSED)
+        } ?: return Reanalysis.Failed
 
         // Queued scripts only shrink while loading, so none before the event and none after means none during it.
-        stillLoading(server)?.let { return Reanalysis(null, it) }
+        stillLoading(server)?.let { return it }
 
         val file = withContext(Dispatchers.IO) {
             LocalFileSystem.getInstance().refreshAndFindFileByNioFile(Path.of(path))
                 ?.also { VfsUtil.markDirtyAndRefresh(false, false, false, it) }
-        } ?: return Reanalysis(null, NOT_REANALYSED)
+        } ?: return Reanalysis.Failed
         var open = false
         var unsaved = false
         withContext(Dispatchers.IO) {
@@ -268,35 +306,31 @@ class AngelScriptMcpToolset : McpToolset {
             throw e
         } catch (e: Exception) {
             // The connection closed under it: the server is stopping, and the status says so next time.
-            return Reanalysis(null, NOT_REANALYSED)
+            return Reanalysis.Failed
         }
-        stillLoading(server)?.let { return Reanalysis(null, it) }
-        return Reanalysis(
-            System.currentTimeMillis(),
-            if (unsaved) "The file has unsaved changes in Rider's editor; those are what was analysed, not the file on disk." else null,
-        )
+        stillLoading(server)?.let { return it }
+        return Reanalysis.Done(System.currentTimeMillis(), unsaved)
     }
 
     /**
      * Asks the server for its status, and says why it cannot analyse a file now, or null if it can.
      * Its answer also marks that every message sent before it has been handled.
      */
-    private suspend fun stillLoading(server: AngelScriptLanguageServer): String? {
+    private suspend fun stillLoading(server: AngelScriptLanguageServer): Reanalysis? {
         val status = try {
             withTimeout(REQUEST_TIMEOUT_MS) { server.getUnrealStatus().await() }
         } catch (e: TimeoutCancellationException) {
-            return NOT_REANALYSED
+            return Reanalysis.Failed
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // The request failed: the server is stopping, and the status says so next time.
-            return NOT_REANALYSED
-        } ?: return NOT_REANALYSED
-        val pending = (status["pendingScripts"] as? Number)?.toInt() ?: return NOT_REANALYSED
+            return Reanalysis.Failed
+        } ?: return Reanalysis.Failed
+        val pending = (status["pendingScripts"] as? Number)?.toInt() ?: return Reanalysis.Failed
         return when {
-            status["typesLoaded"] != true -> NOT_REANALYSED
-            pending > 0 -> "The language server is still loading the scripts ($pending to go) and analyses nothing until " +
-                "it is done, so these are the problems it last reported. Ask again in a moment."
+            status["typesLoaded"] != true -> Reanalysis.Failed
+            pending > 0 -> Reanalysis.Loading(pending)
             else -> null
         }
     }
@@ -376,6 +410,217 @@ class AngelScriptMcpToolset : McpToolset {
         return ApiDetailsMarkdown.of(symbol, api.database, api.script, scriptPath(project))
     }
 
+    @McpTool(name = "angelscript_search_symbols")
+    @McpDescription("""
+        |Finds where Unreal AngelScript (.as) files declare something: the classes, structs, enums,
+        |namespaces, functions, properties and global variables script declares, with the file and
+        |line of each declaration. Rider's search_symbol does not see script. Unreal's own C++ API is
+        |not listed here; angelscript_search_api has it, and says how script calls it.
+        |The query is one of:
+        |- Words separated by spaces that must all occur in one name, case-insensitively. Functions,
+        |  properties and variables are found only when a word has at least five letters; types and
+        |  namespaces always are.
+        |- `Owner.words` or `Owner::words`: only the members of the script types or namespaces whose
+        |  name contains Owner. Nothing after the separator lists them all. Owner, or a word after it,
+        |  needs at least five letters.
+        |Best matches come first: exact names, then names starting with the query. `line` and
+        |`column` are 1-based and point at the declared name, so they can be passed to
+        |angelscript_find_references as they are; `endLine` is where the body of a type, namespace
+        |or function ends.
+    """)
+    suspend fun searchSymbols(
+        @McpDescription("Words separated by spaces, \"Owner.words\" or \"Owner::words\", e.g. \"Health\", \"Take Damage\" or \"AMyCharacter.\".")
+        query: String,
+        @McpDescription("Maximum number of declarations to return.")
+        limit: Int = 50,
+    ): String {
+        if (query.isBlank()) {
+            mcpFail("Give at least one word to search for.")
+        }
+        val parsed = ScriptSymbolQuery.parse(query)
+            ?: mcpFail(
+                "Members are searched only for a query of ${ScriptSymbolQuery.MEMBER_QUERY_LENGTH} letters or more: give " +
+                    "more of the type's or namespace's name before the separator, or of the member's after it."
+            )
+        val project = currentCoroutineContext().project
+        val server = awaitTypes(project)
+        val answer = request(REQUEST_TIMEOUT_MS) { server.workspaceService.symbol(WorkspaceSymbolParams(parsed.serverQuery)) }
+            ?: mcpFail("The AngelScript language server did not answer within ${REQUEST_TIMEOUT_MS / 1000}s. Try again in a moment.")
+        val symbols: List<WorkspaceSymbol> = if (answer.isRight) {
+            answer.right.orEmpty()
+        } else {
+            answer.left.orEmpty().map { WorkspaceSymbol(it.name, it.kind, Either.forLeft(it.location), it.containerName) }
+        }
+        val selected = parsed.select(symbols)
+        // The server names only the file each one is in until asked where in it.
+        val resolved = coroutineScope {
+            selected.take(limit.coerceIn(1, 1_000)).map { symbol -> async { resolve(server, symbol) } }.awaitAll()
+        }
+        val items = resolved.map { symbolItem(project, it) }
+
+        val notes = listOfNotNull(
+            ("Functions, properties and variables are searched only when a word has ${ScriptSymbolQuery.MEMBER_QUERY_LENGTH} " +
+                "letters or more, so only types and namespaces were.").takeUnless { parsed.findsMembers },
+            querySnapshot(project)?.pendingScripts?.takeIf { it > 0 }?.let {
+                "The language server is still loading the scripts ($it to go), so what they declare is missing. Ask again in a moment."
+            },
+        )
+        return gson.toJson(
+            SymbolsReport(
+                query = query,
+                total = selected.size,
+                returned = items.size,
+                items = items,
+                note = notes.joinToString(" ").ifEmpty { null },
+            )
+        )
+    }
+
+    /** [symbol] with the range of its declaration, which the server finds only when asked. */
+    private suspend fun resolve(server: AngelScriptLanguageServer, symbol: WorkspaceSymbol): WorkspaceSymbol {
+        if (symbol.location?.left?.range != null) {
+            return symbol
+        }
+        return request(REQUEST_TIMEOUT_MS) { server.workspaceService.resolveWorkspaceSymbol(symbol) } ?: symbol
+    }
+
+    private fun symbolItem(project: Project, symbol: WorkspaceSymbol): ScriptSymbolItem {
+        val range = symbol.location?.left?.range
+        val path = ScriptSymbolQuery.uriOf(symbol)?.let(AngelScriptDiagnosticsStore::pathFromUri)
+        return ScriptSymbolItem(
+            label = symbol.name,
+            kind = ScriptSymbolQuery.kind(symbol.kind),
+            container = symbol.containerName?.ifEmpty { null },
+            path = path?.let { FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, it)) }.orEmpty(),
+            line = range?.start?.line?.plus(1),
+            column = range?.start?.character?.plus(1),
+            endLine = range?.end?.line?.plus(1),
+        )
+    }
+
+    @McpTool(name = "angelscript_find_references")
+    @McpDescription("""
+        |Finds every place Unreal AngelScript (.as) files refer to the symbol at a position in a
+        |script file: a class, struct, enum, function, property, variable or parameter script
+        |declares, or something Unreal declares and script uses, such as AActor.SetActorLocation.
+        |Unlike a text search it tells a member from a same-named member of another class, and finds
+        |a function's overrides in subclasses and the calls to them.
+        |Point at the name, where it is declared or anywhere it is used: the line and column
+        |angelscript_search_symbols returns, or ones read from the file. Both are 1-based. The file
+        |is analysed again first, so edits made to it outside the editor count; other files are
+        |searched as the language server last read them, which misses edits made outside the editor
+        |to files nobody asked about since.
+        |The result is grouped by file, with the text of each reference's line, and includes the
+        |declaration when script declares the symbol. `access` says
+        |whether a variable or property is read, written or both there, and is left out for
+        |anything else, such as a call or a type. A write through an `&out` argument counts as a
+        |read. References from C++ and Blueprints are not included.
+    """)
+    suspend fun findReferences(
+        @McpDescription("Path of the .as file, relative to the project root or absolute.")
+        filePath: String,
+        @McpDescription("1-based line of the symbol's name.")
+        line: Int,
+        @McpDescription("1-based column of any character of the symbol's name.")
+        column: Int,
+        @McpDescription("Maximum number of references to return, across all files.")
+        limit: Int = 200,
+    ): String {
+        if (line < 1 || column < 1) {
+            mcpFail("Lines and columns are 1-based.")
+        }
+        val project = currentCoroutineContext().project
+        val path = resolveScriptFile(project, filePath)
+        val server = awaitTypes(project)
+        val note = when (val reanalysis = reanalyse(project, path)) {
+            is Reanalysis.Done -> if (reanalysis.unsaved) "The file has unsaved changes in Rider's editor; the position is in those, not in the file on disk." else null
+            Reanalysis.Ignored -> mcpFail("$IGNORED It is not searched, and what it refers to cannot be found from it.")
+            is Reanalysis.Loading -> mcpFail(
+                "The language server is still loading the scripts (${reanalysis.pending} to go) and searches nothing until it is done. Ask again in a moment."
+            )
+            Reanalysis.Failed, Reanalysis.NotRunning ->
+                "The language server could not read the file again just now, so the position is in the file as it last read it, which may predate recent edits."
+        }
+
+        val file = LocalFileSystem.getInstance().findFileByNioFile(Path.of(path))
+            ?: mcpFail("No such file: $path")
+        val params = ReferenceParams(
+            TextDocumentIdentifier(AngelScriptFileUriSupport.normalizedUri(file)),
+            Position(line - 1, column - 1),
+            ReferenceContext(true),
+        )
+        // The server answers null while it cannot resolve, which reanalyse has just ruled out unless it failed.
+        val locations = request(REFERENCES_TIMEOUT_MS) { server.textDocumentService.references(params) }
+            ?: mcpFail("The AngelScript language server did not search for references just now. ${explain(querySnapshot(project))}")
+        if (locations.isEmpty()) {
+            val text = readText(project, path)?.let { ScriptReferences.textAt(it, Range(Position(line - 1, 0), Position(line, 0))).trim() }
+            mcpFail(
+                "Nothing the language server can search for is at line $line, column $column" +
+                    (text?.let { ", which reads: $it" } ?: "") + ". Point at the name of a declared or used symbol."
+            )
+        }
+
+        val byFile = locations.groupBy { location -> AngelScriptDiagnosticsStore.pathFromUri(location.uri) ?: location.uri }
+            .mapValues { (_, found) -> found.sortedWith(compareBy({ it.range.start.line }, { it.range.start.character })) }
+            .toSortedMap(String.CASE_INSENSITIVE_ORDER)
+        val maxReferences = limit.coerceIn(1, 5_000)
+        var name: String? = null
+        val files = mutableListOf<ReferenceFile>()
+        var returned = 0
+        for ((referencedPath, found) in byFile) {
+            val kept = found.take(maxReferences - returned)
+            if (kept.isEmpty()) {
+                break
+            }
+            returned += kept.size
+            val references = readAction {
+                val text = textOf(project, referencedPath) ?: return@readAction null
+                if (name == null) {
+                    name = ScriptReferences.textAt(text.first, kept.first().range)
+                }
+                ScriptReferences.inFile(text.first, text.second, kept.map { it.range })
+            } ?: kept.map { ReferenceItem(it.range.start.line + 1, it.range.start.character + 1, "", null) }
+            files += ReferenceFile(FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, referencedPath)), references)
+        }
+
+        return gson.toJson(
+            ReferencesReport(
+                name = name,
+                total = locations.size,
+                returned = returned,
+                truncated = locations.size > returned,
+                files = files,
+                note = note,
+            )
+        )
+    }
+
+    /** The text of the script file at [path], as the editor has it, and its parse tree when that is of the same text. */
+    private fun textOf(project: Project, path: String): Pair<CharSequence, PsiFile?>? {
+        val file = LocalFileSystem.getInstance().findFileByPath(path) ?: return null
+        val document = FileDocumentManager.getInstance().getDocument(file) ?: return null
+        val documents = PsiDocumentManager.getInstance(project)
+        val psi = if (documents.isCommitted(document)) documents.getPsiFile(document) else null
+        return document.immutableCharSequence to psi
+    }
+
+    private suspend fun readText(project: Project, path: String): CharSequence? = readAction { textOf(project, path)?.first }
+
+    /**
+     * Sends a request and waits up to [timeoutMs] for its answer, or null when there is none in time
+     * or the connection failed under it, which the status explains next time it is asked.
+     */
+    private suspend fun <T> request(timeoutMs: Long, send: () -> CompletableFuture<T>): T? =
+        try {
+            withTimeout(timeoutMs) { send().await() }
+        } catch (e: TimeoutCancellationException) {
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+
     /** The server's view of its analysis state, or null when it is too busy to say. */
     private suspend fun querySnapshot(project: Project): AngelScriptUnrealStatusService.Snapshot? =
         withContext(Dispatchers.IO) {
@@ -433,12 +678,13 @@ class AngelScriptMcpToolset : McpToolset {
     }
 
     /**
-     * Returns once the server has Unreal's types, which is when it saves them for the API.
+     * Returns the server once it has Unreal's types, which is when it saves them for the API and can
+     * analyse script.
      *
      * Starts the server if it is not running, as opening the API tool window does: a search is an
      * explicit request for something only Unreal's types can answer.
      */
-    private suspend fun awaitTypes(project: Project) {
+    private suspend fun awaitTypes(project: Project): AngelScriptLanguageServer {
         val manager = LanguageServerManager.getInstance(project)
         val wasRunning = manager.getServerStatus(AngelScriptLanguageServerFactory.SERVER_ID) == ServerStatus.started
 
@@ -450,23 +696,22 @@ class AngelScriptMcpToolset : McpToolset {
         } catch (e: TimeoutCancellationException) {
             null
         }
-        if (item?.server !is AngelScriptLanguageServer) {
-            mcpFail("The AngelScript language server could not be started. See the AngelScript LSP console in Rider.")
-        }
+        val server = item?.server as? AngelScriptLanguageServer
+            ?: mcpFail("The AngelScript language server could not be started. See the AngelScript LSP console in Rider.")
 
         val deadline = System.currentTimeMillis() + TYPES_WAIT_MS
         while (true) {
             val snapshot = querySnapshot(project)
             val status = snapshot?.status
             if (status != null && status.isAnalysisAvailable) {
-                return
+                return server
             }
             // A server that was already running and is not even connecting will not have types in
             // ten seconds either; one that has just started still needs to receive its configuration.
             val settled = wasRunning &&
                 (status == AngelScriptUnrealStatus.DISCONNECTED || status == AngelScriptUnrealStatus.NOT_CONFIGURED)
             if (settled || System.currentTimeMillis() >= deadline) {
-                mcpFail("No Unreal type database is loaded, so there is no API to search. ${explain(snapshot)}")
+                mcpFail("No Unreal type database is loaded, so script cannot be analysed. ${explain(snapshot)}")
             }
             delay(TYPES_POLL_MS)
         }
@@ -585,6 +830,26 @@ private data class ProblemsReport(
     val checkedAt: String,
     val files: List<FileReport>,
     /** Why an asked-for file's problems may not reflect it as it is now; left out when they do. */
+    val note: String?,
+)
+
+private data class SymbolsReport(
+    val query: String,
+    val total: Int,
+    val returned: Int,
+    val items: List<ScriptSymbolItem>,
+    /** Why the result may be incomplete; left out when it is not. */
+    val note: String?,
+)
+
+private data class ReferencesReport(
+    /** The name referred to, as the first reference spells it. */
+    val name: String?,
+    val total: Int,
+    val returned: Int,
+    val truncated: Boolean,
+    val files: List<ReferenceFile>,
+    /** Why the position may not be where the caller meant; left out when it is. */
     val note: String?,
 )
 
