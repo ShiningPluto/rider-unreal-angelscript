@@ -16,7 +16,7 @@ class AngelScriptMcpToolsetTest : UsefulTestCase() {
         assertEquals(
             setOf(
                 "angelscript_status", "angelscript_get_problems", "angelscript_search_api", "angelscript_get_api_details",
-                "angelscript_search_symbols", "angelscript_find_references",
+                "angelscript_search_symbols", "angelscript_find_references", "angelscript_get_type_hierarchy",
             ),
             tools.keys
         )
@@ -27,5 +27,6 @@ class AngelScriptMcpToolsetTest : UsefulTestCase() {
         assertEquals(setOf("ref"), tools.getValue("angelscript_get_api_details").requiredProperties)
         assertEquals(setOf("query"), tools.getValue("angelscript_search_symbols").requiredProperties)
         assertEquals(setOf("filePath", "line", "column"), tools.getValue("angelscript_find_references").requiredProperties)
+        assertEquals(setOf("typeName"), tools.getValue("angelscript_get_type_hierarchy").requiredProperties)
     }
 }

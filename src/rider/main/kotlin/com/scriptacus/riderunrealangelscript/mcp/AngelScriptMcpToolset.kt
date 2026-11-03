@@ -1,6 +1,7 @@
 package com.scriptacus.riderunrealangelscript.mcp
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonPrimitive
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
@@ -52,7 +53,12 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.ReferenceContext
 import org.eclipse.lsp4j.ReferenceParams
+import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.TypeHierarchyItem
+import org.eclipse.lsp4j.TypeHierarchyPrepareParams
+import org.eclipse.lsp4j.TypeHierarchySubtypesParams
+import org.eclipse.lsp4j.TypeHierarchySupertypesParams
 import org.eclipse.lsp4j.WorkspaceSymbol
 import org.eclipse.lsp4j.WorkspaceSymbolParams
 import org.eclipse.lsp4j.jsonrpc.messages.Either
@@ -109,6 +115,9 @@ class AngelScriptMcpToolset : McpToolset {
         const val IGNORED =
             "The file matches one of the script ignore patterns in Settings | Languages & Frameworks | AngelScript, " +
                 "so the language server does not analyse it."
+
+        /** How the server's symbol search marks a type: a struct as a class. */
+        val TYPE_SYMBOLS = setOf(SymbolKind.Class, SymbolKind.Struct, SymbolKind.Enum)
 
         const val UNSAVED_ANALYSED =
             "The file has unsaved changes in Rider's editor; those are what was analysed, not the file on disk."
@@ -595,6 +604,108 @@ class AngelScriptMcpToolset : McpToolset {
         )
     }
 
+    @McpTool(name = "angelscript_get_type_hierarchy")
+    @McpDescription("""
+        |Returns what a class or struct derives from and what derives from it, as Unreal AngelScript
+        |sees types: the ones script declares and Unreal's C++ ones, with the script file and line of
+        |each that script declares.
+        |`supertypes` runs from the nearest one up. `subtypes` lists the types deriving from it at
+        |every depth, breadth first, each naming the `supertype` it derives from directly; a C++
+        |class such as AActor has thousands, so they stop at `limit`.
+        |Blueprints are not listed: script does not know Unreal's assets. Rider's get_class_hierarchy
+        |lists the Blueprints deriving from a class but does not follow script subclasses, so pass it
+        |the class and each subtype here that has a `declaredIn`. The data assets of a script class
+        |come from Rider's search_assets with source "editor" and the class name without its A or U
+        |prefix; given the prefix, it finds no class and lists unrelated assets.
+    """)
+    suspend fun getTypeHierarchy(
+        @McpDescription("The type's name as script writes it, prefix included, e.g. \"AMyCharacter\" or \"UMyHealthComponent\".")
+        typeName: String,
+        @McpDescription("Maximum number of subtypes to return.")
+        limit: Int = 200,
+    ): String {
+        val asked = typeName.trim()
+        if (asked.isEmpty()) {
+            mcpFail("Give the name of a type, such as AMyCharacter.")
+        }
+        val project = currentCoroutineContext().project
+        val server = awaitTypes(project)
+        val supertypesOf: suspend (TypeHierarchyItem) -> List<TypeHierarchyItem>? = { item ->
+            request(REQUEST_TIMEOUT_MS) { server.textDocumentService.typeHierarchySupertypes(TypeHierarchySupertypesParams(item)) }
+        }
+        val subtypesOf: suspend (TypeHierarchyItem) -> List<TypeHierarchyItem>? = { item ->
+            request(REQUEST_TIMEOUT_MS) { server.textDocumentService.typeHierarchySubtypes(TypeHierarchySubtypesParams(item)) }
+        }
+
+        // The server knows a type only by its exact name. Nothing above or below it means a
+        // misspelling, or a type with no hierarchy such as a struct: script's own symbol search
+        // and Unreal's database tell which, and find one spelled in another case.
+        var name = asked
+        var start = ScriptTypeHierarchy.item(name)
+        var supertypes = ScriptTypeHierarchy.supertypes(start, supertypesOf)
+        var declaration: WorkspaceSymbol? = null
+        var cppKind: String? = null
+        if (supertypes.isEmpty() && subtypesOf(start).isNullOrEmpty()) {
+            declaration = scriptType(server, asked)
+            val known = declaration?.let { typeNameOf(it) }
+                ?: typeDatabase(project).typeIgnoringCase(asked)?.also { cppKind = it.kind.keyword }?.name
+                ?: mcpFail(
+                    "Script knows no type named $asked. Give the name as script writes it, prefix included, such as " +
+                        "AActor or UMyHealthComponent; angelscript_search_symbols and angelscript_search_api find it."
+                )
+            if (known != asked) {
+                name = known
+                start = ScriptTypeHierarchy.item(name)
+                supertypes = ScriptTypeHierarchy.supertypes(start, supertypesOf)
+            }
+        }
+        val subtypes = ScriptTypeHierarchy.walkSubtypes(start, limit.coerceIn(1, 5_000), subtypesOf)
+
+        val path: (String) -> String? = { uri ->
+            AngelScriptDiagnosticsStore.pathFromUri(uri)?.let { FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, it)) }
+        }
+        // The server describes a type only as another's supertype or subtype, or as the one at a
+        // position script declares it at. Asking its supertype costs a list of all of that one's
+        // subtypes, thousands for UObject, so that comes last.
+        val described = subtypes.found.firstOrNull()?.let { (child, _) -> supertypesOf(child)?.firstOrNull() }
+            ?: preparedAt(server, declaration ?: scriptType(server, name))
+            ?: supertypes.firstOrNull()?.let { parent -> subtypesOf(parent)?.firstOrNull { it.name == name } }
+        return gson.toJson(
+            TypeHierarchyReport(
+                type = described?.let { ScriptTypeHierarchy.node(it, null, path) }
+                    ?: TypeHierarchyNode(name, cppKind ?: "class", null, null, null),
+                supertypes = supertypes.map { ScriptTypeHierarchy.node(it, null, path) },
+                subtypes = subtypes.found.map { (item, parent) -> ScriptTypeHierarchy.node(item, parent, path) },
+                truncated = subtypes.truncated,
+                note = querySnapshot(project)?.pendingScripts?.takeIf { it > 0 }?.let {
+                    "The language server is still loading the scripts ($it to go), so the types they declare may be missing. Ask again in a moment."
+                },
+            )
+        )
+    }
+
+    /** The type script declares under [name], whatever its case, resolved for where. */
+    private suspend fun scriptType(server: AngelScriptLanguageServer, name: String): WorkspaceSymbol? {
+        val answer = request(REQUEST_TIMEOUT_MS) { server.workspaceService.symbol(WorkspaceSymbolParams(name)) } ?: return null
+        // A struct's name also comes back as a global function, its constructor.
+        val symbol = answer.right.orEmpty().firstOrNull {
+            it.kind in TYPE_SYMBOLS && ScriptSymbolQuery.ownName(it.name).equals(name, ignoreCase = true)
+        } ?: return null
+        return resolve(server, symbol)
+    }
+
+    /** The name the server keys a type by, which its symbol carries as `data`. */
+    private fun typeNameOf(symbol: WorkspaceSymbol): String =
+        (symbol.data as? JsonPrimitive)?.takeIf { it.isString }?.asString ?: (symbol.data as? String) ?: ScriptSymbolQuery.ownName(symbol.name)
+
+    /** The server's own item for the type script declares at [symbol]'s name. */
+    private suspend fun preparedAt(server: AngelScriptLanguageServer, symbol: WorkspaceSymbol?): TypeHierarchyItem? {
+        val location = symbol?.location?.left ?: return null
+        val range = location.range ?: return null
+        val params = TypeHierarchyPrepareParams(TextDocumentIdentifier(location.uri), range.start)
+        return request(REQUEST_TIMEOUT_MS) { server.textDocumentService.prepareTypeHierarchy(params) }?.firstOrNull()
+    }
+
     /** The text of the script file at [path], as the editor has it, and its parse tree when that is of the same text. */
     private fun textOf(project: Project, path: String): Pair<CharSequence, PsiFile?>? {
         val file = LocalFileSystem.getInstance().findFileByPath(path) ?: return null
@@ -850,6 +961,17 @@ private data class ReferencesReport(
     val truncated: Boolean,
     val files: List<ReferenceFile>,
     /** Why the position may not be where the caller meant; left out when it is. */
+    val note: String?,
+)
+
+private data class TypeHierarchyReport(
+    val type: TypeHierarchyNode,
+    /** Nearest first. */
+    val supertypes: List<TypeHierarchyNode>,
+    /** Breadth first, each naming the type it derives from directly. */
+    val subtypes: List<TypeHierarchyNode>,
+    val truncated: Boolean,
+    /** Why the result may be incomplete; left out when it is not. */
     val note: String?,
 )
 

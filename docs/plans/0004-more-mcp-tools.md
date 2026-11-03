@@ -12,11 +12,11 @@ context: ../CONTRIBUTING.md
 
 ## TL;DR
 
-The plugin serves six MCP tools through Rider's built-in MCP server - problems, API search, API
-details, status, symbol search and references. Three more are worth having, in this order: where an
-AngelScript symbol is declared in C++, the type hierarchy of script classes, and which Blueprint
-assets derive from a script class. Each is backed by something the plugin or the language server
-can already do; what is missing is the tool around it.
+The plugin serves seven MCP tools through Rider's built-in MCP server - problems, API search, API
+details, status, symbol search, references and type hierarchy. One more is worth having: where an
+AngelScript symbol is declared in C++. The plugin can already find it; what is missing is the tool
+around it. The Blueprints deriving from a script class need no tool of the plugin's: Rider's own
+`get_class_hierarchy` finds them, given the script subclasses the type hierarchy tool lists.
 
 ## Why it matters
 
@@ -47,6 +47,10 @@ cannot tell a same-named member of another class from the one it means.
   forms `angelscript_search_api` takes. References get their line's text and, from the plugin's
   parse tree, whether they read or write (`AngelScriptAccess`); the file asked about is analysed
   again first, as `angelscript_get_problems` does.
+- `angelscript_get_type_hierarchy` over `typeHierarchy/supertypes` and `typeHierarchy/subtypes`.
+  Each answers one level, and the server finds the type an item stands for by the name in its
+  `data` alone (`TypeHierarchyBundleTest`), so the walk starts from an item made of a name: a
+  type C++ declares has no position to prepare one from.
 - `AngelScriptDiagnosticsStore` keeps every diagnostic the server publishes, for all files.
 - `AngelScriptUnrealStatusService.query()` answers "can the server analyse anything" without
   starting it, and the toolset's `awaitTypes()` starts it and waits for a type database.
@@ -61,14 +65,32 @@ cannot tell a same-named member of another class from the one it means.
    in the way is that `AngelScriptCppNavigationHandler` does both inside a `GotoDeclarationHandler`,
    so the lookup has to be split from the navigation first. The tool has no caret waiting on it, so
    it can run the full search instead of the synchronous budget.
-2. **Type hierarchy** - supertypes and subtypes of a script class over the type hierarchy
-   requests, which the server implements. The two other semantic queries landed first.
-3. **`angelscript_find_assets(className)`** - the Blueprint assets that derive from a script class,
-   for judging the impact of a change before making it. The server has
-   `GetAssetsImplementing(className)`, but only the code lens reaches it, so it needs a custom
-   request added in `scripts/bundle-lsp.js`, with its `✓` check.
 
 Checked and not needed:
+
+- **`angelscript_find_assets(className)`**, the Blueprints and data assets deriving from a script
+  class, over the asset database the editor sends the server (`GetAssetsImplementing`). Rider's
+  tools answer the same question better; tried on a live project on 2026-11-03:
+  - `get_class_hierarchy` and `search_assets` (whose default source is Rider's index of `.uasset`
+    files) find the Blueprints deriving from a script class, given its name as script writes it,
+    without the editor running. By their code they follow a Blueprint's own subclasses too; the
+    project had none to try. They miss a Blueprint under a script *subclass*: they follow
+    subclasses through the C++ symbol index only. For a class with three Blueprints of its own and
+    four under its script subclasses, they listed three; asked for a subclass, they found its.
+  - They miss data assets, which are not Blueprints. `search_assets` with `source: "editor"`
+    finds those through the editor's asset registry, but only given the class name without its
+    prefix: with it, the class is not found, the filter is dropped, and unrelated assets come back
+    labelled with the class asked for. Editor mode never lists Blueprints, whose asset class is
+    `Blueprint`.
+  - The server's database is no better and needs the editor connected: it records a Blueprint
+    under its nearest script ancestor only, and is looked up by exact name, so it misses the
+    Blueprints under a subclass too. The editor's `NativeParentClass` tag names that ancestor,
+    since the engine counts script classes as native.
+  - `ue_execute_python` with the asset registry's `get_derived_class_names` finds all of them,
+    with the editor running.
+
+  So `angelscript_get_type_hierarchy` lists a class's script subclasses, and its description sends
+  agents to `get_class_hierarchy` with each, and to editor-mode `search_assets` for data assets.
 
 - **Debugging.** The DAP session runs through lsp4ij on the platform's XDebugger, which is what
   Rider's `xdebug_*` tools drive. Try those against an AngelScript session before building
@@ -117,3 +139,5 @@ Checked and not needed:
 - 2026-11-03 - `angelscript_search_symbols` and `angelscript_find_references` landed, checked
   against the bundled server: members are told apart by their class, and a method's overrides and
   `Super::` calls are found.
+- 2026-11-03 - `angelscript_get_type_hierarchy` landed; `angelscript_find_assets` dropped after
+  Rider's asset tools were tried against a live project.

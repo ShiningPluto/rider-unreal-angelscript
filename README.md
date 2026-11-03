@@ -44,6 +44,7 @@ When Rider's MCP server is enabled (**Settings** → **Tools** → **MCP Server*
 - **`angelscript_search_api`** / **`angelscript_get_api_details`** - The API script can call, as the API tool window shows it: Unreal's, inherited members included (`ACharacter.Jump`), and what script declares, under the names and call syntax script uses
 - **`angelscript_search_symbols`** - Where script declares a class, function or variable, by file and line; Rider's `search_symbol` does not see script
 - **`angelscript_find_references`** - Every use in script of the symbol at a position, telling a member from a same-named member of another class, with whether each reads or writes it
+- **`angelscript_get_type_hierarchy`** - What a class derives from and what derives from it, script's classes and C++'s; for the Blueprints deriving from a script class, pass it and each script subclass to Rider's `get_class_hierarchy`
 - **`angelscript_status`** - Whether analysis is available, and why not when it is not
 
 ## Requirements

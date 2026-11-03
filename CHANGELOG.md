@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The MCP tools `angelscript_search_api` and `angelscript_get_api_details` answer from the API tool window's type database, and `angelscript_get_api_details` no longer fails for every item.
 - Searching `ACharacter.Get` covers what ACharacter inherits as well, in the API tool window and through MCP, and each such result names the class that declares it.
 - `angelscript_get_problems` analyses a file again before answering for it, so an agent sees the problems of its edit rather than those from before.
-- Two new MCP tools: `angelscript_search_symbols` finds where script declares something, and `angelscript_find_references` finds every use of a symbol, telling a member from a same-named member of another class.
+- Three new MCP tools: `angelscript_search_symbols` finds where script declares something, `angelscript_find_references` finds every use of a symbol, telling a member from a same-named member of another class, and `angelscript_get_type_hierarchy` lists what a class derives from and what derives from it.
 
 ### Added
 - MCP tool `angelscript_search_symbols`: the classes, structs, enums, namespaces, functions and variables script declares, with the file and line of each.
@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - A function's overrides in subclasses, and the calls to them, are included.
   - Each reference to a variable or property says whether it reads or writes it, as Find Usages groups them.
   - The file asked about is analysed again first, as `angelscript_get_problems` does, so the position matches the file as it is now.
+- MCP tool `angelscript_get_type_hierarchy`: a class's or struct's supertypes up to UObject, and its subtypes at every depth, script's and C++'s, with where script declares each.
+  - It takes a type's name, so it works for C++ classes as well as script's.
+  - Its description tells agents how to find the Blueprints and data assets deriving from a script class with Rider's own asset tools, which do not follow script subclasses themselves.
 
 ### Changed
 - `angelscript_search_api` searches what the API tool window does, instead of asking the language server.
