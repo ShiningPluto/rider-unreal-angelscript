@@ -13,6 +13,8 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.project.IndexNotReadyException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -25,6 +27,8 @@ import com.scriptacus.riderunrealangelscript.lsp.AngelScriptDiagnosticsStore
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptFileUriSupport
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServer
 import com.scriptacus.riderunrealangelscript.lsp.AngelScriptLanguageServerFactory
+import com.scriptacus.riderunrealangelscript.navigation.CppDeclarationSearch
+import com.scriptacus.riderunrealangelscript.navigation.CppTarget
 import com.scriptacus.riderunrealangelscript.services.AngelScriptApiService
 import com.scriptacus.riderunrealangelscript.settings.AngelScriptLspSettings
 import com.scriptacus.riderunrealangelscript.util.GlobMatcher
@@ -104,6 +108,12 @@ class AngelScriptMcpToolset : McpToolset {
          * analysed: its queue sends one message after another in moments, and cannot be waited for.
          */
         const val OPEN_FILE_SETTLE_MS = 200L
+
+        /** A first C++ lookup reads a dozen engine headers at most; a repeat finds the file in a cache. */
+        const val CPP_SEARCH_MS = 20_000L
+
+        /** How many places a function is listed at when only its name says where to look. */
+        const val CPP_CANDIDATES = 3
 
         /** Finding references reads and resolves every module that may use the symbol, a few at a time. */
         const val REFERENCES_TIMEOUT_MS = 60_000L
@@ -399,7 +409,11 @@ class AngelScriptMcpToolset : McpToolset {
         |markdown. For a function, also whether it is a blueprint event, a script mixin, or known to
         |C++ by another name; for a class or struct, what it inherits from, how many members it
         |declares and inherits, and its constructors; for an enum, its values. Says which file
-        |declares what script declares.
+        |declares what script declares, and for what Unreal declares, the C++ header and line, for
+        |reading its implementation and comments; that needs Rider to have indexed Unreal's C++
+        |sources, as it does for a project open as an Unreal project. A function in a script
+        |namespace such as `System::` records no C++ class, so for those it lists where C++ declares
+        |or binds that name instead.
     """)
     suspend fun getApiDetails(
         @McpDescription("The item's `ref`, exactly as angelscript_search_api returned it.")
@@ -416,7 +430,42 @@ class AngelScriptMcpToolset : McpToolset {
                     "an earlier search may name something that has since been renamed or removed, so search again." +
                     if (api.scriptListed) "" else " $SCRIPT_MISSING"
             )
-        return ApiDetailsMarkdown.of(symbol, api.database, api.script, scriptPath(project))
+        val cpp = CppQuery.of(symbol, api.database)?.let { cppDeclaration(project, it) }
+        return ApiDetailsMarkdown.of(symbol, api.database, api.script, scriptPath(project), cpp)
+    }
+
+    /** Where C++ declares what [query] names, from the project's C++ sources. */
+    private suspend fun cppDeclaration(project: Project, query: CppQuery): CppDeclaration {
+        val deadline = System.nanoTime() + CPP_SEARCH_MS * 1_000_000
+        return withContext(Dispatchers.Default) {
+            readAction {
+                if (DumbService.isDumb(project)) return@readAction CppDeclaration.Indexing
+                try {
+                    when (query) {
+                        is CppQuery.Symbol -> CppDeclarationSearch.find(project, query.symbol, deadline)
+                            ?.let { CppDeclaration.Found(cppLocation(project, it)) }
+                        is CppQuery.Name -> CppDeclarationSearch.findByName(project, query.name, CPP_CANDIDATES, deadline)
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { found -> CppDeclaration.ByName(query.name, found.map { cppLocation(project, it) }) }
+                    } ?: unfound(project)
+                } catch (e: IndexNotReadyException) {
+                    CppDeclaration.Indexing
+                }
+            }
+        }
+    }
+
+    /**
+     * Why nothing was found. Asked only then, so a check that is wrong about the engine can only
+     * change what a miss says, never hide a declaration that was found.
+     */
+    private fun unfound(project: Project): CppDeclaration =
+        if (CppDeclarationSearch.indexesEngine(project)) CppDeclaration.NotFound else CppDeclaration.NoEngineSources
+
+    /** `path:line`, the path relative to the project when it is in it, as the engine's sources are not. */
+    private fun cppLocation(project: Project, target: CppTarget): String {
+        val path = FileUtil.toSystemDependentName(AngelScriptDiagnosticsStore.relativeTo(project.basePath, target.file.path))
+        return CppDeclarationSearch.lineOf(target)?.let { "$path:$it" } ?: path
     }
 
     @McpTool(name = "angelscript_search_symbols")
@@ -616,7 +665,8 @@ class AngelScriptMcpToolset : McpToolset {
         |lists the Blueprints deriving from a class but does not follow script subclasses, so pass it
         |the class and each subtype here that has a `declaredIn`. The data assets of a script class
         |come from Rider's search_assets with source "editor" and the class name without its A or U
-        |prefix; given the prefix, it finds no class and lists unrelated assets.
+        |prefix; given the prefix, it finds no class and lists unrelated assets. Both answer only
+        |while Rider has the project open as an Unreal project, not as a folder.
     """)
     suspend fun getTypeHierarchy(
         @McpDescription("The type's name as script writes it, prefix included, e.g. \"AMyCharacter\" or \"UMyHealthComponent\".")

@@ -13,10 +13,11 @@ context: ../CONTRIBUTING.md
 ## TL;DR
 
 The plugin serves seven MCP tools through Rider's built-in MCP server - problems, API search, API
-details, status, symbol search, references and type hierarchy. One more is worth having: where an
-AngelScript symbol is declared in C++. The plugin can already find it; what is missing is the tool
-around it. The Blueprints deriving from a script class need no tool of the plugin's: Rider's own
-`get_class_hierarchy` finds them, given the script subclasses the type hierarchy tool lists.
+details, status, symbol search, references and type hierarchy - and the API details say where C++
+declares what Unreal declares. One tool is left, and only if agents need it: the C++ declaration of
+whatever is at a script position. The Blueprints deriving from a script class need no tool of the
+plugin's: Rider's own `get_class_hierarchy` finds them, given the script subclasses the type
+hierarchy tool lists.
 
 ## Why it matters
 
@@ -51,6 +52,16 @@ cannot tell a same-named member of another class from the one it means.
   Each answers one level, and the server finds the type an item stands for by the name in its
   `data` alone (`TypeHierarchyBundleTest`), so the walk starts from an item made of a name: a
   type C++ declares has no position to prepare one from.
+- `angelscript_get_api_details` gives the header and line of what Unreal declares, through
+  `CppDeclarationSearch`, the search go to declaration uses, moved out of its handler for this.
+  The type database records a member's class and its C++ name where script's differs
+  (`K2_GetActorLocation`, `ReceiveBeginPlay`), so `CppQuery` looks those up as Ctrl+Click does.
+  What a script namespace such as `System::` holds comes from classes it does not record, so for
+  those the details list where C++ binds or declares the name: `System::SweepSingleByProfile` is
+  bound in `Bind_WorldCollision.cpp` and declared on `UWorld`. The search reads only what Rider
+  has indexed, and a project with only script may be opened as a folder, with none of the engine's
+  sources in it; when nothing is found and the index has no `CoreMinimal.h`, the details say that
+  instead of calling each item missing. Not yet tried on such a project.
 - `AngelScriptDiagnosticsStore` keeps every diagnostic the server publishes, for all files.
 - `AngelScriptUnrealStatusService.query()` answers "can the server analyse anything" without
   starting it, and the toolset's `awaitTypes()` starts it and waits for a type database.
@@ -59,12 +70,19 @@ cannot tell a same-named member of another class from the one it means.
 
 ## What is missing
 
-1. **`angelscript_find_cpp_declaration(filePath, line, column)`** - the C++ header and line where
-   the symbol at a script position is declared. `angelscript/getCppSymbol` already returns the
-   class, the member and the ancestry, and `CppSourceSearch` already finds the declaration. What is
-   in the way is that `AngelScriptCppNavigationHandler` does both inside a `GotoDeclarationHandler`,
-   so the lookup has to be split from the navigation first. The tool has no caret waiting on it, so
-   it can run the full search instead of the synchronous budget.
+1. **`angelscript_find_cpp_declaration(filePath, line, column)`**, if agents turn out to need it -
+   the C++ declaration of whatever is at a script position. Over the API details it saves knowing
+   the type of the expression a member is called on: `angelscript/getCppSymbol` resolves it, and
+   `CppDeclarationSearch.find` takes it from there. Wait for agents to be seen stuck on that. It
+   would add nothing for a namespace function, where `getCppSymbol` finds no type and answers
+   nothing, nor at a script override of a blueprint event, where `GetDefinition` finds the
+   override first.
+
+   Checked against a live project on 2026-11-03, Rider's own tools cannot do this part: on a script
+   position `get_symbol_info` gives the script signature and no location; `search_symbol` finds
+   C++ by its C++ name only (`ActorLocation` finds nothing related to `GetActorLocation`), lists
+   every class's member of that name unless given `AActor::Name`, and answered with files but no
+   lines.
 
 Checked and not needed:
 
@@ -89,8 +107,13 @@ Checked and not needed:
   - `ue_execute_python` with the asset registry's `get_derived_class_names` finds all of them,
     with the editor running.
 
+  - Both tools answer only while Rider has the project open as an Unreal project: UnrealLink's
+    provider checks `UnrealHost.isUnrealEngineSolution`, and without it they fail with "No game
+    engine asset index available for this project".
+
   So `angelscript_get_type_hierarchy` lists a class's script subclasses, and its description sends
-  agents to `get_class_hierarchy` with each, and to editor-mode `search_assets` for data assets.
+  agents to `get_class_hierarchy` with each, and to editor-mode `search_assets` for data assets,
+  saying when those can answer.
 
 - **Debugging.** The DAP session runs through lsp4ij on the platform's XDebugger, which is what
   Rider's `xdebug_*` tools drive. Try those against an AngelScript session before building
@@ -141,3 +164,6 @@ Checked and not needed:
   `Super::` calls are found.
 - 2026-11-03 - `angelscript_get_type_hierarchy` landed; `angelscript_find_assets` dropped after
   Rider's asset tools were tried against a live project.
+- 2026-11-03 - The API details give the C++ declaration; the position-based tool waits for a need.
+- 2026-11-04 - Gone through for a project with only script: the API details say when Rider has not
+  indexed the engine, and the type hierarchy's pointer to Rider's asset tools says when they answer.

@@ -10,6 +10,7 @@ applies-to:
   language-server: v1.9.4
 touches:
   - src/rider/main/kotlin/com/scriptacus/riderunrealangelscript/navigation/CppSourceSearch.kt
+  - src/rider/main/kotlin/com/scriptacus/riderunrealangelscript/navigation/CppDeclarationSearch.kt
   - src/rider/main/kotlin/com/scriptacus/riderunrealangelscript/navigation/AngelScriptCppNavigationHandler.kt
   - scripts/bundle-lsp.js
 verified-by:
@@ -80,7 +81,8 @@ the UE5 large-world aliases (`FVector` is a macro-made name for `TVector`, which
 also searches for the `T`-prefixed template), properties as well as functions, and the script
 signatures bound from C++ as string literals in `Bind_*.cpp`.
 
-`AngelScriptCppNavigationHandler` orders the search by how certain each step is:
+`CppDeclarationSearch`, which go to declaration and `angelscript_get_api_details` share, orders the
+search by how certain each step is:
 
 1. files that name **both** the type and the member - the index is asked for each word and the
    answers intersected, which is what makes a declaring file findable when neither its name nor its
@@ -153,3 +155,8 @@ trip per candidate would cost more and buy the same answer.
 - 2026-10-26 - `getCppSymbol` and `navigateToCpp` ask `GetDefinition` first. Ctrl-clicking a method
   of a `UScriptWorldSubsystem` subclass opened `ScriptWorldSubsystem.h`, for every script method of
   every script class, since stage one started working again on 2026-09-20.
+- 2026-11-03 - The search moved out of the navigation handler into `CppDeclarationSearch`, unchanged,
+  so `angelscript_get_api_details` can give the header and line. It gained `findByName` for what a
+  script namespace such as `System::` holds, whose class the type database does not record: in each
+  candidate file, the bound script signature first, then a declaration of the name. Checked on the
+  engine's own `World.h` and `Bind_WorldCollision.cpp` for `System::SweepSingleByProfile`.

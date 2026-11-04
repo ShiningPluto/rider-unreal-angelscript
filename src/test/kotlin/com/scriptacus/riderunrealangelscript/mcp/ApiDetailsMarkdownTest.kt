@@ -62,6 +62,37 @@ class ApiDetailsMarkdownTest : UsefulTestCase() {
         assertEquals("```angelscript\nEMode::Fly\n```\n", details(listOf("property", "EMode", "::", "Fly")))
     }
 
+    fun testWhereCppDeclaresItIsSaid() {
+        val beginPlay = member("BeginPlay")
+        assertEquals(
+            """
+            |```angelscript
+            |void AActor.BeginPlay()
+            |```
+            |
+            |- Blueprint event: script can override it, but not call it.
+            |- C++ name: `ReceiveBeginPlay`
+            |- C++ declaration: `Engine/Classes/GameFramework/Actor.h:812`
+            |""".trimMargin(),
+            ApiDetailsMarkdown.member(beginPlay, path, CppDeclaration.Found("Engine/Classes/GameFramework/Actor.h:812")),
+        )
+        assertTrue(
+            ApiDetailsMarkdown.member(member("Math::Lerp"), path, CppDeclaration.ByName("Lerp", listOf("Math/Lerp.h:3", "Bind_Math.cpp:40"))).endsWith(
+                "- C++ declaration: which class it belongs to is not recorded; `Lerp` is declared or bound to script at " +
+                    "`Math/Lerp.h:3`, `Bind_Math.cpp:40`\n"
+            )
+        )
+        assertTrue(ApiDetailsMarkdown.member(beginPlay, path, CppDeclaration.NotFound).endsWith("- C++ declaration: not found in the project's C++ sources\n"))
+        assertTrue(ApiDetailsMarkdown.member(beginPlay, path, CppDeclaration.Indexing).contains("not looked up while Rider is indexing"))
+        assertTrue(
+            ApiDetailsMarkdown.member(beginPlay, path, CppDeclaration.NoEngineSources)
+                .contains("- C++ declaration: Rider has not indexed Unreal's C++ sources for this project")
+        )
+
+        val pawn = ApiDetailsMarkdown.of(ApiItems.resolve(listOf("type", "APawn"), database, script)!!, database, script, path, CppDeclaration.Found("Pawn.h:40"))
+        assertTrue(pawn, pawn.contains("- Inherits: AActor → UObject\n- C++ declaration: `Pawn.h:40`\n"))
+    }
+
     fun testAClassSaysWhatItInheritsAndHowToListItsMembers() {
         assertEquals(
             """

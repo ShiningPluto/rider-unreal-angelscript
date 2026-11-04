@@ -29,14 +29,21 @@ internal object ApiDetailsMarkdown {
     /** How many of the files script declares a namespace's members in are named. */
     private const val FILE_LIMIT = 8
 
-    fun of(symbol: UnrealSymbol, database: UnrealTypeDatabase, script: ScriptDeclarations, path: (ScriptOrigin) -> String): String =
+    /** [cpp] is where C++ declares [symbol], looked up beforehand; null leaves it unsaid. */
+    fun of(
+        symbol: UnrealSymbol,
+        database: UnrealTypeDatabase,
+        script: ScriptDeclarations,
+        path: (ScriptOrigin) -> String,
+        cpp: CppDeclaration? = null,
+    ): String =
         when (symbol) {
-            is UnrealMember -> member(symbol, path)
-            is UnrealType -> type(symbol, database, script)
+            is UnrealMember -> member(symbol, path, cpp)
+            is UnrealType -> type(symbol, database, script, cpp)
             is UnrealNamespace -> namespace(symbol, database, script, path)
         }
 
-    fun member(member: UnrealMember, path: (ScriptOrigin) -> String): String = buildString {
+    fun member(member: UnrealMember, path: (ScriptOrigin) -> String, cpp: CppDeclaration? = null): String = buildString {
         code(declaration(member).toString())
         documentation(member.documentation)
         val facts = mutableListOf<String>()
@@ -50,8 +57,21 @@ internal object ApiDetailsMarkdown {
             }
             member.unrealName?.takeIf { it != member.name }?.let { facts += "C++ name: `$it`" }
         }
+        cpp?.let { facts += cppFact(it) }
         member.scriptOrigin?.let { facts += "Declared in: `${path(it)}`" }
         facts(facts)
+    }
+
+    private fun cppFact(cpp: CppDeclaration): String = when (cpp) {
+        is CppDeclaration.Found -> "C++ declaration: `${cpp.location}`"
+        is CppDeclaration.ByName ->
+            "C++ declaration: which class it belongs to is not recorded; `${cpp.name}` is declared or bound to script at " +
+                cpp.locations.joinToString(", ") { "`$it`" }
+        CppDeclaration.NotFound -> "C++ declaration: not found in the project's C++ sources"
+        CppDeclaration.NoEngineSources ->
+            "C++ declaration: Rider has not indexed Unreal's C++ sources for this project, as when it is opened as a folder " +
+                "rather than as an Unreal project, so none of what Unreal declares can be found"
+        CppDeclaration.Indexing -> "C++ declaration: not looked up while Rider is indexing; ask again once it has finished"
     }
 
     private fun declaration(member: UnrealMember): UnrealDeclaration = when (member) {
@@ -59,7 +79,7 @@ internal object ApiDetailsMarkdown {
         is UnrealProperty -> UnrealDeclaration.of(member)
     }
 
-    fun type(type: UnrealType, database: UnrealTypeDatabase, script: ScriptDeclarations): String = buildString {
+    fun type(type: UnrealType, database: UnrealTypeDatabase, script: ScriptDeclarations, cpp: CppDeclaration? = null): String = buildString {
         code(UnrealDeclaration.of(type).toString())
         documentation(type.documentation)
 
@@ -68,6 +88,7 @@ internal object ApiDetailsMarkdown {
         if (supertypes.isNotEmpty()) {
             facts += "Inherits: " + supertypes.joinToString(" → ") { it.name }
         }
+        cpp?.let { facts += cppFact(it) }
         when (type.kind) {
             UnrealTypeKind.ENUM -> {
                 val values = type.properties.map { it.name }

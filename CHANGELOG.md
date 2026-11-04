@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Searching `ACharacter.Get` covers what ACharacter inherits as well, in the API tool window and through MCP, and each such result names the class that declares it.
 - `angelscript_get_problems` analyses a file again before answering for it, so an agent sees the problems of its edit rather than those from before.
 - Three new MCP tools: `angelscript_search_symbols` finds where script declares something, `angelscript_find_references` finds every use of a symbol, telling a member from a same-named member of another class, and `angelscript_get_type_hierarchy` lists what a class derives from and what derives from it.
+- `angelscript_get_api_details` gives the C++ header and line of what Unreal declares, so an agent can read its implementation.
 
 ### Added
 - MCP tool `angelscript_search_symbols`: the classes, structs, enums, namespaces, functions and variables script declares, with the file and line of each.
@@ -23,7 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - The file asked about is analysed again first, as `angelscript_get_problems` does, so the position matches the file as it is now.
 - MCP tool `angelscript_get_type_hierarchy`: a class's or struct's supertypes up to UObject, and its subtypes at every depth, script's and C++'s, with where script declares each.
   - It takes a type's name, so it works for C++ classes as well as script's.
-  - Its description tells agents how to find the Blueprints and data assets deriving from a script class with Rider's own asset tools, which do not follow script subclasses themselves.
+  - Its description tells agents how to find the Blueprints and data assets deriving from a script class with Rider's own asset tools, which do not follow script subclasses themselves and answer only while the project is open as an Unreal project.
 
 ### Changed
 - `angelscript_search_api` searches what the API tool window does, instead of asking the language server.
@@ -31,6 +32,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - A class matches by its own name, not by its members': `Actor` used to list every member of every class with Actor in its name, 4,107 items in one project.
   - Results include classes, structs, enums and namespaces, with a function's return type or a property's type, and the file of what script declares.
   - Script's results are ranked with Unreal's rather than mixed in by the server's order.
+- `angelscript_get_api_details` gives where C++ declares what Unreal declares, found the way Ctrl+Click on it in script finds it.
+  - A member is looked up in its class by its C++ name, which the type database records where script's differs: `ReceiveBeginPlay` for `BeginPlay`.
+  - A function of a script namespace such as `System::` has no class recorded, so the details list where C++ binds it to script or declares that name instead.
+  - When Rider has not indexed Unreal's C++ sources, as for a project with only script opened as a folder, the details say so rather than calling every item not found.
 - `angelscript_get_api_details` returns the declaration in a code block, the C++ comment as written, and what the declaration leaves out.
   - For a function: whether it is a blueprint event or a script mixin, its C++ name, and the file script declares it in.
   - For a class or struct: what it inherits from, how many members it declares and inherits, and its constructors. For an enum: its values.
@@ -52,6 +57,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Internal
 - The language server interface drops upstream's `angelscript/getAPI`, `getAPISearch` and `getAPIDetails`, which nothing sends any more.
+- The C++ declaration search moved out of the go-to-declaration handler into `CppDeclarationSearch`, unchanged, so the MCP API details can use it.
 - A build without `pluginVersion` is marked `-SNAPSHOT` instead of `-dev`, such as `1.0.3-SNAPSHOT`, so the IDE offers the release it precedes as an update.
   - The IDE ranks a word it does not know above the version it follows, so it took `1.0.2-dev` to be newer than `1.0.2` and never offered 1.0.2. `SNAPSHOT` is one it ranks below.
 

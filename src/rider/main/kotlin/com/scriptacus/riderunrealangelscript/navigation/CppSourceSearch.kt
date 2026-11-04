@@ -182,6 +182,23 @@ class CppSource(private val text: String) {
         Regex("\\b" + Regex.escape(name) + "\\b").findAll(text).any { isCode[it.range.first] }
 
     /**
+     * Where a function or variable [name] is, with nothing to say which class it belongs to, or -1:
+     * the string it is bound to script by, which is what script calls, and else its declaration
+     * anywhere in the file.
+     */
+    fun findNamed(name: String): Int =
+        findScriptBinding(name).takeIf { it >= 0 } ?: findMemberDeclaration(null, name)
+
+    /** The 1-based line [offset] is on. */
+    fun lineAt(offset: Int): Int {
+        var line = 1
+        for (i in 0 until minOf(offset, text.length)) {
+            if (text[i] == '\n') line++
+        }
+        return line
+    }
+
+    /**
      * Where [name] is bound to script from C++, or -1.
      *
      * Global functions and mixin methods often have no C++ declaration under that name at all: the

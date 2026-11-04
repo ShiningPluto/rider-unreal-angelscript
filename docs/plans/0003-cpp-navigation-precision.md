@@ -50,8 +50,8 @@ line - would extend the chain where the database stops.
 
 ### Cache invalidation
 
-`declarationFileCache` maps `class|member` to the file the declaration was found in, and nothing
-calls `clearCaches()`. Entries self-heal when the declaration is no longer in the cached file, so the
+`CppDeclarationSearch.declarationFileCache` maps `class|member` to the file the declaration was
+found in, and nothing calls `clearCaches()`. Entries self-heal when the declaration is no longer in the cached file, so the
 cost is a wasted read rather than a wrong jump, but a file deleted or moved is noticed only by
 accident.
 

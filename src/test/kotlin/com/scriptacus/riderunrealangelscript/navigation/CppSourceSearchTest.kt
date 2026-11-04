@@ -286,6 +286,37 @@ class CppSourceSearchTest : UsefulTestCase() {
         assertFalse(CppSource("void Take(const FTransformFragment& F);\n").mentions("FTransform"))
     }
 
+    /**
+     * A function of a script namespace such as `System::` comes from a C++ class nothing records,
+     * so only its name says where to look: what script calls is the bound signature, and else the
+     * declaration of that name is the best there is.
+     */
+    fun testANameIsFoundWhereScriptBindsItBeforeWhereCppDeclaresIt() {
+        val bound = """
+            void SweepSingleByProfile_Unused();
+            FAngelscriptBinds::BindGlobalFunction(
+                "bool SweepSingleByProfile(FHitResult& OutHit, FName ProfileName)",
+                [](FHitResult& OutHit, FName ProfileName) { return false; });
+        """.trimIndent()
+        assertAt(bound, CppSource(bound).findNamed("SweepSingleByProfile"), "SweepSingleByProfile(FHitResult& OutHit")
+
+        val declared = "class UWorld\n{\npublic:\n    bool SweepSingleByProfile(FHitResult& OutHit, FName ProfileName) const;\n};\n"
+        val source = CppSource(declared)
+        val at = source.findNamed("SweepSingleByProfile")
+        assertAt(declared, at, "SweepSingleByProfile(FHitResult& OutHit, FName ProfileName) const")
+        assertEquals(4, source.lineAt(at))
+
+        assertEquals(-1, CppSource("void SweepSingle();\n").findNamed("SweepSingleByProfile"))
+    }
+
+    fun testLinesAreCountedFromOne() {
+        val source = CppSource("a\nb\n\nc")
+        assertEquals(1, source.lineAt(0))
+        assertEquals(2, source.lineAt(2))
+        assertEquals(4, source.lineAt(5))
+        assertEquals(4, source.lineAt(99))
+    }
+
     fun testBuildOutputIsNeverACandidate() {
         assertTrue(CppFileRanking.isBuildArtifact("F:/Project/Intermediate/Build/Win64/UHT/Actor.generated.h"))
         assertTrue(CppFileRanking.isBuildArtifact("F:\\Project\\Binaries\\Win64\\Foo.h"))
