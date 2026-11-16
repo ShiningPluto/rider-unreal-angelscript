@@ -54,10 +54,10 @@ class AngelScriptColorSettingsPage : ColorSettingsPage {
 
                 <keyword>delegate</keyword> <type_keyword>void</type_keyword> <sem_delegate>FOnEquipped</sem_delegate><parentheses>(</parentheses><parentheses>)</parentheses><semicolon>;</semicolon>
 
-                <unreal_macro>UCLASS</unreal_macro><parentheses>(</parentheses>Abstract<parentheses>)</parentheses>
+                <unreal_macro>UCLASS</unreal_macro><parentheses>(</parentheses><macro_specifier>Abstract</macro_specifier><parentheses>)</parentheses>
                 <keyword>class</keyword> <sem_actor>AWeapon</sem_actor> <operator>:</operator> <sem_actor>AActor</sem_actor>
                 <braces>{</braces>
-                    <unreal_macro>UPROPERTY</unreal_macro><parentheses>(</parentheses>BlueprintReadWrite<parentheses>)</parentheses>
+                    <unreal_macro>UPROPERTY</unreal_macro><parentheses>(</parentheses><macro_specifier>BlueprintReadWrite</macro_specifier><parentheses>)</parentheses>
                     <sem_struct>FWeaponData</sem_struct> <sem_member_var>Data</sem_member_var><semicolon>;</semicolon>
 
                     <unreal_macro>UPROPERTY</unreal_macro><parentheses>(</parentheses><parentheses>)</parentheses>
@@ -116,6 +116,7 @@ class AngelScriptColorSettingsPage : ColorSettingsPage {
             "comma" to AngelScriptSyntaxHighlighter.COMMA,
             "semicolon" to AngelScriptSyntaxHighlighter.SEMICOLON,
             "unreal_macro" to AngelScriptSyntaxHighlighter.UNREAL_MACRO,
+            "macro_specifier" to AngelScriptSyntaxHighlighter.MACRO_SPECIFIER,
             "preprocessor" to AngelScriptSyntaxHighlighter.PREPROCESSOR,
 
             // Semantic token mappings
@@ -178,6 +179,7 @@ class AngelScriptColorSettingsPage : ColorSettingsPage {
 
             // Syntactic Highlighting - Unreal Specific
             AttributesDescriptor("Unreal Specific//Unreal Macro", AngelScriptSyntaxHighlighter.UNREAL_MACRO),
+            AttributesDescriptor("Unreal Specific//Macro Specifier", AngelScriptSyntaxHighlighter.MACRO_SPECIFIER),
             AttributesDescriptor("Unreal Specific//Preprocessor Directive", AngelScriptSyntaxHighlighter.PREPROCESSOR),
 
             // Semantic Highlighting (LSP) - Types
