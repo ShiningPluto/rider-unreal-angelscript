@@ -14,6 +14,19 @@
     <!-- AngelScript tools for AI agents; the plugin works without the MCP server, so it stays optional -->
     <depends optional="true" config-file="angelscript-mcp.xml">com.intellij.mcpServer</depends>
 
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Notifications shown when a code lens command cannot reach the Unreal editor -->
+        <notificationGroup id="AngelScript" displayType="BALLOON"/>
+        <!-- LSP commitCharacters, which lsp4ij does not implement -->
+        <typedHandler implementation="com.scriptacus.riderunrealangelscript.actions.AngelScriptCommitCharacterHandler"/>
+        <!-- Types ';' after the closing parenthesis when the caret is still inside it -->
+        <typedHandler implementation="com.scriptacus.riderunrealangelscript.actions.AngelScriptSemicolonHandler"/>
+        <!-- Pairs typed quotes and steps over an existing closing quote, as Rider's C# editor does -->
+        <typedHandler implementation="com.scriptacus.riderunrealangelscript.actions.AngelScriptQuoteHandler"/>
+        <!-- Removes both halves of a quote or bracket pair when one is deleted -->
+        <backspaceHandlerDelegate implementation="com.scriptacus.riderunrealangelscript.actions.AngelScriptBackspaceHandler"/>
+    </extensions>
+
     <description>
         <![CDATA[
         AngelScript language support for Unreal Engine projects that use
@@ -51,6 +64,9 @@
         <lang.syntaxHighlighterFactory language="angelscript" implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptSyntaxHighlighterFactory"/>
         <!-- Color settings page allows users to customize syntax highlighting colors -->
         <colorSettingsPage implementation="com.scriptacus.riderunrealangelscript.lang.AngelScriptColorSettingsPage"/>
+        <!-- Colours Unreal macro specifiers (DefaultComponent, EditAnywhere, ...) using the parse tree -->
+        <annotator language="angelscript"
+                   implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptMacroSpecifierAnnotator"/>
         <!-- Brace matching for {}, [], and () -->
         <lang.braceMatcher language="angelscript" implementationClass="com.scriptacus.riderunrealangelscript.lang.AngelScriptBraceMatcher"/>
         <!-- Comment actions (Ctrl+/ for line, Ctrl+Shift+/ for block) -->
@@ -80,6 +96,8 @@
                 language="angelscript"
                 order="first, before LSPCompletionContributor"
                 implementationClass="com.scriptacus.riderunrealangelscript.lsp.AngelScriptCompletionContributor"/>
+
+
 
         <!-- Navigation handler: filters excluded files and provides C++ navigation -->
         <gotoDeclarationHandler
@@ -170,6 +188,26 @@
                 class="com.scriptacus.riderunrealangelscript.actions.AngelScriptParenAction"
                 text="AngelScript: Insert Parentheses"
                 description="Handles parenthesis insertion from LSP completion (currently no-op, relies on Rider's default behavior)"/>
+
+        <!-- VS Code command the server uses for its file-template code lenses ("Create Actor", ...) -->
+        <action id="editor.action.insertSnippet"
+                class="com.scriptacus.riderunrealangelscript.actions.InsertSnippetCommandAction"
+                text="AngelScript: Insert File Template"
+                description="Inserts a code snippet sent by the AngelScript language server"/>
+
+        <!-- Code lens commands: saved and forwarded to the Unreal editor through the language server -->
+        <action id="angelscript.saveAndCreateBlueprint"
+                class="com.scriptacus.riderunrealangelscript.actions.SaveAndCreateBlueprintCommandAction"
+                text="AngelScript: Create Asset"
+                description="Saves the script and asks the Unreal editor to create the asset for the class"/>
+        <action id="angelscript.saveAndEditAsset"
+                class="com.scriptacus.riderunrealangelscript.actions.SaveAndEditAssetCommandAction"
+                text="AngelScript: Edit Asset in Unreal"
+                description="Saves the script and asks the Unreal editor to open the asset"/>
+        <action id="angelscript.openAssets"
+                class="com.scriptacus.riderunrealangelscript.actions.OpenAssetsCommandAction"
+                text="AngelScript: Open Implementing Assets"
+                description="Opens the blueprints that implement the class"/>
 
         <!-- One-step AngelScript debugging: creates the DAP configuration when missing, then starts it under Debug -->
         <action id="AngelScript.StartDebugging"

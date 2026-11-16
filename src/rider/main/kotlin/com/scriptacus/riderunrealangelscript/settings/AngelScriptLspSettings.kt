@@ -39,6 +39,37 @@ class AngelScriptLspSettings : PersistentStateComponent<AngelScriptLspSettings.S
         // Completion
         var mathCompletionShortcuts: Boolean = true,
 
+        /**
+         * Insert `()` after a completed function or method name and put the caret between them,
+         * as the VS Code extension does for its `UnrealAngelscript.insertParenthesisOnFunctionCompletion`
+         * setting.
+         */
+        var insertParenthesisOnFunctionCompletion: Boolean = true,
+
+        /**
+         * Commit the selected completion when one of its LSP `commitCharacters` is typed, as VS Code
+         * does. lsp4ij does not implement commit characters.
+         */
+        var useCommitCharacters: Boolean = true,
+
+        /**
+         * Type `;` after the closing parenthesis when the caret is still inside it, as Rider's C#
+         * editor does: `Move(|)` + `;` becomes `Move();`.
+         */
+        var moveSemicolonOutsideParentheses: Boolean = true,
+
+        /**
+         * Pair a typed `"` or `'` with a closing one and step over an existing one, as Rider's C#
+         * editor does.
+         */
+        var autoCloseQuotes: Boolean = true,
+
+        /**
+         * Delete both halves when the caret is between a pair and one of them is removed:
+         * backspace between `""` or `()` removes both characters.
+         */
+        var deleteMatchingDelimiters: Boolean = true,
+
         // Diagnostics
         var diagnosticsForUnrealNamingConvention: Boolean = true,
         var correctFloatLiteralsWhenExpectingDoublePrecision: Boolean = false,

@@ -101,3 +101,76 @@ inserted text. Nothing in the plugin does this any more.
   from applying range markers in array order. `LspSamePositionTextEditTest` added.
 - 2026-10-21 - The subclass replaced by item corrections before lsp4ij and a decorator after it, after
   the JetBrains Marketplace review of 1.0.0 reported its internal API usages.
+
+## 4. Parentheses after a function completion
+
+The server attaches the ngelscript.paren command to every function and method completion item.
+In VS Code that command inserts `()` after the completed name, puts the caret between the
+parentheses and opens signature help. lsp4ij only inserts the item's text, and the plugin's action
+for the command is a no-op, so a completed call had no parentheses at all.
+
+**Fix:** `AngelScriptParenthesisInserter` runs from the contributor's decorator, after lsp4ij has
+inserted the item, and mirrors the VS Code command's branches:
+
+- a `(` directly before the caret (the user typed it) or directly after it (the call is already
+  written) inserts nothing;
+- a `.` before the caret is the completion's commit character, so `()` is inserted in front of
+  it;
+- otherwise `()` is inserted and the caret is moved between the parentheses.
+
+The setting `insertParenthesisOnFunctionCompletion` (default on, Completion settings page) turns it
+off, matching the VS Code extension's `UnrealAngelscript.insertParenthesisOnFunctionCompletion`.
+
+**Tests:** `AngelScriptParenthesisInserterTest` covers every branch of the decision.
+
+## 5. Signature help after a function completion
+
+lsp4ij's proposal already calls `AutoPopupController.autoPopupParameterInfo` after inserting an
+item, but it does that before the plugin's parentheses exist. At that moment the caret sits right
+after the function name, outside any argument list, so the parameter info handler has nothing to
+show. `AngelScriptParenthesisInserter` therefore triggers signature help again once `()` has been
+inserted and the caret is between them.
+
+The handler for `angelscript` is lsp4ij's `LSPParameterInfoHandler`, registered in `plugin.xml`
+under `codeInsight.parameterInfo`.
+
+## 6. What lsp4ij already does - do not reimplement
+
+Checked against lsp4ij 0.21.0 so that these are not added a second time in this plugin:
+
+- **Sorting**: `LSPCompletionItemComparator` sorts items by `sortText`, falling back to the label.
+  The server's ordering is what the lookup shows.
+- **`filterText` matching**: `LSPCompletionProposal.getAllLookupStrings` returns both
+  `filterText` and `label`, so items whose filter text is a lowercased name still match what is
+  typed.
+- **Signature help**: `LSPCompletionProposal.handleInsert` calls `autoPopupParameterInfo` when the
+  server supports signature help (see section 5 for the timing problem).
+- **Not implemented by lsp4ij**: `CompletionItem.commitCharacters`. Nothing reads
+  `item.getCommitCharacters()`; typing `(` or `.` closes the lookup through IntelliJ's own
+  behaviour rather than committing the selected item. The plugin implements them itself, see
+  section 7.
+
+## 7. Commit characters
+
+lsp4ij never reads `CompletionItem.commitCharacters`, so typing `(` or `.` while a function was
+selected closed the lookup instead of committing the selected item, which is what VS Code does.
+
+`AngelScriptCommitCharacterHandler` (a `TypedHandlerDelegate`) implements them:
+
+- `beforeCharTyped` looks at `LookupManager.getActiveLookup`; only a live lookup is considered.
+- The selected element is unwrapped through the decorator chain (lsp4ij's `PrioritizedLookupElement`,
+  the plugin's `FormatAfterInsert`) until an `AngelScriptCompletionItemHolder` is found. That
+  interface, added for this, exposes the `CompletionItem` the element was built from.
+- When the typed character is one of the item's commit characters,
+  `LookupImpl.finishLookup(char)` commits the completion and types the character in one step.
+- `(` is special: `finishLookup` inserts it itself, so
+  `AngelScriptCommitCharacters.suppressParenthesisInsertion` is set while it runs and
+  `AngelScriptParenthesisInserter` skips its own pair. Without it the result would be
+  `Foo()(` instead of `Foo(`.
+- A `.` needs no flag: the parenthesis inserter adds `()` while the completion is inserted and
+  `finishLookup` appends the dot, giving `Foo().`.
+
+The behaviour is controlled by the `useCommitCharacters` setting (Completion page, on by default)
+because a mistakenly matched character would interrupt typing.
+
+**Tests:** `AngelScriptCommitCharactersTest` covers the character matching.

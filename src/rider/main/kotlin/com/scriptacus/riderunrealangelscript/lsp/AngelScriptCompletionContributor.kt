@@ -35,12 +35,13 @@ class AngelScriptCompletionContributor : CompletionContributor(), DumbAware {
 
     private class FormatAfterInsert(
         delegate: LookupElement,
-        private val item: CompletionItem,
-    ) : LookupElementDecorator<LookupElement>(delegate) {
+        override val completionItem: CompletionItem,
+    ) : LookupElementDecorator<LookupElement>(delegate), AngelScriptCompletionItemHolder {
 
         override fun handleInsert(context: InsertionContext) {
             super.handleInsert(context)
-            formatInserted(context, item)
+            AngelScriptParenthesisInserter.insertIfNeeded(context, completionItem)
+            formatInserted(context, completionItem)
         }
     }
 

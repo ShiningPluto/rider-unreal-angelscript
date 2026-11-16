@@ -69,9 +69,12 @@ class ScriptFilesPanel(
     private val properties = PropertiesComponent.getInstance(project)
     private val renderer: ScriptFileTreeCellRenderer
 
+    private var refreshAlarm: com.intellij.util.Alarm? = null
+
     companion object {
         private const val EXPANDED_PATHS_KEY = "angelscript.files.tree.expanded"
         private const val AUTOSCROLL_FROM_SOURCE_KEY = "angelscript.files.autoscroll.from.source"
+        private const val REFRESH_DEBOUNCE_MS = 250
     }
 
     init {
@@ -310,11 +313,14 @@ class ScriptFilesPanel(
     }
 
     private fun scheduleRefresh() {
-        ApplicationManager.getApplication().invokeLater {
-            if (!project.isDisposed) {
-                loadScriptFolders()
-            }
-        }
+        // One event arrives per created or deleted child, so copying or deleting a folder would
+        // rebuild the tree once per file. Coalesce them into a single rebuild.
+        val alarm = refreshAlarm ?: com.intellij.util.Alarm(
+            com.intellij.util.Alarm.ThreadToUse.SWING_THREAD,
+            parentDisposable
+        ).also { refreshAlarm = it }
+        alarm.cancelAllRequests()
+        alarm.addRequest({ if (!project.isDisposed) loadScriptFolders() }, REFRESH_DEBOUNCE_MS)
     }
 
     /**
@@ -325,10 +331,16 @@ class ScriptFilesPanel(
     }
 
     private fun loadScriptFolders() {
-        rootNode.removeAllChildren()
-        scriptFolders.clear()
-        rootNode.add(DefaultMutableTreeNode("Loading..."))
-        treeModel.reload()
+        // Show a placeholder only on the first load. Reloading the model here on every refresh was
+        // what made the window flash when a file was created or deleted: the tree was emptied,
+        // painted as "Loading...", and painted again when the background detection finished.
+        // Later refreshes leave the current tree on screen until buildTreeFromDetectedFolders()
+        // swaps in the new one in a single UI-thread step.
+        if (rootNode.childCount == 0) {
+            scriptFolders.clear()
+            rootNode.add(DefaultMutableTreeNode("Loading..."))
+            treeModel.reload()
+        }
 
         val basePath = project.basePath
         if (basePath == null) {
@@ -571,13 +583,23 @@ class ScriptFilesPanel(
     }
 
     private fun showContextMenu(e: MouseEvent) {
-        val path = tree.getPathForLocation(e.x, e.y) ?: return
+        // getRowForLocation looks only at the row, so the menu opens anywhere on a row and not just
+        // over the label text. The empty area below the tree gets its own menu instead of nothing.
+        val row = tree.getRowForLocation(e.x, e.y)
+        if (row < 0) {
+            showBackgroundMenu(e)
+            return
+        }
+        val path = tree.getPathForRow(row) ?: return
         tree.selectionPath = path
 
-        val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
-
-        // Only show context menu for FileNode (not GroupNode)
-        val fileNode = node.userObject as? FileNode ?: return
+        // Group headers and the placeholder rows get the background menu.
+        val node = path.lastPathComponent as? DefaultMutableTreeNode
+        val fileNode = node?.userObject as? FileNode
+        if (fileNode == null) {
+            showBackgroundMenu(e)
+            return
+        }
         val file = fileNode.file
 
         val actionGroup = if (file.isDirectory) {
@@ -593,6 +615,37 @@ class ScriptFilesPanel(
         popupMenu.setTargetComponent(tree)
 
         popupMenu.component.show(e.component, e.x, e.y)
+    }
+
+    /**
+     * Menu for the empty area below the tree and for group headers: create a file or folder in the
+     * selected folder (or the first script folder), and refresh the list.
+     */
+    private fun showBackgroundMenu(e: MouseEvent) {
+        val group = DefaultActionGroup()
+        val directory = backgroundDirectory()
+        if (directory != null) {
+            group.add(NewFileAction(directory))
+            group.add(NewFolderAction(directory))
+            group.addSeparator()
+        }
+        group.add(object : AnAction("Refresh", "Reload the AngelScript file list", null) {
+            override fun actionPerformed(event: AnActionEvent) {
+                refresh()
+            }
+        })
+
+        val popupMenu = ActionManager.getInstance()
+            .createActionPopupMenu("AngelScriptFilesBackground", group)
+        popupMenu.setTargetComponent(tree)
+        popupMenu.component.show(e.component, e.x, e.y)
+    }
+
+    private fun backgroundDirectory(): VirtualFile? {
+        val selected = (tree.selectionPath?.lastPathComponent as? DefaultMutableTreeNode)
+            ?.userObject as? FileNode
+        if (selected != null && selected.file.isDirectory) return selected.file
+        return scriptFolders.firstOrNull { it.isValid }
     }
 
     private fun createFolderActions(folder: VirtualFile): DefaultActionGroup {

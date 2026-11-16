@@ -90,6 +90,9 @@ class AngelScriptSyntaxHighlighter : SyntaxHighlighter {
 
         // Unreal specific
         val UNREAL_MACRO = createTextAttributesKey("ANGELSCRIPT_UNREAL_MACRO", DefaultLanguageHighlighterColors.METADATA)
+
+        /** Specifiers inside a declaration macro, such as `DefaultComponent` in `UPROPERTY(...)`. */
+        val MACRO_SPECIFIER = createTextAttributesKey("ANGELSCRIPT_MACRO_SPECIFIER", DefaultLanguageHighlighterColors.CONSTANT)
         val PREPROCESSOR = createTextAttributesKey("ANGELSCRIPT_PREPROCESSOR", DefaultLanguageHighlighterColors.METADATA)
 
         // Semantic highlighting from LSP (when connected to Unreal Engine)
