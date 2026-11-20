@@ -6,6 +6,7 @@ import com.redhat.devtools.lsp4ij.LanguageServerFactory
 import com.redhat.devtools.lsp4ij.client.LanguageClientImpl
 import com.redhat.devtools.lsp4ij.client.features.LSPClientFeatures
 import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider
+import com.scriptacus.riderunrealangelscript.usages.AngelScriptUsageFeature
 import org.eclipse.lsp4j.services.LanguageServer
 
 class AngelScriptLanguageServerFactory : LanguageServerFactory {
@@ -49,5 +50,6 @@ class AngelScriptLanguageServerFactory : LanguageServerFactory {
             .setWorkspaceFolderFeature(AngelScriptWorkspaceFolderFeature())
             .setCompletionFeature(AngelScriptCompletionFeature())
             .setDiagnosticFeature(AngelScriptDiagnosticFeature())
+            .setUsageFeature(AngelScriptUsageFeature())
     }
 }

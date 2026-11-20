@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `angelscript_get_problems` analyses a file again before answering for it, so an agent sees the problems of its edit rather than those from before.
 - Three new MCP tools: `angelscript_search_symbols` finds where script declares something, `angelscript_find_references` finds every use of a symbol, telling a member from a same-named member of another class, and `angelscript_get_type_hierarchy` lists what a class derives from and what derives from it.
 - `angelscript_get_api_details` gives the C++ header and line of what Unreal declares, so an agent can read its implementation.
+- Find Usages' read and write access filters and icons work for AngelScript, and its groups are named as for C++: "Read access", "Write access" and "Read write access". Requires lsp4ij 0.30 or later.
 
 ### Added
 - MCP tool `angelscript_search_symbols`: the classes, structs, enums, namespaces, functions and variables script declares, with the file and line of each.
@@ -46,7 +47,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - Such a result is named through the type searched, and notes the class that declares it, such as `ACharacter.GetActorLocation()  from AActor`. Clearing the search shows it in that class's "Inherited from" group.
   - Only a whole name does this: `Actor.Get` would otherwise list AActor's members again for every class with Actor in its name.
 - `angelscript_status` and the `analysis` of `angelscript_get_problems` give `pendingScripts`, the scripts the server has still to load after starting. Until it is 0, problems are reported only for what it analysed before.
+- The read and write access filters of Find Usages apply to AngelScript references, in the Find tool window and the Show Usages popup, and each reference that reads or writes has Rider's read or write access icon.
+  - lsp4ij 0.30 lets a plugin say whether a reference reads or writes. The plugin tells it from its own parse tree, as it already did for the grouping.
+  - A reference that both reads and writes, such as `X += 1` or `X++`, has the read-write icon and is hidden only when both filters are off.
+- AngelScript references are grouped under the names Rider gives C++ and C# ones: "Read access", "Write access", and "Read write access" for one that both reads and writes, such as `X += 1` or `X++`.
+  - They were "Value read" and "Value write", with `X += 1` and `X++` among the writes.
 - Requires lsp4ij 0.30 or later.
+  - On an older lsp4ij, AngelScript references are all under "References" and the access filters do not apply to them.
   - Completing an override at the start of a line relies on lsp4ij 0.30 applying edits at one position in their order. An older one puts the return type in front of `UFUNCTION(BlueprintOverride)`.
 
 ### Fixed
@@ -62,6 +69,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The C++ declaration search moved out of the go-to-declaration handler into `CppDeclarationSearch`, unchanged, so the MCP API details can use it.
 - A build without `pluginVersion` is marked `-SNAPSHOT` instead of `-dev`, such as `1.0.3-SNAPSHOT`, so the IDE offers the release it precedes as an update.
   - The IDE ranks a word it does not know above the version it follows, so it took `1.0.2-dev` to be newer than `1.0.2` and never offered 1.0.2. `SNAPSHOT` is one it ranks below.
+- `AngelScriptUsageTypeProvider` is gone: lsp4ij's own usage type provider types each reference by the access the plugin gives it. See `docs/decisions/0014-give-lsp4ij-the-access-of-each-reference.md`.
 - Completion no longer merges the edits an item makes at one position before lsp4ij applies them. lsp4ij 0.30 applies them in their order itself (redhat-developer/lsp4ij#1833).
 
 ## 1.0.2 - 2026-10-26

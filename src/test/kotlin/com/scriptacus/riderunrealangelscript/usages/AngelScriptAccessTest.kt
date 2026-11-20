@@ -8,9 +8,9 @@ import com.intellij.testFramework.ParsingTestCase
 import com.intellij.usages.ShowUsageViewSettings
 import com.intellij.usages.UsageTarget
 import com.intellij.usages.UsageViewSettings
-import com.intellij.usages.impl.rules.UsageType
 import com.intellij.usages.impl.rules.UsageTypeProvider
 import com.redhat.devtools.lsp4ij.usages.LSPUsagePsiElement
+import com.redhat.devtools.lsp4ij.usages.LSPUsageTypeProvider
 import com.scriptacus.riderunrealangelscript.lang.AngelScriptParserDefinition
 
 /**
@@ -105,33 +105,32 @@ class AngelScriptAccessTest : ParsingTestCase("", "as", AngelScriptParserDefinit
         assertNull(AngelScriptAccess.at(file, TextRange(range.startOffset - 1, range.endOffset)))
     }
 
-    fun testReferencesAreGroupedAsReadsAndWrites() {
-        val provider = AngelScriptUsageTypeProvider()
-        assertEquals(UsageType.WRITE, provider.getUsageType(usage("«Count» = 1;")))
-        assertEquals(UsageType.WRITE, provider.getUsageType(usage("«Count»++;")))
-        assertEquals(UsageType.READ, provider.getUsageType(usage("Other = «Count»;")))
-        assertNull(provider.getUsageType(usage("«Fire»();")))
+    fun testUsageFeatureGivesLsp4ijTheAccess() {
+        val feature = AngelScriptUsageFeature()
+        assertEquals(Access.Write, feature.getReadWriteAccess(usage("«Count» = 1;")))
+        assertEquals(Access.ReadWrite, feature.getReadWriteAccess(usage("«Count»++;")))
+        assertEquals(Access.Read, feature.getReadWriteAccess(usage("Other = «Count»;")))
+        assertNull(feature.getReadWriteAccess(usage("«Fire»();")))
     }
 
-    fun testOtherResultKindsAreLeftToLsp4ij() {
-        val provider = AngelScriptUsageTypeProvider()
-        for (kind in LSPUsagePsiElement.UsageKind.values().filter { it != LSPUsagePsiElement.UsageKind.references }) {
-            assertNull(kind.name, provider.getUsageType(usage("«Count» = 1;", kind)))
-        }
+    fun testReferencesAreGroupedByTheirAccessAsRiderGroupsCpp() {
+        assertEquals("Write access", groupOfReference("«Count» = 1;"))
+        assertEquals("Read write access", groupOfReference("«Count» += 1;"))
+        assertEquals("Read write access", groupOfReference("«Count»++;"))
+        assertEquals("Read access", groupOfReference("Other = «Count»;"))
     }
 
-    fun testGroupingAsksTheUsageTypeProviders() {
+    fun testOtherUsagesAreGroupedByTheirUsageType() {
         // Registered under the platform's own constant, so a wrong name in the rule fails here
         registerExtensionPoint(UsageTypeProvider.EP_NAME, UsageTypeProvider::class.java)
-        registerExtension(UsageTypeProvider.EP_NAME, AngelScriptUsageTypeProvider())
-        val rule = AngelScriptUsageTypeGroupingRule()
-        assertEquals(UsageType.WRITE, rule.usageTypeOf(usage("«Count» = 1;"), UsageTarget.EMPTY_ARRAY))
-        assertEquals(UsageType.READ, rule.usageTypeOf(usage("Other = «Count»;"), UsageTarget.EMPTY_ARRAY))
-        // lsp4ij's provider, not registered here, answers for this in the IDE
-        assertEquals(UsageType.UNCLASSIFIED, rule.usageTypeOf(usage("«Fire»();"), UsageTarget.EMPTY_ARRAY))
+        registerExtension(UsageTypeProvider.EP_NAME, LSPUsageTypeProvider())
+        assertEquals("References", groupOfReference("«Fire»();"))
+        val declaration = usage("int «Count» = 0;", LSPUsagePsiElement.UsageKind.declarations)
+        assertEquals("Declarations", AngelScriptUsageTypeGroupingRule().groupNameOf(declaration, null, UsageTarget.EMPTY_ARRAY))
 
         val (file, range) = parse(inFunction("«Count» = 1;"))
-        assertNull(rule.usageTypeOf(file.findElementAt(range.startOffset)!!, UsageTarget.EMPTY_ARRAY))
+        val notAnLspUsage = file.findElementAt(range.startOffset)!!
+        assertNull(AngelScriptUsageTypeGroupingRule().groupNameOf(notAnLspUsage, Access.Write, UsageTarget.EMPTY_ARRAY))
     }
 
     fun testGroupingFollowsRidersUsageTypeGrouping() {
@@ -158,6 +157,13 @@ class AngelScriptAccessTest : ParsingTestCase("", "as", AngelScriptParserDefinit
 
     private fun usage(statement: String, kind: LSPUsagePsiElement.UsageKind = LSPUsagePsiElement.UsageKind.references) =
         parse(inFunction(statement)).let { (file, range) -> LSPUsagePsiElement(file, range).also { it.kind = kind } }
+
+    /** The group of a reference whose usage has the access lsp4ij gets from the plugin. */
+    private fun groupOfReference(statement: String): String? {
+        val reference = usage(statement)
+        val access = AngelScriptUsageFeature().getReadWriteAccess(reference)
+        return AngelScriptUsageTypeGroupingRule().groupNameOf(reference, access, UsageTarget.EMPTY_ARRAY)
+    }
 
     private fun assertAccess(expected: Access?, statement: String) = assertAccessIn(expected, inFunction(statement))
 

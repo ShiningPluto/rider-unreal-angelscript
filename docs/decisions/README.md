@@ -12,11 +12,12 @@ Why the code is the way it is. Format and rules: [../README.md](../README.md).
 | [0006](0006-answer-goto-declaration-synchronously.md) | Answer go-to-declaration while the caret waits, and hand back a real target | cpp-navigation | accepted | 2026-09-20 |
 | [0007](0007-match-ignore-globs-as-text.md) | Match ignore globs against the path text, not through java.nio PathMatcher | lsp-client | accepted | 2026-09-20 |
 | [0008](0008-take-the-grammar-from-the-engine-parser.md) | Take the grammar from the engine's parser, and measure every change against shipped scripts | editor | accepted | 2026-09-23 |
-| [0009](0009-classify-reference-access-from-the-parse-tree.md) | Tell reads from writes in Find Usages with the plugin's parse tree, through a usage type provider and a grouping rule | lsp-client | accepted | 2026-09-25 |
+| [0009](0009-classify-reference-access-from-the-parse-tree.md) | Tell reads from writes in Find Usages with the plugin's parse tree, through a usage type provider and a grouping rule | lsp-client | superseded by 0014 | 2026-09-25 |
 | [0010](0010-show-script-implementations-of-cpp-blueprint-events.md) | Show script implementations of C++ blueprint events from the frontend, and hide Rider's warning for them there | editor | accepted | 2026-09-25 |
 | [0011](0011-browse-the-api-from-the-saved-type-database.md) | Browse the Unreal API from the type database the server saves, and save it whatever the cache setting says | lsp-client | accepted | 2026-10-22 |
 | [0012](0012-serve-the-mcp-api-tools-from-the-type-database.md) | Serve the MCP API tools from the type database the API tool window reads, and search what a named type inherits | mcp | accepted | 2026-11-03 |
 | [0013](0013-analyse-an-asked-for-file-behind-a-status-barrier.md) | Have the server analyse a file angelscript_get_problems is asked for, and know it did from a status request sent after it | mcp | accepted | 2026-11-03 |
+| [0014](0014-give-lsp4ij-the-access-of-each-reference.md) | Give lsp4ij the access of each AngelScript reference, and group references under the names Rider gives C++ and C# access | lsp-client | accepted | 2026-11-20 |
 
 ## Reading order
 

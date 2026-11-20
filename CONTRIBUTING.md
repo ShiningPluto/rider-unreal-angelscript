@@ -52,9 +52,10 @@ The IDE integration layer providing:
 **lsp4ij version:** pinned in `build.gradle.kts` (`plugin("com.redhat.devtools.lsp4ij", ...)`).
 lsp4ij is a separate Marketplace plugin that users update independently, and `plugin.xml` cannot
 express a version constraint on it, so the pin is both what we compile against and the effective
-minimum. **0.30 or later**, for completion edits at one position applied in their order. Before
-0.21, which added `LSPWorkspaceFolderFeature`, the plugin's client features fail to load and the
-server never starts. When raising it, run the checks in
+minimum. **0.30 or later**, for `LSPUsageFeature.getReadWriteAccess`, which the read and write
+access filters of Find Usages need, and for completion edits at one position applied in their
+order. Before 0.21, which added `LSPWorkspaceFolderFeature`, the plugin's client features fail to
+load and the server never starts. When raising it, run the checks in
 [reference/lsp-completion-workaround.md](docs/reference/lsp-completion-workaround.md#checking-after-an-lsp4ij-upgrade):
 completion depends on how lsp4ij builds and inserts its items.
 

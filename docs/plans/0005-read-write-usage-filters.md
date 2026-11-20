@@ -1,7 +1,7 @@
 ---
 id: plan-0005
 title: The read and write access filters and icons of Find Usages work for AngelScript references
-status: open
+status: done
 date: 2026-09-25
 area: lsp-client
 depends-on: []
@@ -100,3 +100,8 @@ anything there: Rider groups no lsp4ij usage by usage type.
   "Occurrence Type" all work. A read-write reference (`+=`, `++`) gets the read-write icon and
   stays visible unless both filters are off; only its group is "Value write". Submitted as lsp4ij#1682 after the maintainer asked for a PR in
   discussion #1676.
+- 2026-11-20 - Done against lsp4ij 0.30.1; #1682 shipped in 0.30.0. Recorded in
+  [decisions/0014](../decisions/0014-give-lsp4ij-the-access-of-each-reference.md), with two changes
+  to the list above: all three groups take the names Rider gives C++ and C# access, "Read access",
+  "Write access" and "Read write access", which the user chose; and the grouping rule reads the
+  access from the usage, not from `LSPUsagePsiElement`, so it still loads on an older lsp4ij.

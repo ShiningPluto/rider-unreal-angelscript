@@ -1,7 +1,7 @@
 ---
 id: 0009
 title: Tell reads from writes in Find Usages with the plugin's parse tree, through a usage type provider and a grouping rule
-status: accepted
+status: superseded
 date: 2026-09-25
 area: lsp-client
 applies-to:
@@ -17,7 +17,7 @@ touches:
 verified-by:
   - src/test/kotlin/com/scriptacus/riderunrealangelscript/usages/AngelScriptAccessTest.kt
 supersedes: []
-superseded-by: null
+superseded-by: 0014
 ---
 
 # Tell reads from writes in Find Usages with the plugin's parse tree, through a usage type provider and a grouping rule
@@ -144,3 +144,6 @@ for AngelScript and searching ourselves is not possible either: `LSPUsageSearche
 - 2026-10-21 - Whether "Occurrence Type" is on is read from Rider's backend model rather than from
   Rider's grouping provider, whose `getActiveRules` is override-only API that the Marketplace
   reported for 1.0.0.
+- 2026-11-20 - Superseded by [0014](0014-give-lsp4ij-the-access-of-each-reference.md): lsp4ij 0.30 is
+  told the access of each reference, the usage type provider is gone, and the groups take the names
+  Rider gives C++ and C# access. The classification itself, `AngelScriptAccess`, is unchanged.

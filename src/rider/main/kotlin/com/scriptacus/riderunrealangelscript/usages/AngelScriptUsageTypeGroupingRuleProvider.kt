@@ -1,10 +1,12 @@
 package com.scriptacus.riderunrealangelscript.usages
 
+import com.intellij.codeInsight.highlighting.ReadWriteAccessDetector.Access
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
+import com.intellij.usages.ReadWriteAccessUsage
 import com.intellij.usages.Usage
 import com.intellij.usages.UsageGroup
 import com.intellij.usages.UsageTarget
@@ -28,9 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * The platform groups by usage type through `UsageGroupingRuleProviderImpl`, and Rider unregisters
  * it at startup (`RiderExtensionsConfigurator`) in favour of rules that only group the usages its
- * own backend finds. The types lsp4ij and [AngelScriptUsageTypeProvider] give AngelScript usages
- * were never shown. This asks the same providers the platform rule asks, for AngelScript usages
- * only, so every other result keeps Rider's grouping.
+ * own backend finds. The types lsp4ij gives AngelScript usages were never shown. This groups
+ * AngelScript usages only, so every other result keeps Rider's grouping.
  *
  * It is on when Rider groups its own results by usage type, which is the "Occurrence Type" item
  * under Group By; toggling that item makes every usage view ask again.
@@ -81,31 +82,72 @@ open class AngelScriptUsageTypeGroupingRuleProvider : UsageGroupingRuleProvider 
     }
 }
 
-// Parses no more than the file the usage is in, so it keeps grouping while indexes are rebuilt
+/**
+ * Puts each AngelScript usage under its usage type.
+ *
+ * A reference [AngelScriptUsageFeature] told lsp4ij the access of is a `ReadWriteAccessUsage`, and
+ * goes under the group Rider gives C++ and C# usages with that access: "Read access", "Write
+ * access", or "Read write access" for `X += 1` and `X++`. The types lsp4ij's usage type provider
+ * gives them are the platform's, which has only "Value read" and "Value write" and calls a
+ * reference that both reads and writes a write. Every other usage goes under the type the usage
+ * type providers give it, lsp4ij's "References", "Declarations" and so on.
+ *
+ * The access is read from the usage, as its icon and the read and write access filters read it,
+ * rather than from lsp4ij's usage element, so the rule needs nothing newer than lsp4ij 0.21.
+ *
+ * Parses no more than the file the usage is in, so it keeps grouping while indexes are rebuilt.
+ */
 class AngelScriptUsageTypeGroupingRule : SingleParentUsageGroupingRule(), DumbAware {
 
     override fun getParentGroupFor(usage: Usage, targets: Array<out UsageTarget>): UsageGroup? {
         val element = (usage as? PsiElementUsage)?.element ?: return null
-        return usageTypeOf(element, targets)?.let(::UsageTypeGroup)
+        return groupNameOf(element, accessOf(usage), targets)?.let(::UsageTypeGroup)
     }
 
     // Outermost, as the platform places its usage type groups; Rider's own rules come from its backend
     override fun getRank(): Int = Int.MIN_VALUE
 
-    internal fun usageTypeOf(element: PsiElement, targets: Array<out UsageTarget>): UsageType? {
+    /**
+     * The name of the group [element] goes under, or null when it is not a usage in AngelScript.
+     * [access] is that of the usage, null when it has none.
+     */
+    internal fun groupNameOf(element: PsiElement, access: Access?, targets: Array<out UsageTarget>): String? {
         if (element !is LSPUsagePsiElement || element.containingFile !is AngelScriptFile) return null
-        return USAGE_TYPE_PROVIDERS.extensionList.firstNotNullOfOrNull {
-            if (it is UsageTypeProviderEx) it.getUsageType(element, targets) else it.getUsageType(element)
-        } ?: UsageType.UNCLASSIFIED
+        return when (access) {
+            Access.Read -> READ_ACCESS
+            Access.Write -> WRITE_ACCESS
+            Access.ReadWrite -> READ_WRITE_ACCESS
+            null -> usageTypeOf(element, targets).toString()
+        }
     }
 
-    private data class UsageTypeGroup(val type: UsageType) : UsageGroup {
-        override fun getPresentableGroupText(): String = type.toString()
+    private fun accessOf(usage: Usage): Access? {
+        if (usage !is ReadWriteAccessUsage) return null
+        return when {
+            usage.isAccessedForReading && usage.isAccessedForWriting -> Access.ReadWrite
+            usage.isAccessedForWriting -> Access.Write
+            usage.isAccessedForReading -> Access.Read
+            else -> null
+        }
+    }
+
+    private fun usageTypeOf(element: PsiElement, targets: Array<out UsageTarget>): UsageType =
+        USAGE_TYPE_PROVIDERS.extensionList.firstNotNullOfOrNull {
+            if (it is UsageTypeProviderEx) it.getUsageType(element, targets) else it.getUsageType(element)
+        } ?: UsageType.UNCLASSIFIED
+
+    private data class UsageTypeGroup(val name: String) : UsageGroup {
+        override fun getPresentableGroupText(): String = name
         override fun compareTo(other: UsageGroup): Int = presentableGroupText.compareTo(other.presentableGroupText)
     }
 
     private companion object {
         // UsageTypeProvider.EP_NAME is internal API
         val USAGE_TYPE_PROVIDERS = ExtensionPointName.create<UsageTypeProvider>("com.intellij.usageTypeProvider")
+
+        // The names of the occurrence kinds of Rider's backend, from JetBrains.ReSharper.Feature.Services
+        const val READ_ACCESS = "Read access"
+        const val WRITE_ACCESS = "Write access"
+        const val READ_WRITE_ACCESS = "Read write access"
     }
 }
