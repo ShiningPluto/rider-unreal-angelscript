@@ -5,7 +5,7 @@ status: accepted
 date: 2026-11-20
 area: lsp-client
 applies-to:
-  plugin: 1.0.3
+  plugin: 1.1.0
   lsp4ij: "0.30"
   language-server: v1.9.4
   rider: "2025.2"

@@ -42,7 +42,7 @@ and the return type ended up in front of the macro.
 Up to plugin 1.0.2, `AngelScriptCompletionEdits.mergeSamePositionEdits` combined the additional edits
 that start at the same position into one, with their text in array order, before lsp4ij saw the
 item. lsp4ij 0.30 does the same itself: `doApplyEdits` joins the insertions at one offset into one
-edit (redhat-developer/lsp4ij#1833). The plugin requires 0.30 since 1.0.3, and the merge is gone.
+edit (redhat-developer/lsp4ij#1833). The plugin requires 0.30 since 1.1.0, and the merge is gone.
 
 **Tests:** `LspSamePositionTextEditTest` pins that lsp4ij applies insertions at one position in array
 order, including the Blueprint override and an insertion before a replacement at the same position.

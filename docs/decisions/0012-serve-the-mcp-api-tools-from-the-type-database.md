@@ -5,7 +5,7 @@ status: accepted
 date: 2026-11-03
 area: mcp
 applies-to:
-  plugin: 1.0.3
+  plugin: 1.1.0
   lsp4ij: "0.21"
   language-server: v1.9.4
   rider: "2025.2"
