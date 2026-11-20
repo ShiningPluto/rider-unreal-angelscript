@@ -120,8 +120,8 @@ Format and lifecycle: [plans/README.md](plans/README.md).
 
 Longer maintenance guides for mechanisms that are too intricate to live in comments:
 
-- [reference/lsp-completion-workaround.md](reference/lsp-completion-workaround.md) - the
-  reflection-based completion proposal and how to tell whether lsp4ij has fixed the underlying bug.
+- [reference/lsp-completion-workaround.md](reference/lsp-completion-workaround.md) - what the plugin
+  changes about lsp4ij's completion, and what to check after an lsp4ij upgrade.
 - [reference/debugging.md](reference/debugging.md) - debugging AngelScript with the bundled debug
   adapter.
 

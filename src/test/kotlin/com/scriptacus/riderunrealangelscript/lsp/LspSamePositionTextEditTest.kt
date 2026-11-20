@@ -11,26 +11,17 @@ import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextEdit
 
 /**
- * Pins the lsp4ij behaviour that [AngelScriptCompletionEdits.mergeSamePositionEdits] exists to work
- * around, so that a lsp4ij upgrade says whether the workaround is still needed instead of leaving it
- * to be guessed.
+ * Pins that lsp4ij applies edits at the same position in the order of the array, which completing
+ * an override relies on.
  *
  * The LSP specification (3.17, 3.16.6.4) requires that multiple edits at the same position end up
- * in the document in the order they appear in the array. `LSPIJUtils.applyEdits` converts every
- * edit to a RangeMarker up front and then applies them in array order - and for two insertions at
- * the same offset that produces the array order *reversed* in the text, because a zero-length
- * marker at the insertion point does not move, so each later insertion lands in front of the
- * earlier one.
+ * in the document in the order they appear in the array. Completing an override of a Blueprint
+ * event at column 0 sends `UFUNCTION(BlueprintOverride)\n` and the return type as two insertions at
+ * the start of the line, and the other way round the return type lands in front of the macro.
  *
- * This matters for real completions: completing an override of a Blueprint event sends
- * `UFUNCTION(BlueprintOverride)\n` inserted at `(line, 0)` together with an edit of the same line
- * that also starts at `(line, 0)`, and getting them the wrong way round indents the macro instead
- * of the declaration.
- *
- * Measured identical on lsp4ij 0.19.1 (what this build compiles against) and 0.21.0 (what Rider
- * ships today). **If this test fails, lsp4ij has changed how it orders same-position edits**: check
- * whether the merging can be dropped, and update docs/reference/lsp-completion-workaround.md either
- * way.
+ * Up to lsp4ij 0.21 `LSPIJUtils.applyEdits` reversed two insertions at one offset, and the plugin
+ * merged them into one edit before lsp4ij saw them. lsp4ij 0.30 joins them itself (#1833). **If this
+ * test fails, lsp4ij reverses them again**: see docs/reference/lsp-completion-workaround.md.
  */
 class LspSamePositionTextEditTest : UsefulTestCase() {
 
@@ -40,8 +31,8 @@ class LspSamePositionTextEditTest : UsefulTestCase() {
         TestApplicationManager.getInstance()
     }
 
-    private fun applyInOrder(vararg newTexts: String): String =
-        apply("class UMyThing\n{\n}\n", newTexts.map { TextEdit(Range(Position(2, 0), Position(2, 0)), it) })
+    private fun edit(line: Int, start: Int, end: Int, newText: String) =
+        TextEdit(Range(Position(line, start), Position(line, end)), newText)
 
     private fun apply(text: String, edits: List<TextEdit>): String {
         val document = DocumentImpl(text)
@@ -53,42 +44,35 @@ class LspSamePositionTextEditTest : UsefulTestCase() {
         return document.text
     }
 
-    fun testSamePositionEditsComeOutReversedSoTheWorkaroundIsStillNeeded() {
-        assertEquals(
-            "lsp4ij no longer reverses same-position edits - the completion workaround may be obsolete",
-            "class UMyThing\n{\n\tUFUNCTION()\n}\n",
-            applyInOrder("UFUNCTION()\n", "\t")
-        )
-    }
-
-    /** What merging the edits first is worth: lsp4ij then applies them in the order the spec asks for. */
-    fun testMergedSamePositionEditsComeOutInArrayOrder() {
-        val insertions = listOf("UFUNCTION()\n", "\t").map { TextEdit(Range(Position(2, 0), Position(2, 0)), it) }
+    fun testSamePositionInsertionsComeOutInArrayOrder() {
         assertEquals(
             "class UMyThing\n{\nUFUNCTION()\n\t}\n",
-            apply("class UMyThing\n{\n}\n", AngelScriptCompletionEdits.mergeSamePositionEdits(insertions)!!)
+            apply("class UMyThing\n{\n}\n", listOf(edit(2, 0, 0, "UFUNCTION()\n"), edit(2, 0, 0, "\t")))
         )
     }
 
-    /**
-     * The edits the server sends for an override of a Blueprint event typed at column 0, where the
-     * edit that adds the return type is an insertion too: without merging, the return type lands in
-     * front of the macro.
-     */
+    /** The edits the server sends for an override of a Blueprint event typed at column 0. */
     fun testBlueprintOverrideAtColumnZeroKeepsTheMacroFirst() {
         val edits = listOf(
-            TextEdit(Range(Position(3, 0), Position(3, 0)), "}\n"),
-            TextEdit(Range(Position(2, 0), Position(2, 0)), "UFUNCTION(BlueprintOverride)\n"),
-            TextEdit(Range(Position(2, 0), Position(2, 0)), "void "),
-        )
-        val text = "class AMyActor\n{\nBeginPlay()\n}\n"
-        assertEquals(
-            "class AMyActor\n{\nvoid UFUNCTION(BlueprintOverride)\nBeginPlay()\n}\n}\n",
-            apply(text, edits)
+            edit(3, 0, 0, "}\n"),
+            edit(2, 0, 0, "UFUNCTION(BlueprintOverride)\n"),
+            edit(2, 0, 0, "void "),
         )
         assertEquals(
             "class AMyActor\n{\nUFUNCTION(BlueprintOverride)\nvoid BeginPlay()\n}\n}\n",
-            apply(text, AngelScriptCompletionEdits.mergeSamePositionEdits(edits)!!)
+            apply("class AMyActor\n{\nBeginPlay()\n}\n", edits)
+        )
+    }
+
+    /** The same typed after indentation, where the edit that adds the return type replaces it. */
+    fun testInsertionBeforeAReplacementAtTheSamePositionComesFirst() {
+        val edits = listOf(
+            edit(2, 0, 0, "\tUFUNCTION(BlueprintOverride)\n"),
+            edit(2, 0, 1, "\tvoid "),
+        )
+        assertEquals(
+            "class AMyActor\n{\n\tUFUNCTION(BlueprintOverride)\n\tvoid BeginPlay()\n}\n",
+            apply("class AMyActor\n{\n\tBeginPlay()\n}\n", edits)
         )
     }
 }

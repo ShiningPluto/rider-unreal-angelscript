@@ -5,7 +5,6 @@ import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiFile
 import com.redhat.devtools.lsp4ij.LSPIJUtils
 import org.eclipse.lsp4j.CompletionItem
-import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.jsonrpc.messages.Either
@@ -21,11 +20,6 @@ object AngelScriptCompletionEdits {
     /** The completion item a lookup element was built from, for the work done after insertion. */
     val COMPLETION_ITEM: Key<CompletionItem> = Key.create("angelscript.completionItem")
 
-    fun prepare(item: CompletionItem, document: Document, file: PsiFile, offset: Int) {
-        fixPrefixAfterScope(item, document, file, offset)
-        item.additionalTextEdits = mergeSamePositionEdits(item.additionalTextEdits)
-    }
-
     /**
      * Gives the item the range it replaces when lsp4ij would get it wrong: right after `::`.
      *
@@ -35,7 +29,7 @@ object AngelScriptCompletionEdits {
      * a text edit also changes how lsp4ij filters, which goes wrong for the many items whose filter
      * text is not the start of their label.
      */
-    private fun fixPrefixAfterScope(item: CompletionItem, document: Document, file: PsiFile, offset: Int) {
+    fun prepare(item: CompletionItem, document: Document, file: PsiFile, offset: Int) {
         if (item.textEdit != null) return
         val text = document.charsSequence
         val start = scopeAwarePrefixStart(text, offset)
@@ -75,33 +69,5 @@ object AngelScriptCompletionEdits {
             common++
         }
         return common
-    }
-
-    /**
-     * Combines the edits that start at the same position into one, in their order.
-     *
-     * The LSP says edits at the same position apply in array order. lsp4ij applies each edit through
-     * a range marker, and an empty marker at an insertion point stays in front of text inserted
-     * there, so every later insertion at a position lands before the earlier ones: `UFUNCTION()\n`
-     * then `\t` came out as `\tUFUNCTION()\n`. One edit has no order to lose. Edits that would
-     * overlap - two at one position that both replace text - are left as they are.
-     */
-    internal fun mergeSamePositionEdits(edits: List<TextEdit>?): List<TextEdit>? {
-        if (edits == null || edits.size < 2) return edits
-        val byStart = edits.groupBy { it.range.start }
-        if (byStart.size == edits.size) return edits
-
-        val merged = ArrayList<TextEdit>(byStart.size)
-        for (group in byStart.values) {
-            val replacing = group.filter { it.range.start != it.range.end }
-            if (group.size == 1 || replacing.size > 1) {
-                merged.addAll(group)
-                continue
-            }
-            val end: Position = replacing.singleOrNull()?.range?.end ?: group.first().range.end
-            val newText = group.joinToString("") { it.newText.orEmpty() }
-            merged.add(TextEdit(Range(group.first().range.start, end), newText))
-        }
-        return merged
     }
 }

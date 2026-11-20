@@ -52,10 +52,11 @@ The IDE integration layer providing:
 **lsp4ij version:** pinned in `build.gradle.kts` (`plugin("com.redhat.devtools.lsp4ij", ...)`).
 lsp4ij is a separate Marketplace plugin that users update independently, and `plugin.xml` cannot
 express a version constraint on it, so the pin is both what we compile against and the effective
-minimum. **0.21 or later**, for `LSPWorkspaceFolderFeature` - on an older lsp4ij the plugin's
-client features fail to load and the server never starts. When raising it, check the classes the
-plugin extends against the new version: `LSPCompletionProposal` in particular is subclassed with
-reflection into its private members, see [reference/lsp-completion-workaround.md](docs/reference/lsp-completion-workaround.md).
+minimum. **0.30 or later**, for completion edits at one position applied in their order. Before
+0.21, which added `LSPWorkspaceFolderFeature`, the plugin's client features fail to load and the
+server never starts. When raising it, run the checks in
+[reference/lsp-completion-workaround.md](docs/reference/lsp-completion-workaround.md#checking-after-an-lsp4ij-upgrade):
+completion depends on how lsp4ij builds and inserts its items.
 
 **lsp4j exists twice.** The Rider SDK ships lsp4j 0.21 in `lib/`, lsp4ij bundles its own 1.0, and
 the plugin compiles against the first but runs against the second - lsp4ij's are the objects it is

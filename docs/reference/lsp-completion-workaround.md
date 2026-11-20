@@ -23,30 +23,29 @@ So the plugin never touches the class. It works at the two points around it that
 Until 1.0.1 this was done by `AngelScriptCompletionProposal`, a subclass of `LSPCompletionProposal`
 that copied its `apply()` and reached its private members by reflection.
 
-## 1. Edits at the same position are applied in reverse
+## 1. Edits at the same position were applied in reverse (fixed in lsp4ij 0.30)
 
 The LSP specification (3.17, 3.16.6.4) says that edits at the same position are applied in the order
-of the array. `LSPIJUtils.applyEdits` turns every edit into a `RangeMarker` up front and applies them
-in array order, and a zero-length marker at an insertion point stays in front of text inserted there,
-so each later insertion at a position lands before the earlier ones:
+of the array. Up to lsp4ij 0.21, `LSPIJUtils.applyEdits` turned every edit into a `RangeMarker` up
+front and applied them in array order, and a zero-length marker at an insertion point stays in front
+of text inserted there, so each later insertion at a position landed before the earlier ones:
 
 ```
-in array order ["UFUNCTION()\n", "\t"]  ->  "\tUFUNCTION()\n"   (lsp4ij)
-                                         ->  "UFUNCTION()\n\t"   (the specification)
+in array order ["UFUNCTION()\n", "\t"]  ->  "\tUFUNCTION()\n"   (lsp4ij 0.21)
+                                         ->  "UFUNCTION()\n\t"   (the specification, lsp4ij 0.30)
 ```
 
 The server sends such edits when an override of a Blueprint event is completed at column 0: the
 `UFUNCTION(BlueprintOverride)` line and the return type are both insertions at the start of the line,
 and the return type ended up in front of the macro.
 
-**Fix:** `AngelScriptCompletionEdits.mergeSamePositionEdits` combines the additional edits that start
-at the same position into one edit, with their text in array order. By the specification the result
-is the same; there is just no order left to lose. Edits that would overlap - two at one position that
-both replace text - are left alone. The server sends its additional edits with the completion list,
-not on resolve, so they can be merged before lsp4ij sees the item.
+Up to plugin 1.0.2, `AngelScriptCompletionEdits.mergeSamePositionEdits` combined the additional edits
+that start at the same position into one, with their text in array order, before lsp4ij saw the
+item. lsp4ij 0.30 does the same itself: `doApplyEdits` joins the insertions at one offset into one
+edit (redhat-developer/lsp4ij#1833). The plugin requires 0.30 since 1.0.3, and the merge is gone.
 
-**Tests:** `LspSamePositionTextEditTest` pins lsp4ij's reversal and shows that merged edits come out in
-array order; `AngelScriptCompletionEditsTest` covers the merge itself.
+**Tests:** `LspSamePositionTextEditTest` pins that lsp4ij applies insertions at one position in array
+order, including the Blueprint override and an insertion before a replacement at the same position.
 
 ## 2. Completing right after `::` replaced the operator
 
@@ -82,8 +81,9 @@ inserted text. Nothing in the plugin does this any more.
 
 ## Checking after an lsp4ij upgrade
 
-1. Run `LspSamePositionTextEditTest`. If `testSamePositionEditsComeOutReversedSoTheWorkaroundIsStillNeeded`
-   fails, lsp4ij now applies same-position edits in array order and the merging can go.
+1. Run `LspSamePositionTextEditTest`. If it fails, lsp4ij reverses edits at the same position again:
+   merge them in `AngelScriptCompletionEdits.prepare` before lsp4ij sees the item, as
+   `mergeSamePositionEdits` did up to 1.0.2 (it is in the git history).
 2. Check that `LSPCompletionFeature.createLookupElement` still builds its element from the item it is
    given, and that `addLookupItem` still computes the filtering prefix as described in section 2.
 3. In Rider, with a type database loaded:
@@ -101,3 +101,8 @@ inserted text. Nothing in the plugin does this any more.
   from applying range markers in array order. `LspSamePositionTextEditTest` added.
 - 2026-10-21 - The subclass replaced by item corrections before lsp4ij and a decorator after it, after
   the JetBrains Marketplace review of 1.0.0 reported its internal API usages.
+- 2026-11-20 - Checked against lsp4ij 0.30.1. `LspSamePositionTextEditTest` failed as it was meant
+  to: lsp4ij applies same-position edits in array order (#1833), so the merge was removed and the
+  test now pins the fix. `LSPCompletionFeature` and `CompletionPrefix` are unchanged since 0.21.
+  `LSPIJUtils.getWordRangeAt` now returns no range after whitespace, where `prepare` already leaves
+  the item alone.

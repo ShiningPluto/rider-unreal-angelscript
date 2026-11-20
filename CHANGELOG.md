@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   - Such a result is named through the type searched, and notes the class that declares it, such as `ACharacter.GetActorLocation()  from AActor`. Clearing the search shows it in that class's "Inherited from" group.
   - Only a whole name does this: `Actor.Get` would otherwise list AActor's members again for every class with Actor in its name.
 - `angelscript_status` and the `analysis` of `angelscript_get_problems` give `pendingScripts`, the scripts the server has still to load after starting. Until it is 0, problems are reported only for what it analysed before.
+- Requires lsp4ij 0.30 or later.
+  - Completing an override at the start of a line relies on lsp4ij 0.30 applying edits at one position in their order. An older one puts the return type in front of `UFUNCTION(BlueprintOverride)`.
 
 ### Fixed
 - `angelscript_get_problems` with `filePath` answered with the problems from before an edit made outside Rider's editor, such as an agent's.
@@ -60,6 +62,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - The C++ declaration search moved out of the go-to-declaration handler into `CppDeclarationSearch`, unchanged, so the MCP API details can use it.
 - A build without `pluginVersion` is marked `-SNAPSHOT` instead of `-dev`, such as `1.0.3-SNAPSHOT`, so the IDE offers the release it precedes as an update.
   - The IDE ranks a word it does not know above the version it follows, so it took `1.0.2-dev` to be newer than `1.0.2` and never offered 1.0.2. `SNAPSHOT` is one it ranks below.
+- Completion no longer merges the edits an item makes at one position before lsp4ij applies them. lsp4ij 0.30 applies them in their order itself (redhat-developer/lsp4ij#1833).
 
 ## 1.0.2 - 2026-10-26
 

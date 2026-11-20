@@ -299,7 +299,7 @@ dependencies {
         if (localLsp4ij != null) {
             localPlugin(file(localLsp4ij))
         } else {
-            plugin("com.redhat.devtools.lsp4ij", "0.21.0")
+            plugin("com.redhat.devtools.lsp4ij", "0.30.1")
         }
 
         // Test framework
