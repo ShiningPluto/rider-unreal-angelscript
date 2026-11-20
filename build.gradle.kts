@@ -371,8 +371,10 @@ tasks.patchPluginXml {
  * many as fit in [maxChars] characters, and a link to the whole changelog. The newest release with
  * Highlights is always there, and one without, such as a release of internal changes only, is
  * skipped. An Unreleased section is headed with [version], the version being built.
+ *
+ * A release's Highlights run to about 1,000 characters, so [maxChars] leaves room for two or three.
  */
-fun whatsNew(changelog: String, version: String, maxChars: Int = 1500): String {
+fun whatsNew(changelog: String, version: String, maxChars: Int = 3000): String {
     fun html(markdown: String) = markdown
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         .replace(Regex("`([^`]+)`"), "<code>$1</code>")

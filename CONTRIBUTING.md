@@ -218,7 +218,7 @@ checking, is recorded in
     notice, and nothing that only maintainers need to know. Leave them out of a release that users
     will not notice.
   - The plugin's "What's new" shows the Highlights of the newest releases, as many as fit in about
-    1,500 characters (`whatsNew` in `build.gradle.kts`).
+    3,000 characters (`whatsNew` in `build.gradle.kts`).
 
 Read [decisions/0001](docs/decisions/0001-patch-the-language-server-at-bundle-time.md) and
 [decisions/0003](docs/decisions/0003-send-only-the-script-folders-as-the-workspace.md) before
